@@ -133,6 +133,29 @@ def test_a_claude_session_is_started_resumed_and_talked_to():
         s.close()
 
 
+def test_a_terminal_nobody_watches_is_ended_and_the_session_resumes():
+    s = Running(idle_terminal_s=0.5)
+    try:
+        need_engine(s.cfg)
+        _, g = s.call("POST", "/api/games", {"color": "w", "elo": 1320})
+        _, r = s.call("POST", f"/api/games/{g['id']}/claude/analyse")
+        term = s.tutor.terminal(r["terminal"])
+        output(term, '"prompt"')  # watched for a moment, then left alone
+        deadline = time.time() + 15
+        while s.call("GET", f"/api/games/{g['id']}")[1]["claude"]["terminal"] and time.time() < deadline:
+            time.sleep(0.2)
+        left = s.call("GET", f"/api/games/{g['id']}")[1]["claude"]
+        assert left["terminal"] is None and left["started"]
+        deadline = time.time() + 10
+        while term.alive and time.time() < deadline:
+            time.sleep(0.1)
+        assert not term.alive
+        code, r2 = s.call("POST", f"/api/games/{g['id']}/claude/resume")
+        assert code == 200 and r2["terminal"] != r["terminal"]
+    finally:
+        s.close()
+
+
 def test_the_tools_claude_is_given():
     s = Running()
     try:
