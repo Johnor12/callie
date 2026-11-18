@@ -22,8 +22,8 @@ own machine, reachable from their other devices over Tailscale.
 
 ## Setting it up
 
-Needs Linux (or macOS), Python 3.12 or newer, and [Claude Code](https://claude.com/claude-code) logged in for the
-Claude pane. Everything else works without it.
+Needs Linux (it was built and tried on Linux only; macOS may work), Python 3.12 or newer, and
+[Claude Code](https://claude.com/claude-code) logged in for the Claude pane. Everything else works without it.
 
 ```sh
 git clone https://github.com/Johnor12/chess-tutor && cd chess-tutor
@@ -126,7 +126,7 @@ other authentication: do not put it on a port the internet can reach.
 ## Calibration
 
 <!-- calibration -->
-The sub-1320 opponent was measured on 2026-11-18 with Stockfish 19: 5,940 games
+The sub-1320 opponent was measured on 2026-11-18 with Stockfish 19: 9,090 games
 (`scripts/calibration.jsonl`), each temperature against its neighbours and against Stockfish at 1320, 1500 and
 1700 where they were within reach of each other. One rating per temperature was then fitted to all the results
 (maximum likelihood under the Elo model, Stockfish's levels held at their nominal ratings), and where two
@@ -134,23 +134,26 @@ neighbouring temperatures came out in the wrong order they were pooled. The oppo
 
 | Rating | Temperature (centipawns) |
 | --- | --- |
-| 1405 | 80 |
+| 1414 | 80 |
 | 1380 | 90 |
 | 1265 | 100 |
-| 1192 | 110 |
-| 1029 | 120 |
-| 989 | 135 |
-| 923 | 150 |
-| 799 | 165 |
-| 561 | 189.7 |
-| 549 | 220 |
+| 1191 | 110 |
+| 1071 | 120 |
+| 992 | 135 |
+| 913 | 150 |
+| 789 | 165 |
+| 719 | 180 |
+| 605 | 200 |
+| 542 | 220 |
+| 450 | 245 |
+| 344 | 270 |
 
-Opponents are offered from 550 up. What to make of the numbers:
+Opponents are offered from 400 up. What to make of the numbers:
 
-- A match of 60 to 150 games pins a rating difference to within about 50 to 80 points, and the lowest levels are
-  reached through a chain of such matches, so they are the least certain.
-- Strength falls steeply with temperature in this range: the whole span from 1300 down to 550 is roughly a
-  doubling of the temperature.
+- A pairing of 60 to 270 games pins a rating difference to within roughly 40 to 80 points, and the lowest
+  levels are reached through a chain of such pairings, so they are the least certain.
+- Strength falls steeply with temperature in this range: the whole span from 1300 down to 400 is less than a
+  tripling of the temperature.
 - The scale is Stockfish's (`UCI_Elo`), measured at fast time controls, where its weakened levels pick their
   move at a fixed shallow depth and so do not get weaker.
 
