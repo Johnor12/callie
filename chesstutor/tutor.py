@@ -1,8 +1,9 @@
 """Claude: one Claude Code session per game, in a real terminal that the game's page shows.
 
-Nothing here runs by itself. A session is opened when the page asks for an analysis (its button) or sends a
-message, and is told then what is expected of it and how to get at the game: the tools of `mcp.py` (the moves,
-the engine's analysis of each, the engine itself). The app talks to it the way a person would: it pastes a
+Nothing here runs by itself. A session is opened when the page sends it a message (or, over the API, when an
+analysis is asked for), and is told then what is expected of it and how to get at the game: the tools of `mcp.py` (the moves,
+the engine's analysis of each, the engine itself). From then on the page shows it whenever it shows the game,
+resuming it if its terminal has ended since. The app talks to it the way a person would: it pastes a
 message into the terminal and presses Enter. Every session runs in the same directory, so they share one
 Claude Code project: its memory carries from game to game.
 """
@@ -22,12 +23,13 @@ from .terminals import Terminal
 
 SYSTEM = """\
 You are the chess tutor inside Chess Tutor, a local app. The person you are talking to (the student) plays games \
-against Stockfish held to a limited strength, on a board next to this terminal. This session belongs to one of \
-those games. Nothing is sent to you automatically as the game goes on: you are asked when the student wants you.
+on a board next to this terminal, against Stockfish held to a limited strength or against Allie, a model that \
+plays the way people of a chosen rating do. This session belongs to one of those games; `game` says which opponent \
+it has. Nothing is sent to you automatically as the game goes on: you are asked when the student wants you.
 
 What reaches you
 - A message that starts with a tag in square brackets was sent by the app, not typed by the student. \
-[analysis request] comes from the student pressing the "Claude analysis" button: it says which game this is, how \
+[analysis request] is the student asking for an analysis through the app: it says which game this is, how \
 far it has got, and which moves have been played since you were last asked. [context] introduces the game when \
 the student's own message is what opened the session.
 - Anything else is the student talking to you, often while the game is still being played.
@@ -55,16 +57,30 @@ follow on the board (SAN with move numbers).
 - If the game is still in progress, do not give it away: no hints about the position on the board now (the best \
 move, a tactic that is waiting) unless the student asks. When they ask for a hint, start small (where to look) \
 unless they ask for the move itself.
-- The opponent is a weakened engine and errs on purpose at lower ratings. When a move of the student's only \
-worked because the opponent went wrong afterwards, say so.
+- The opponent errs at lower ratings: Stockfish on purpose, without rhyme; Allie the way a person of its rating \
+would. When a move of the student's only worked because the opponent went wrong afterwards, say so.
 - When the game is over, end with the two or three moments that decided it and one thing to practise.
 - Pitch it to the student's level as their play and questions show it. Be direct and kind, with no filler praise.
 - Write plain text for a terminal: short paragraphs, no tables, no headers.
 
-Memory
+{allie}Memory
 Every game's session runs in this same directory, so your memory here is shared by all of this student's games. \
 Look at what you already know about their play before you analyse, and keep it current: recurring mistakes, \
 openings they play, what they have been working on, how they like feedback given.
+"""
+
+# The part of SYSTEM about `human_moves`, for sessions that are given it (Allie installed).
+ALLIE = """\
+People, not engines
+- human_moves: what people actually play in a position, by Allie (a model trained on human games): the most \
+played moves of players of a rating you choose, with how often each is played, how games between such players \
+end from there, and the likeliest continuation. Use it to explore human lines: which replies the student should \
+expect from an opponent of their level, whether a mistake of theirs is a common one, whether the engine's best \
+move is one a person would find, what a trap catches in practice.
+- It says how likely a move is, never how good. Every evaluation, best move and refutation you give comes from \
+Stockfish (review, analyze), at full strength. When the two disagree, that is the lesson: say what people \
+play, what is right, and why the difference matters at the student's level.
+
 """
 
 # Claude Code's own variables, when the server was itself started from one of its sessions (or by systemd).
@@ -123,15 +139,10 @@ class Tutor:
             "tui": "fullscreen",
             "wheelScrollAccelerationEnabled": False,  # the page sends one wheel event per line (see app.js)
         }
-        mcp = {
-            "mcpServers": {
-                "chess": {
-                    "command": sys.executable,
-                    "args": [str(_ROOT / "mcp.py")],
-                    "env": {"CHESSTUTOR_URL": self.cfg.url, "CHESSTUTOR_GAME": game_id},
-                }
-            }
-        }
+        env = {"CHESSTUTOR_URL": self.cfg.url, "CHESSTUTOR_GAME": game_id}
+        if self.svc.allie.available():
+            env["CHESSTUTOR_ALLIE"] = "1"  # the session is offered `human_moves`
+        mcp = {"mcpServers": {"chess": {"command": sys.executable, "args": [str(_ROOT / "mcp.py")], "env": env}}}
         s, m = self.dir / f"{game_id}.settings.json", self.dir / f"{game_id}.mcp.json"
         s.write_text(json.dumps(settings, indent=2))
         m.write_text(json.dumps(mcp, indent=2))
@@ -142,7 +153,7 @@ class Tutor:
         return any((base / "projects").glob(f"*/{session_id}.jsonl"))
 
     def _request(self, row: dict, plies: int) -> str:
-        """What the "Claude analysis" button sends."""
+        """What a request for an analysis sends."""
         since = row["analysed_ply"]
         text = f"[analysis request] {self.svc.brief(row['id'])} "
         if plies == 0:
@@ -173,7 +184,8 @@ class Tutor:
         if self.cfg.claude_effort:
             argv += ["--effort", self.cfg.claude_effort]
         argv += ["--settings", str(settings), "--mcp-config", str(mcp), "--strict-mcp-config"]
-        argv += ["--append-system-prompt", SYSTEM, *self.cfg.claude_args]
+        system = SYSTEM.replace("{allie}", ALLIE if self.svc.allie.available() else "")
+        argv += ["--append-system-prompt", system, *self.cfg.claude_args]
         if parts:
             argv += ["--", _clean("\n\n".join(parts))]
         env = {k: v for k, v in os.environ.items() if k not in _STRIP_ENV}
@@ -194,7 +206,7 @@ class Tutor:
         return t if t is not None and t.alive else None
 
     def analyse(self, game_id: str, cols: int = 110, rows: int = 32) -> dict:
-        """The button: open the game's session if need be, and ask it for an analysis of the game as it stands."""
+        """Open the game's session if need be, and ask it for an analysis of the game as it stands."""
         with self.lock:
             row = self.svc.store.game(game_id)
             if row is None:
@@ -211,7 +223,8 @@ class Tutor:
         return {"terminal": t.id}
 
     def say(self, game_id: str, text: str, cols: int = 110, rows: int = 32) -> dict:
-        """A message from the student (the box under the terminal). Claude Code queues it if it is mid-answer."""
+        """A message from the student (the page's box): typed into the game's session, which it opens, or resumes,
+        if it is not running. Claude Code queues it if it is mid-answer."""
         text = _clean(text)
         if not text:
             raise TutorError("nothing to send")

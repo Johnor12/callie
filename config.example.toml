@@ -19,6 +19,14 @@ hash_mb = 512      # for each of the two analysis engines
 review_ms = 1500   # how long every position of a game is analysed
 opponent_ms = 1000 # how long the opponent thinks
 
+[allie]
+# The second opponent, a model of human play (README, "Allie"). Nothing here is needed after
+# `chess-tutor allie install`, which puts all of it under <home>/allie.
+# python = "~/.local/share/chess-tutor/allie/venv/bin/python"   # the Python of the environment it is installed in
+# model = "/somewhere/allie-2.1"     # a directory with config.json and model.safetensors, if not the one it downloads
+threads = 0        # CPU threads; 0 means its own choice (one per core)
+idle_s = 1800      # its process holds 10 GB: ended after this long without a game or a question, loaded again on the next
+
 [claude]
 bin = "claude"
 model = "claude-fable-5-2"

@@ -52,6 +52,11 @@ def _tool(svc: Service, game_id: str, b: dict) -> dict:
     if name == "analyze":
         extra = {k: args[k] for k in ("seconds", "lines", "candidates") if args.get(k) is not None}
         return {"text": svc.tool_analyze(game_id, **where, **extra)}
+    if name == "human_moves":
+        if args.get("fen"):
+            raise GameError("human_moves reads a game from its first move: give a ply of this game and moves to play on from it, not a FEN")
+        extra = {k: args[k] for k in ("elo", "top", "line") if args.get(k) is not None}
+        return {"text": svc.tool_humans(game_id, args.get("ply"), args.get("moves"), **extra)}
     raise GameError(f"no tool {name!r}")
 
 
@@ -62,11 +67,12 @@ def _routes(svc: Service, tutor: Tutor):
         ("GET", r"/api/health", lambda m, b, q: {"ok": True, "games": len(svc.store.all("SELECT id FROM games LIMIT 1"))}),
         ("GET", r"/api/meta", lambda m, b, q: svc.meta()),
         ("GET", r"/api/games", lambda m, b, q: svc.games()),
-        ("POST", r"/api/games", lambda m, b, q: svc.create(b.get("color", "w"), b.get("elo"), b.get("opening"), b.get("time_control"))),
+        ("POST", r"/api/games", lambda m, b, q: svc.create(b.get("color", "w"), b.get("elo"), b.get("opening"), b.get("time_control"), b.get("engine"))),
         ("GET", rf"/api/games/{_ID}", lambda m, b, q: svc.state(m[1], since(q))),
         ("POST", rf"/api/games/{_ID}/move", lambda m, b, q: svc.move(m[1], b.get("move", ""))),
         ("POST", rf"/api/games/{_ID}/resign", lambda m, b, q: svc.resign(m[1])),
         ("POST", rf"/api/games/{_ID}/takeback", lambda m, b, q: svc.takeback(m[1])),
+        ("POST", rf"/api/games/{_ID}/draw", lambda m, b, q: svc.draw(m[1], bool(b.get("accept")))),
         ("POST", rf"/api/games/{_ID}/pause", lambda m, b, q: svc.pause(m[1], bool(b.get("paused", True)))),
         ("POST", rf"/api/games/{_ID}/delete", lambda m, b, q: svc.delete(m[1])),
         # Claude: nothing starts unless one of these is called

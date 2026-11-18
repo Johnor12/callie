@@ -1,8 +1,9 @@
-"""`chess-tutor`: run the server, fetch the engine, install it as a service."""
+"""`chess-tutor`: run the server, fetch the engines, install it as a service."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -17,9 +18,13 @@ import time
 import urllib.request
 from pathlib import Path
 
+from . import allie
 from .config import Config, ConfigError, load_config
 
 RELEASE = "https://api.github.com/repos/official-stockfish/Stockfish/releases/latest"
+RUSTUP = "https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init"
+RUST_MIN = (1, 89)  # what Allie's engine is written for
+TORCH = ("torch==2.10.*", "https://download.pytorch.org/whl/cpu")  # the version Allie was trained with, without CUDA
 UNIT = Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser() / "systemd" / "user" / "chess-tutor.service"
 _CARRIED = ("CHESSTUTOR_CONFIG", "CHESSTUTOR_HOME", "CHESSTUTOR_CLAUDE_BIN", "CHESSTUTOR_PYTHON")
 
@@ -90,6 +95,8 @@ def cmd_status(cfg: Config, args) -> int:
     info = _running(cfg)
     print(f"server: {info['url']}, pid {info['pid']}" if info else "server: not running (`chess-tutor start`)")
     print(f"engine: {cfg.engine}" + ("" if cfg.engine.exists() else "  MISSING: run `chess-tutor engine install`"))
+    why = allie.missing(cfg)
+    print(f"allie: {allie.weights(cfg)}, run by {cfg.allie_python}" if why is None else f"allie: not installed (`chess-tutor allie install`): {why}")
     claude = shutil.which(cfg.claude_bin)
     print(f"claude: {claude or cfg.claude_bin + '  NOT ON THE PATH'}, model {cfg.claude_model}, "
           f"account {cfg.claude_config_dir or os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'}")  # fmt: skip
@@ -168,6 +175,113 @@ def cmd_engine(cfg: Config, args) -> int:
     return 0
 
 
+# ---------- Allie ----------
+
+
+def _pinned(python: Path) -> bool:
+    """Whether Allie's environment already holds its code and engine at the commit this version plays."""
+    check = (
+        "import json, sys, torch, allie_fast, allie.lichess.engine\n"
+        "from importlib.metadata import distribution as d\n"
+        "at = lambda n: json.loads(d(n).read_text('direct_url.json'))['vcs_info']['commit_id']\n"
+        "sys.exit(not (at('allie') == at('allie-fast') == sys.argv[1]))"
+    )
+    return python.is_file() and subprocess.run([str(python), "-c", check, allie.COMMIT], capture_output=True).returncode == 0
+
+
+def _cargo(home: Path, env: dict) -> Path | None:
+    """Make a Rust toolchain of RUST_MIN or newer the first on ``env``'s PATH: the one already on it, else one
+    downloaded into ``home`` (returned, so it can be removed once the engine is built) and nowhere else."""
+
+    def version() -> tuple:
+        try:
+            out = subprocess.run(["cargo", "--version"], capture_output=True, text=True, env=env).stdout.split()
+            return tuple(int(x) for x in out[1].split(".")[:2])
+        except (OSError, IndexError, ValueError):
+            return (0, 0)
+
+    if version() >= RUST_MIN:
+        return None
+    rust = home / "rust"
+    env.update(RUSTUP_HOME=str(rust / "rustup"), CARGO_HOME=str(rust / "cargo"))
+    env["PATH"] = f"{rust / 'cargo' / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+    if version() < RUST_MIN:
+        print("downloading a Rust toolchain to build Allie's engine with (kept out of your own setup) ...", flush=True)
+        rust.mkdir(parents=True, exist_ok=True)
+        init = rust / "rustup-init"
+        with urllib.request.urlopen(RUSTUP, timeout=60) as r, open(init, "wb") as f:
+            shutil.copyfileobj(r, f)
+        want = urllib.request.urlopen(RUSTUP + ".sha256", timeout=60).read().split()[0].decode()
+        if hashlib.sha256(init.read_bytes()).hexdigest() != want:
+            raise RuntimeError("the Rust installer did not download whole: run this again")
+        init.chmod(0o755)
+        subprocess.run([str(init), "-y", "-q", "--no-modify-path", "--profile", "minimal", "--default-toolchain", "stable"], env=env, check=True)  # fmt: skip
+    return rust
+
+
+def cmd_allie(cfg: Config, args) -> int:
+    """Everything Allie needs, under <home>/allie: a Python environment with its code and its engine (built here,
+    in Rust), and its weights."""
+    if platform.system() != "Linux" or platform.machine().lower() not in ("x86_64", "amd64"):
+        print("Allie's engine, which its calibrated play needs, runs on Linux x86-64 only", file=sys.stderr)
+        return 1
+    home, python, env = cfg.allie_home, cfg.allie_python, dict(os.environ)
+    home.mkdir(parents=True, exist_ok=True)
+    try:
+        if cfg.allie_python_path:
+            print(f"[allie] python is set: using {python} as it is")
+        elif _pinned(python):
+            print(f"Allie's code and engine are already at {allie.COMMIT[:10]} in {python.parent.parent}")
+        else:
+            if not shutil.which("uv"):
+                print("needs uv (https://docs.astral.sh/uv/) to make Allie's Python environment", file=sys.stderr)
+                return 1
+            # --no-config: packages come from PyPI, PyTorch and GitHub, whatever indexes this machine's uv is set up with
+            uv = ["uv", "--no-config"]
+            if not python.is_file():
+                subprocess.run([*uv, "venv", "--python", "3.12", str(home / "venv")], env=env, check=True)
+            private = _cargo(home, env)
+            pip = [*uv, "pip", "install", "--python", str(python)]
+            subprocess.run([*pip, TORCH[0], "--default-index", TORCH[1]], env=env, check=True)
+            at = f"git+{allie.SOURCE}@{allie.COMMIT}"
+            print("building Allie's engine (a few minutes) ...", flush=True)
+            subprocess.run(
+                [*pip, "--no-sources", "--default-index", "https://pypi.org/simple", f"allie[bot] @ {at}",
+                 f"allie-fast @ {at}#subdirectory=rust/allie-fast"], env=env, check=True,
+            )  # fmt: skip
+            if not _pinned(python):
+                print(f"Allie's code did not install into {python.parent.parent}", file=sys.stderr)
+                return 1
+            if private:
+                shutil.rmtree(private, ignore_errors=True)  # it was only needed for the build
+        if allie.weights(cfg) is None:
+            if cfg.allie_model:
+                print(f"[allie] model is set, but {cfg.allie_model} holds no config.json and model.safetensors", file=sys.stderr)
+                return 1
+            print(f"downloading {allie.REPO} from Hugging Face (18 GB) ...", flush=True)
+            fetch = (
+                "import sys; from huggingface_hub import snapshot_download\n"
+                "snapshot_download(sys.argv[1], allow_patterns=['config.json', 'model.safetensors'])"
+            )
+            hub = dict(env, HF_HUB_CACHE=str(home / "hub"), HF_HUB_DISABLE_TELEMETRY="1")
+            subprocess.run([str(python), "-c", fetch, allie.REPO], env=hub, check=True)
+    except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
+        print(f"chess-tutor: installing Allie stopped: {e}", file=sys.stderr)
+        return 1
+    print("loading it once, to see that it runs ...", flush=True)
+    engine = allie.Allie(cfg)
+    try:
+        info = engine.load()
+    except allie.AllieError as e:
+        print(f"chess-tutor: {e}", file=sys.stderr)
+        return 1
+    finally:
+        engine.close()
+    print(f"installed {allie.NAME} ({info['name']}, {info['threads']} threads, loads in {info['load_s']:.0f} s) in {home}")
+    print("it is offered as an opponent from the next time the page is loaded")
+    return 0
+
+
 # ---------- the service ----------
 
 
@@ -241,6 +355,9 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("engine", help="the chess engine")
     e.add_argument("action", choices=["install"])
     e.set_defaults(fn=cmd_engine)
+    a = sub.add_parser("allie", help="Allie, the opponent that plays as people do (a 19 GB install)")
+    a.add_argument("action", choices=["install"])
+    a.set_defaults(fn=cmd_allie)
     v = sub.add_parser("service", help="run the server as a systemd user service")
     v.add_argument("action", choices=["install", "uninstall"])
     v.set_defaults(fn=cmd_service)

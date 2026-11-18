@@ -31,6 +31,11 @@ class Config:
     hash_mb: int = 512
     review_ms: int = 1500  # how long each position of a game is analysed
     opponent_ms: int = 1000  # how long the opponent thinks
+    # Allie (the other opponent; `chess-tutor allie install`)
+    allie_python_path: Path | None = None  # the Python of the environment Allie is installed in
+    allie_model: Path | None = None  # a directory with its weights (None: where `allie install` downloads them)
+    allie_threads: int = 0  # 0: Allie's own choice, one per core
+    allie_idle_s: float = 1800.0  # its process is ended after this long unused (it holds 10 GB); it loads again
     # Claude Code
     claude_bin: str = "claude"
     claude_model: str = "claude-fable-5-2"
@@ -47,6 +52,15 @@ class Config:
     @property
     def engine(self) -> Path:
         return self.engine_path or self.home / "engine" / "stockfish"
+
+    @property
+    def allie_home(self) -> Path:
+        """Everything `chess-tutor allie install` puts on the machine."""
+        return self.home / "allie"
+
+    @property
+    def allie_python(self) -> Path:
+        return self.allie_python_path or self.allie_home / "venv" / "bin" / "python"
 
     @property
     def workspace(self) -> Path:
@@ -74,6 +88,7 @@ def load_config(path: Path | None = None) -> Config:
     path = path or default_config_path()
     data: dict = tomllib.loads(path.read_text()) if path.exists() else {}
     server, engine, claude = data.get("server", {}), data.get("engine", {}), data.get("claude", {})
+    allie = data.get("allie", {})
     cfg = Config(
         home=_expand(os.environ.get("CHESSTUTOR_HOME", data.get("home", "~/.local/share/chess-tutor"))),
         host=str(server.get("host", "127.0.0.1")),
@@ -85,6 +100,10 @@ def load_config(path: Path | None = None) -> Config:
         hash_mb=int(engine.get("hash_mb", 512)),
         review_ms=int(engine.get("review_ms", 1500)),
         opponent_ms=int(engine.get("opponent_ms", 1000)),
+        allie_python_path=Path(os.path.expanduser(allie["python"])) if allie.get("python") else None,
+        allie_model=_expand(allie["model"]) if allie.get("model") else None,
+        allie_threads=int(allie.get("threads", 0)),
+        allie_idle_s=float(allie.get("idle_s", 1800)),
         claude_bin=os.environ.get("CHESSTUTOR_CLAUDE_BIN", str(claude.get("bin", "claude"))),
         claude_model=str(claude.get("model", "claude-fable-5-2")),
         claude_effort=str(claude.get("effort", "")),

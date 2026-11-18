@@ -79,7 +79,8 @@ def test_a_game_with_a_book_opponent():
         s = until(svc, g["id"], lambda s: s["plies"] == 2)
         assert [m["san"] for m in s["moves"]] == ["e4", "e6"] and s["moves"][1]["source"] == "book"
         s = until(svc, g["id"], analysed)
-        assert s["moves"][0]["cpl"] >= 0 and s["moves"][0]["best"]["line"] and s["acpl"]["user"] is not None
+        assert s["moves"][0]["cpl"] >= 0 and s["moves"][0]["verdict"] and s["acpl"]["user"] is not None
+        assert not any("best" in m for m in s["moves"])  # what the engine preferred is not shown while the game is on
         assert '[White "You"]' in s["pgn"] and "1. e4 e6 *" in s["pgn"]
         # the tools a Claude session is given
         assert "the student plays White" in svc.tool_game(g["id"]) and "Legal moves" in svc.tool_game(g["id"])
@@ -117,6 +118,7 @@ def test_playing_black_and_being_mated():
         assert s["status"] == "finished" and s["result"] == "1-0" and s["reason"] == "checkmate" and s["legal"] == {}
         assert s["moves"][-1]["san"] == "Qxf7#" and s["moves"][-1]["eval"]["mate"] == 0 and s["moves"][-1]["eval"]["value"] > 9000
         assert s["moves"][5]["verdict"] == "blunder"  # 3... Nf6 allows mate
+        assert s["moves"][5]["best"]["line"] and s["moves"][5]["best"]["uci"] != "g8f6"  # over: what the engine preferred
         try:
             svc.move(g["id"], "Ke7")
             raise AssertionError("a move was accepted after the game ended")
@@ -150,7 +152,7 @@ def test_the_clock():
     try:
         g = svc.create("w", 1320, None, "10+3")
         gid = g["id"]
-        assert g["clock"] == {"ms": 600000, "increment_ms": 3000, "running": False, "paused": False}
+        assert g["clock"] == {"ms": 600000, "increment_ms": 3000, "running": False, "paused": False, "opponent": None}
         svc.move(gid, "e4")
         s = until(svc, gid, lambda s: s["plies"] == 2)
         assert s["clock"]["ms"] == 603000 and s["clock"]["running"]  # not charged for the first move; the increment is

@@ -5,6 +5,7 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const TOUCH = matchMedia("(pointer: coarse)");
+const PHONE = matchMedia("(max-width: 760px)");  // the one-column layout of style.css
 const FILES = "abcdefgh";
 const FORM = "chess-tutor.form";
 
@@ -22,7 +23,8 @@ const S = {
   poll: null,      // AbortController of the wait on the game
   clockAt: 0,      // when the clock in S.game was read
   term: null,
-  form: { color: "w", elo: 1200, full: false, opening: "", time: "untimed" },
+  reopen: false,   // the game's session is to be shown again if its terminal has ended (once each time you come back)
+  form: { engine: "stockfish", color: "w", elo: 1200, full: false, opening: "", time: "untimed" },
 };
 try { Object.assign(S.form, JSON.parse(localStorage.getItem(FORM) || "{}")); } catch (e) { /* no storage */ }
 
@@ -93,24 +95,28 @@ async function showHome() {
 function saveForm() { try { localStorage.setItem(FORM, JSON.stringify(S.form)); } catch (e) { /* no storage */ } }
 function renderForm() {
   const f = S.form, m = S.meta;
-  f.elo = Math.max(m.elo.min, Math.min(m.elo.max, +f.elo || m.elo.default));
+  // Who plays: an engine that is not installed can be seen but not picked.
+  let eng = m.engines.find((e) => e.key === f.engine && e.available) || m.engines[0];
+  f.engine = eng.key;
+  const off = m.engines.find((e) => !e.available);
+  $("f-engine").innerHTML = m.engines.map((e) => `<button data-v="${e.key}" class="${e.key === eng.key ? "on" : ""}"${e.available ? "" : " disabled"} title="${esc(e.available ? "" : e.missing)}">${esc(e.name)}</button>`).join("");
+  $("f-engine-hint").textContent = off ? `${off.name} is not installed: run \`chess-tutor allie install\` to play against it.` : "";
+  if (!eng.full) f.full = false;
+  f.elo = Math.max(eng.elo.min, Math.min(eng.elo.max, +f.elo || eng.elo.default));
   for (const b of $("f-color").children) b.classList.toggle("on", b.dataset.v === f.color);
-  for (const el of [$("f-elo"), $("f-elo-n")]) { el.min = m.elo.min; el.max = m.elo.max; el.value = f.elo; el.disabled = f.full; }
-  $("f-full").checked = f.full;
-  $("f-elo-hint").textContent = f.full ? `${m.engine} with nothing held back.`
-    : f.elo >= m.elo.native ? `Stockfish limiting itself to ${f.elo} (its own scale, anchored to the CCRL rating list).`
-    : `Below ${m.elo.native} Stockfish has no setting: a weaker player built on it, measured against Stockfish at ${m.elo.native} and up.`;
+  for (const el of [$("f-elo"), $("f-elo-n")]) { el.min = eng.elo.min; el.max = eng.elo.max; el.value = f.elo; el.disabled = f.full; }
+  $("f-full").checked = f.full; $("f-full-label").hidden = !eng.full;
   // The opponent can only steer for an opening of the colour it plays.
   const side = f.color === "w" ? "b" : f.color === "b" ? "w" : null;
   const list = side ? m.openings[side] : [];
   if (!list.some((o) => o.key === f.opening)) f.opening = "";
   $("f-opening").innerHTML = `<option value="">Engine's choice</option>` + list.map((o) => `<option value="${o.key}"${o.key === f.opening ? " selected" : ""}>${esc(o.name)}</option>`).join("");
   $("f-opening").disabled = !side;
-  $("f-opening-hint").textContent = !side ? "Pick a colour to choose the opening the opponent plays."
-    : f.opening ? "The opponent follows this opening for as long as your moves allow it, then plays at its strength." : "";
   if (!m.time_controls.includes(f.time)) f.time = "untimed";
+  $("f-time-label").textContent = eng.key === "allie" ? "Clocks" : "Your clock";
   $("f-time").innerHTML = m.time_controls.map((t) => `<button data-v="${t}" class="${t === f.time ? "on" : ""}">${t === "untimed" ? "Untimed" : esc(t.replace("+", " + "))}</button>`).join("");
 }
+$("f-engine").onclick = (ev) => { const b = ev.target.closest("button"); if (b && !b.disabled) { S.form.engine = b.dataset.v; saveForm(); renderForm(); } };
 $("f-color").onclick = (ev) => { const b = ev.target.closest("button"); if (b) { S.form.color = b.dataset.v; saveForm(); renderForm(); } };
 $("f-time").onclick = (ev) => { const b = ev.target.closest("button"); if (b) { S.form.time = b.dataset.v; saveForm(); renderForm(); } };
 $("f-elo").oninput = () => { S.form.elo = +$("f-elo").value; saveForm(); renderForm(); };
@@ -121,7 +127,7 @@ $("f-start").onclick = async () => {
   const f = S.form;
   $("f-err").textContent = ""; $("f-start").disabled = true;
   try {
-    const g = await api("POST", "/api/games", { color: f.color, elo: f.full ? null : f.elo, opening: f.opening || null, time_control: f.time });
+    const g = await api("POST", "/api/games", { engine: f.engine, color: f.color, elo: f.full ? null : f.elo, opening: f.opening || null, time_control: f.time });
     location.hash = `#/game/${g.id}`;
   } catch (e) { $("f-err").textContent = e.message; }
   $("f-start").disabled = false;
@@ -142,7 +148,7 @@ function outcome(g) {  // [label, class] of a game for you
   const won = (g.result === "1-0") === (g.user_color === "w");
   return [`${won ? "Won" : "Lost"} · ${g.reason === "time" ? "on time" : g.reason}`, won ? "won" : "lost"];
 }
-const strength = (g) => g.elo ? `Stockfish ${g.elo}` : "Stockfish, full strength";
+const strength = (g) => g.opponent;
 function renderGames(games) {
   $("game-empty").hidden = games.length > 0;
   $("game-list").innerHTML = games.map((g) => {
@@ -170,7 +176,7 @@ function showGame(id) {
   $("home").hidden = true; $("game").hidden = false;
   if (S.gid === id) return;
   leaveGame();
-  Object.assign(S, { gid: id, game: null, view: 0, follow: true, flip: false, sel: null, drag: null, promo: null, pending: null });
+  Object.assign(S, { gid: id, game: null, view: 0, follow: true, flip: false, sel: null, drag: null, promo: null, pending: null, reopen: true });
   $("board").innerHTML = ""; $("moves").innerHTML = ""; $("insight").innerHTML = ""; $("game-err").textContent = "";
   loadMeta().catch(() => {});
   startPoll();
@@ -194,6 +200,7 @@ function startPoll() {
         if (ctl.signal.aborted) return;
         if (/^no game/.test(e.message)) { location.hash = "#/"; return; }
         $("game-err").textContent = "Lost touch with the server; trying again…";
+        S.reopen = true;  // a server that was restarted has none of the terminals it had
         since = null;
         await sleep(1500);
       }
@@ -204,7 +211,7 @@ function stopPoll() { if (S.poll) S.poll.abort(); S.poll = null; }
 // The wait on the game is also what runs your clock: a hidden tab stops waiting, and the clock stops with it.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { stopPoll(); if (S.term) unlisten(S.term); }
-  else { startPoll(); if (S.term) listen(S.term); }
+  else { S.reopen = true; startPoll(); if (S.term) listen(S.term); }
 });
 
 function setGame(g) {
@@ -242,11 +249,17 @@ function render(scroll) {
 
 function renderPlayers() {
   const g = S.game;
-  $("p-top").innerHTML = `<span class="name">${esc(strength(g))}</span>` + (g.thinking ? `<span class="thinking">thinking…</span>` : "");
+  const theirs = g.clock && g.clock.opponent, both = theirs ? "the clocks" : "your clock";
+  const note = g.trouble ? `<span class="thinking" title="${esc(g.trouble)}">cannot move: ${esc(g.trouble)}</span>`
+    : g.loading ? `<span class="thinking">loading Allie, about a minute…</span>` : g.thinking ? `<span class="thinking">thinking…</span>` : "";
+  const offer = g.draw_offer ? `<span class="offer">offers a draw</span><button id="draw-accept" data-testid="draw-accept">Accept</button>` +
+    `<button id="draw-decline" class="quiet" data-testid="draw-decline">Decline</button>` : "";
+  $("p-top").innerHTML = `<span class="name">${esc(strength(g))}</span>` + note + offer +
+    (theirs ? `<div class="clock" id="opp-clock"><span class="time" id="opp-clock-time" data-testid="opponent-clock"></span></div>` : "");
   let clock = "";
   if (g.clock) {
     clock = `<div class="clock" id="clock"><span class="time" id="clock-time" data-testid="clock"></span>` +
-      (g.status === "active" ? `<button id="clock-pause" data-testid="clock-pause" title="${g.clock.paused ? "Start your clock again" : "Stop your clock, to talk to Claude or step away"}">${g.clock.paused ? "Resume" : "Pause"}</button>` : "") + `</div>`;
+      (g.status === "active" ? `<button id="clock-pause" data-testid="clock-pause" title="${g.clock.paused ? `Start ${both} again` : `Stop ${both}, to talk to Claude or step away`}">${g.clock.paused ? "Resume" : "Pause"}</button>` : "") + `</div>`;
   }
   $("p-bottom").innerHTML = `<span class="name">You</span><span class="sub">${g.user_color === "w" ? "White" : "Black"}</span>${clock}`;
   if (g.clock) {
@@ -254,17 +267,25 @@ function renderPlayers() {
     const b = $("clock-pause");
     if (b) b.onclick = () => act(() => api("POST", `/api/games/${g.id}/pause`, { paused: !g.clock.paused }));
   }
+  if (g.draw_offer) for (const accept of [true, false]) {
+    $(accept ? "draw-accept" : "draw-decline").onclick = () => act(() => api("POST", `/api/games/${g.id}/draw`, { accept }));
+  }
 }
 function tickClock() {
-  const g = S.game, el = $("clock-time");
-  if (!g || !g.clock || !el) return;
-  const ms = Math.max(0, g.clock.ms - (g.clock.running ? performance.now() - S.clockAt : 0));
+  const g = S.game;
+  if (!g || !g.clock) return;
+  showClock($("clock"), $("clock-time"), g.clock);
+  if (g.clock.opponent) showClock($("opp-clock"), $("opp-clock-time"), g.clock.opponent);
+}
+function showClock(box, el, c) {  // a clock as the server last read it, less the time since if it is running
+  const g = S.game;
+  if (!box || !el) return;
+  const ms = Math.max(0, c.ms - (c.running ? performance.now() - S.clockAt : 0)), paused = g.clock.paused && g.status === "active";
   const s = Math.floor(ms / 1000), text = ms < 20000 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}.${Math.floor(ms % 1000 / 100)}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  el.textContent = g.clock.paused && g.status === "active" ? `${text} ⏸` : text;
-  const c = $("clock");
-  c.classList.toggle("running", g.clock.running);
-  c.classList.toggle("paused", g.clock.paused && g.status === "active");
-  c.classList.toggle("low", ms < 30000 && g.status === "active");
+  el.textContent = paused ? `${text} ⏸` : text;
+  box.classList.toggle("running", c.running);
+  box.classList.toggle("paused", paused);
+  box.classList.toggle("low", ms < 30000 && g.status === "active");
 }
 setInterval(tickClock, 100);
 
@@ -299,7 +320,7 @@ function renderBoard() {
       (c === 0 ? `<span class="coord rank">${rank + 1}</span>` : "") + (r === 7 ? `<span class="coord file">${FILES[file]}</span>` : "") +
       (p ? pieceSvg(p).replace('class="pc', `class="pc${S.drag && S.drag.moved && S.drag.from === name ? " dragging" : ""}`) : "") + `</div>`;
   }
-  // Where the engine would have gone instead of the move shown.
+  // Where the engine would have gone instead of the move shown (the server says only once the game is over).
   const m = pos.move;
   if (m && m.best && m.best.uci !== m.uci) html += arrow(m.best.uci, flip);
   if (S.promo) {
@@ -481,22 +502,32 @@ document.addEventListener("keydown", (ev) => {
 });
 
 // ---------- Claude ----------
-// A Claude Code session in a terminal, shown with xterm.js. Nothing starts it but the buttons and the box here.
+// A Claude Code session in a terminal, shown with xterm.js. Nothing starts one but a message sent from the box
+// here; once a game has one, it is shown whenever the game is.
 function paneSize() {
   if (S.term) return { cols: S.term.xterm.cols, rows: S.term.xterm.rows };
-  const box = $("claude-pane").getBoundingClientRect(), font = TOUCH.matches ? 12 : 13;
-  return { cols: Math.max(40, Math.floor((box.width - 24) / (font * 0.61))), rows: Math.max(12, Math.floor((box.height - 110) / (font * 1.25))) };
+  // No terminal yet: the pane holds only the box. The size is that of the terminal it grows to hold (style.css).
+  const font = TOUCH.matches ? 12 : 13, width = $("claude-pane").clientWidth;
+  const height = (PHONE.matches ? innerHeight * 0.78 : $("game").clientHeight - 24) - $("compose").offsetHeight;
+  return { cols: Math.max(40, Math.floor((width - 24) / (font * 0.61))), rows: Math.max(12, Math.floor((height - 12) / (font * 1.25))) };
 }
 function syncClaude() {
-  const g = S.game, c = g.claude, id = c.terminal;
+  const c = S.game.claude, id = c.terminal;
   if (id && (!S.term || S.term.id !== id)) openTerminal(id);
   if (!id && S.term) closeTerminal();
-  $("terminal").hidden = !id; $("claude-empty").hidden = !!id; $("claude-close").hidden = !id;
-  $("claude-resume").hidden = $("claude-reset").hidden = !!id || !c.started;
-  const n = g.moves.length;
-  $("claude-analyse").textContent = !c.started ? "Start Claude analysis" : c.analysed_ply < n ? "Analyse new moves" : "Analyse again";
-  $("claude-sub").textContent = !c.started ? "" : id ? (c.analysed_ply ? `last asked at move ${Math.ceil(c.analysed_ply / 2)}` : "") : "session closed";
+  $("terminal").hidden = !id;
   renderKeys();
+  if (id) S.reopen = false;
+  else if (S.reopen && c.started && !document.hidden) { S.reopen = false; reopen(); }
+}
+// A game you come back to shows its session as you left it: one whose terminal has ended since (nobody was
+// watching it, the server was restarted) is resumed. Once each time, so one you leave with /exit stays closed.
+async function reopen() {
+  const gid = S.gid;
+  try {
+    const r = await api("POST", `/api/games/${gid}/claude/resume`, paneSize());
+    if (S.gid === gid && S.game) { S.game.claude.terminal = r.terminal; syncClaude(); }
+  } catch (e) { /* nothing to resume (its transcript is gone), or no Claude Code: a message sent says which */ }
 }
 async function claude(path, body) {
   $("claude-err").textContent = "";
@@ -504,12 +535,8 @@ async function claude(path, body) {
     const r = await api("POST", `/api/games/${S.gid}/claude/${path}`, { ...paneSize(), ...(body || {}) });
     if (r.terminal && S.game) { S.game.claude.terminal = r.terminal; S.game.claude.started = true; syncClaude(); }
     return r;
-  } catch (e) { $("claude-err").textContent = e.message; $("claude-empty").hidden = false; throw e; }
+  } catch (e) { $("claude-err").textContent = e.message; throw e; }
 }
-$("claude-analyse").onclick = () => claude("analyse").catch(() => {});
-$("claude-resume").onclick = () => claude("resume").catch(() => {});
-$("claude-close").onclick = () => claude("close").catch(() => {});
-$("claude-reset").onclick = () => { if (confirm("Forget this game's Claude session? Its conversation will no longer be reachable from here.")) claude("reset").catch(() => {}); };
 async function composeSend() {
   const text = $("compose-text").value;
   if (!text.trim() || !S.gid) return;
@@ -522,7 +549,7 @@ $("compose-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" &
 const addon = (load) => { try { load(); } catch (e) { /* not there, or no GPU: the terminal works without it */ } };
 function openTerminal(id) {
   closeTerminal();
-  $("terminal").hidden = false; $("claude-empty").hidden = true;
+  $("terminal").hidden = false;
   const xterm = new Terminal({
     fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, "DejaVu Sans Mono", monospace', fontSize: TOUCH.matches ? 12 : 13, cursorBlink: true,
     scrollback: 5000, allowProposedApi: true, theme: { background: "#16181d", foreground: "#d7dae0" },

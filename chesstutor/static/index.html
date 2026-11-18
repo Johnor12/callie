@@ -28,24 +28,26 @@
         </div>
       </div>
       <div class="field">
+        <label>Opponent</label>
+        <div class="seg" id="f-engine" data-testid="new-engine"></div>
+        <div class="hint" id="f-engine-hint"></div>
+      </div>
+      <div class="field">
         <label for="f-elo">Opponent strength</label>
         <div class="elo">
           <input type="range" id="f-elo" data-testid="new-elo" step="10">
           <input type="number" id="f-elo-n" data-testid="new-elo-number" step="10" inputmode="numeric">
           <span class="unit">Elo</span>
-          <label class="check"><input type="checkbox" id="f-full" data-testid="new-full"> full strength</label>
+          <label class="check" id="f-full-label"><input type="checkbox" id="f-full" data-testid="new-full"> full strength</label>
         </div>
-        <div class="hint" id="f-elo-hint"></div>
       </div>
       <div class="field">
         <label for="f-opening">Opponent's opening</label>
         <select id="f-opening" data-testid="new-opening"></select>
-        <div class="hint" id="f-opening-hint"></div>
       </div>
       <div class="field">
-        <label>Your clock</label>
+        <label id="f-time-label">Your clock</label>
         <div class="seg" id="f-time" data-testid="new-time"></div>
-        <div class="hint">Only you are timed. The clock runs while this game's page is open and can be paused.</div>
       </div>
       <div class="row">
         <button class="primary" id="f-start" data-testid="new-start">Start game</button>
@@ -92,27 +94,14 @@
     </section>
 
     <section id="claude-pane" data-testid="claude-pane">
-      <div class="claude-head">
-        <b>Claude</b>
-        <span class="sub" id="claude-sub"></span>
-        <span class="spacer"></span>
-        <button class="primary" id="claude-analyse" data-testid="claude-analyse">Start Claude analysis</button>
-        <button class="quiet" id="claude-close" data-testid="claude-close" title="End the terminal. The session is kept and can be resumed." hidden>Close</button>
-      </div>
-      <div id="claude-empty" data-testid="claude-empty">
-        <p>Claude is not looking at this game. Nothing is sent to it until you ask.</p>
-        <p><b>Start Claude analysis</b> opens a Claude Code session here that can read the game, the engine's analysis of every move, and run the engine itself on any line. Ask it anything in the box below.</p>
-        <p class="links"><button class="quiet" id="claude-resume" data-testid="claude-resume" hidden>Reopen the earlier session</button>
-        <button class="quiet" id="claude-reset" data-testid="claude-reset" hidden>Forget it and start over</button></p>
-        <span class="err" id="claude-err" data-testid="claude-error"></span>
-      </div>
       <div id="terminal" data-testid="terminal" hidden></div>
       <div id="keys" data-testid="keys" hidden>
         <button data-key="esc">esc</button><button data-key="up">↑</button><button data-key="down">↓</button>
         <button data-key="enter">⏎</button><button data-key="tab">tab</button><button data-key="ctrlc">^C</button>
       </div>
+      <div class="err" id="claude-err" data-testid="claude-error"></div>
       <div id="compose" data-testid="compose">
-        <textarea id="compose-text" data-testid="compose-text" rows="2" placeholder="Ask Claude about the game…  (Enter to send, Shift+Enter for a new line)"></textarea>
+        <textarea id="compose-text" data-testid="compose-text" rows="2" placeholder="Ask Claude about the game…"></textarea>
         <button id="compose-send" data-testid="compose-send">Send</button>
       </div>
     </section>

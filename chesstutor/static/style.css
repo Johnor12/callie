@@ -94,6 +94,8 @@ textarea { resize: none; width: 100%; }
 .player { display: flex; align-items: center; gap: 10px; min-height: 30px; padding-left: 26px; }
 .player .name { font-weight: 600; }
 .player .thinking { color: var(--accent); font-size: 13px; }
+.player .offer { color: var(--warn); font-size: 13px; }
+.player > button { padding: 3px 10px; font-size: 13px; }
 .clock { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .clock .time { font: 600 19px/1 ui-monospace, "SFMono-Regular", Menlo, monospace; padding: 5px 10px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); min-width: 78px; text-align: center; }
 .clock.running .time { background: #e9edf0; color: #14171c; border-color: #e9edf0; }
@@ -128,19 +130,15 @@ textarea { resize: none; width: 100%; }
 .actions { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); flex-wrap: wrap; align-items: center; }
 .actions button { padding: 5px 10px; font-size: 13px; }
 
-#claude-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.claude-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--line); flex: none; }
-.claude-head .sub { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.claude-head button { padding: 5px 12px; font-size: 13px; white-space: nowrap; }
-#claude-empty { flex: 1; padding: 22px 20px; color: var(--dim); overflow: auto; }
-#claude-empty p { max-width: 520px; margin: 0 0 12px; }
-#claude-empty b { color: var(--text); }
-#claude-empty .links button { padding: 4px 8px; margin-left: -8px; color: var(--accent); }
-#terminal { flex: 1; min-height: 0; background: #16181d; overflow: hidden; }
+/* the box to write in, and above it, once a session is open, its terminal: only then does the pane take the height */
+#claude-pane { display: flex; flex-direction: column; align-self: start; min-height: 0; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+#claude-pane:has(#terminal:not([hidden])) { align-self: stretch; }
+#terminal { flex: 1; min-height: 0; background: #16181d; overflow: hidden; border-bottom: 1px solid var(--line); }
 #terminal .xterm { height: 100%; padding: 6px 0 4px 8px; }  /* on .xterm: the fit addon subtracts its padding, not its parent's */
-#keys { display: flex; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--line); overflow-x: auto; flex: none; }
+#keys { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
 #keys button { padding: 6px 12px; font-size: 13px; flex: none; }
-#compose { display: flex; gap: 8px; padding: 8px; border-top: 1px solid var(--line); flex: none; align-items: flex-end; }
+#claude-err:not(:empty) { padding: 8px 10px 0; }
+#compose { display: flex; gap: 8px; padding: 8px; flex: none; align-items: flex-end; }
 #compose button { height: 34px; }
 
 /* two columns: the board with the moves under it, Claude beside */
@@ -158,7 +156,8 @@ textarea { resize: none; width: 100%; }
   #game { display: flex; flex-direction: column; padding: 8px 10px 16px; }
   #board-pane { width: 100%; }
   #moves-pane { max-height: 300px; }
-  #claude-pane { height: 78dvh; flex: none; }
+  #claude-pane { flex: none; align-self: stretch; }
+  #claude-pane:has(#terminal:not([hidden])) { height: 78dvh; }
   .field { grid-template-columns: 1fr; }
   .field .hint { grid-column: 1; }
   .player, .nav, #insight { padding-left: 0; }

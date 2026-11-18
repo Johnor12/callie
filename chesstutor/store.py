@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS games (
   created_at REAL NOT NULL,
   updated_at REAL NOT NULL,
   user_color TEXT NOT NULL,            -- 'w' or 'b'
+  engine TEXT NOT NULL DEFAULT 'stockfish',  -- who the opponent is: 'stockfish' or 'allie'
   elo INTEGER,                          -- the opponent's strength; NULL: full strength
   opening TEXT,                         -- key of the opening the opponent steers for; NULL: its own choice
   start_fen TEXT NOT NULL,
@@ -21,9 +22,11 @@ CREATE TABLE IF NOT EXISTS games (
   result TEXT,                          -- '1-0', '0-1', '1/2-1/2'
   reason TEXT,                          -- checkmate, resignation, stalemate, ...
   time_control TEXT,                    -- '10+3' (minutes + seconds a move); NULL: untimed
-  clock_ms INTEGER,                     -- what is left on your clock (the opponent has none)
+  clock_ms INTEGER,                     -- what is left on your clock
+  opp_clock_ms INTEGER,                 -- what is left on the opponent's; NULL: it has none (Stockfish never has)
   increment_ms INTEGER NOT NULL DEFAULT 0,
-  paused INTEGER NOT NULL DEFAULT 0,    -- you stopped your clock
+  paused INTEGER NOT NULL DEFAULT 0,    -- you stopped the clock (yours, and the opponent's if it has one)
+  draw_offer INTEGER,                   -- the ply of the opponent's move that came with a draw offer; NULL: none stands
   session_id TEXT NOT NULL,             -- the Claude Code session that analyses this game
   session_started INTEGER NOT NULL DEFAULT 0,  -- it was given its first prompt, so it can be resumed
   analysed_ply INTEGER NOT NULL DEFAULT 0      -- how far the game was when Claude was last asked to analyse it
@@ -36,6 +39,7 @@ CREATE TABLE IF NOT EXISTS moves (
   fen TEXT NOT NULL,                    -- the position after the move
   source TEXT NOT NULL,                 -- 'user', 'engine' or 'book'
   played_at REAL NOT NULL,
+  clock_ms INTEGER,                     -- the mover's clock after the move, increment included; NULL: it has none
   PRIMARY KEY (game_id, ply)
 );
 CREATE TABLE IF NOT EXISTS evals (      -- the position after `ply` moves (0: the start), at full strength
@@ -50,6 +54,11 @@ CREATE TABLE IF NOT EXISTS evals (      -- the position after `ply` moves (0: th
   PRIMARY KEY (game_id, ply)
 );
 """
+# Columns added since the first release: a database made before them gets them here.
+ADDED = {
+    "games": {"engine": "TEXT NOT NULL DEFAULT 'stockfish'", "opp_clock_ms": "INTEGER", "draw_offer": "INTEGER"},
+    "moves": {"clock_ms": "INTEGER"},
+}
 
 
 class Store:
@@ -62,6 +71,11 @@ class Store:
         with self.lock:
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.executescript(SCHEMA)
+            for table, columns in ADDED.items():
+                have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+                for name, kind in columns.items():
+                    if name not in have:
+                        self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
 
     def run(self, sql: str, args: tuple = ()) -> None:
         with self.lock:
@@ -106,11 +120,11 @@ class Store:
     def moves(self, game_id: str) -> list[dict]:
         return self.all("SELECT * FROM moves WHERE game_id=? ORDER BY ply", (game_id,))
 
-    def add_move(self, game_id: str, ply: int, uci: str, san: str, fen: str, source: str) -> None:
+    def add_move(self, game_id: str, ply: int, uci: str, san: str, fen: str, source: str, clock_ms: int | None = None) -> None:
         with self.lock:
             self.conn.execute(
-                "INSERT INTO moves (game_id, ply, uci, san, fen, source, played_at) VALUES (?,?,?,?,?,?,?)",
-                (game_id, ply, uci, san, fen, source, time.time()),
+                "INSERT INTO moves (game_id, ply, uci, san, fen, source, played_at, clock_ms) VALUES (?,?,?,?,?,?,?,?)",
+                (game_id, ply, uci, san, fen, source, time.time(), clock_ms),
             )
             self.conn.execute("UPDATE games SET updated_at=? WHERE id=?", (time.time(), game_id))
 

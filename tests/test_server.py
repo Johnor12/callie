@@ -97,6 +97,7 @@ def test_a_claude_session_is_started_resumed_and_talked_to():
         gid = g["id"]
         assert g["claude"] == {"started": False, "analysed_ply": 0, "terminal": None}
         assert s.call("POST", f"/api/games/{gid}/claude/resume")[0] == 400  # nothing to resume yet
+        assert s.call("POST", f"/api/games/{gid}/draw", {"accept": True}) == (400, {"error": "there is no draw offer to answer"})
         s.call("POST", f"/api/games/{gid}/move", {"move": "e4"})
         # the button: a new session, told what the game is and what is wanted
         code, r = s.call("POST", f"/api/games/{gid}/claude/analyse", {"cols": 100, "rows": 30})
