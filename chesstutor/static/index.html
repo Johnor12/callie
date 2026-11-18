@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- interactive-widget: a phone's keyboard takes its height from the page, so the terminal ends above it -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#16181d">
+  <title>Chess Tutor</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+  <link rel="stylesheet" href="/static/vendor/xterm.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="#/" data-testid="home-link"><img src="/static/icon.svg" alt="" width="22" height="22">Chess Tutor</a>
+    <span class="crumb" id="crumb" data-testid="crumb"></span>
+    <span class="spacer"></span>
+    <span class="engine" id="engine-name"></span>
+  </header>
+
+  <main id="home" data-testid="home" hidden>
+    <section class="card" id="new-game" data-testid="new-game">
+      <h2>New game</h2>
+      <div class="field">
+        <label>You play</label>
+        <div class="seg" id="f-color" data-testid="new-color">
+          <button data-v="w">White</button><button data-v="b">Black</button><button data-v="random">Random</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="f-elo">Opponent strength</label>
+        <div class="elo">
+          <input type="range" id="f-elo" data-testid="new-elo" step="10">
+          <input type="number" id="f-elo-n" data-testid="new-elo-number" step="10" inputmode="numeric">
+          <span class="unit">Elo</span>
+          <label class="check"><input type="checkbox" id="f-full" data-testid="new-full"> full strength</label>
+        </div>
+        <div class="hint" id="f-elo-hint"></div>
+      </div>
+      <div class="field">
+        <label for="f-opening">Opponent's opening</label>
+        <select id="f-opening" data-testid="new-opening"></select>
+        <div class="hint" id="f-opening-hint"></div>
+      </div>
+      <div class="field">
+        <label>Your clock</label>
+        <div class="seg" id="f-time" data-testid="new-time"></div>
+        <div class="hint">Only you are timed. The clock runs while this game's page is open and can be paused.</div>
+      </div>
+      <div class="row">
+        <button class="primary" id="f-start" data-testid="new-start">Start game</button>
+        <span class="err" id="f-err" data-testid="new-error"></span>
+      </div>
+    </section>
+    <section id="recent">
+      <h2>Recent games</h2>
+      <ol id="game-list" data-testid="game-list"></ol>
+      <div class="empty" id="game-empty" hidden>No games yet.</div>
+    </section>
+  </main>
+
+  <main id="game" data-testid="game" hidden>
+    <section id="board-pane" data-testid="board-pane">
+      <div class="player" id="p-top" data-testid="player-opponent"></div>
+      <div class="board-row">
+        <div id="evalbar" data-testid="evalbar" title="The engine's evaluation of the position shown"><div id="evalbar-white"></div><span id="evalbar-text"></span></div>
+        <div id="board" data-testid="board"></div>
+      </div>
+      <div class="player" id="p-bottom" data-testid="player-you"></div>
+      <div class="nav" data-testid="nav">
+        <button id="nav-first" data-testid="nav-first" title="Start (Home)">⏮</button>
+        <button id="nav-prev" data-testid="nav-prev" title="Back (←)">◀</button>
+        <button id="nav-next" data-testid="nav-next" title="Forward (→)">▶</button>
+        <button id="nav-last" data-testid="nav-last" title="Latest (End)">⏭</button>
+        <span class="spacer"></span>
+        <button id="act-flip" class="quiet" data-testid="flip" title="Turn the board around">Flip</button>
+      </div>
+      <div id="insight" data-testid="insight"></div>
+    </section>
+
+    <section id="moves-pane" data-testid="moves-pane">
+      <div id="result" data-testid="result" hidden></div>
+      <svg id="graph" data-testid="graph" viewBox="0 0 100 40" preserveAspectRatio="none"><title>White's winning chances over the game</title></svg>
+      <div class="moves-head"><span>Moves</span><span class="acpl" id="acpl" data-testid="acpl" title="Average centipawn loss"></span></div>
+      <div id="moves" data-testid="moves"></div>
+      <div class="actions">
+        <button id="act-takeback" data-testid="takeback" title="Undo your last move and the reply to it">Take back</button>
+        <button id="act-resign" data-testid="resign">Resign</button>
+        <button id="act-pgn" class="quiet" data-testid="copy-pgn">Copy PGN</button>
+        <span class="err" id="game-err" data-testid="game-error"></span>
+      </div>
+    </section>
+
+    <section id="claude-pane" data-testid="claude-pane">
+      <div class="claude-head">
+        <b>Claude</b>
+        <span class="sub" id="claude-sub"></span>
+        <span class="spacer"></span>
+        <button class="primary" id="claude-analyse" data-testid="claude-analyse">Start Claude analysis</button>
+        <button class="quiet" id="claude-close" data-testid="claude-close" title="End the terminal. The session is kept and can be resumed." hidden>Close</button>
+      </div>
+      <div id="claude-empty" data-testid="claude-empty">
+        <p>Claude is not looking at this game. Nothing is sent to it until you ask.</p>
+        <p><b>Start Claude analysis</b> opens a Claude Code session here that can read the game, the engine's analysis of every move, and run the engine itself on any line. Ask it anything in the box below.</p>
+        <p class="links"><button class="quiet" id="claude-resume" data-testid="claude-resume" hidden>Reopen the earlier session</button>
+        <button class="quiet" id="claude-reset" data-testid="claude-reset" hidden>Forget it and start over</button></p>
+        <span class="err" id="claude-err" data-testid="claude-error"></span>
+      </div>
+      <div id="terminal" data-testid="terminal" hidden></div>
+      <div id="keys" data-testid="keys" hidden>
+        <button data-key="esc">esc</button><button data-key="up">↑</button><button data-key="down">↓</button>
+        <button data-key="enter">⏎</button><button data-key="tab">tab</button><button data-key="ctrlc">^C</button>
+      </div>
+      <div id="compose" data-testid="compose">
+        <textarea id="compose-text" data-testid="compose-text" rows="2" placeholder="Ask Claude about the game…  (Enter to send, Shift+Enter for a new line)"></textarea>
+        <button id="compose-send" data-testid="compose-send">Send</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/vendor/xterm.js"></script>
+  <script src="/static/vendor/addon-fit.js"></script>
+  <script src="/static/vendor/addon-unicode-graphemes.js"></script>
+  <script src="/static/vendor/addon-webgl.js"></script>
+  <script src="/static/pieces.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

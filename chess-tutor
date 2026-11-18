@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs the checkout as it is: there is nothing to install. Needs Python 3.12 or newer.
+here=$(dirname "$(readlink -f "$0")")
+for py in "$CHESSTUTOR_PYTHON" python3.14 python3.13 python3.12 python3; do
+  [ -n "$py" ] && command -v "$py" >/dev/null 2>&1 || continue
+  "$py" -c 'import sys; sys.exit(sys.version_info < (3, 12))' 2>/dev/null || continue
+  PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" exec "$py" -m chesstutor.cli "$@"
+done
+echo "chess-tutor: needs Python 3.12 or newer (set CHESSTUTOR_PYTHON to one)" >&2
+exit 1

@@ -1,0 +1,30 @@
+# Chess Tutor configuration. Copy to ~/.config/chess-tutor/config.toml (or point CHESSTUTOR_CONFIG at it).
+# Every key is optional; what is shown is the default unless the comment says otherwise.
+
+# home = "~/.local/share/chess-tutor"   # games.db, the engine, Claude session files, logs
+
+[server]
+host = "127.0.0.1"
+port = 8750
+# Names the server answers to besides the loopback ones, for a proxy on this machine such as `tailscale serve`.
+# With none, forwarded requests are refused. Host names only: no scheme, port or path.
+# hosts = ["my-machine.my-tailnet.ts.net"]
+# Who may use it under those names. Empty: every device the tailnet lets reach this machine.
+# tailscale_logins = ["me@example.com"]
+
+[engine]
+# path = "~/.local/share/chess-tutor/engine/stockfish"   # where `chess-tutor engine install` puts it
+threads = 0        # for analysis; 0 means half the machine's logical processors
+hash_mb = 512      # for each of the two analysis engines
+review_ms = 1500   # how long every position of a game is analysed
+opponent_ms = 1000 # how long the opponent thinks
+
+[claude]
+bin = "claude"
+model = "claude-fable-5-2"
+# effort = "high"                    # empty: Claude Code's own default
+# The Claude Code configuration directory (its login, settings and transcripts) the sessions run in.
+# Unset: whatever CLAUDE_CONFIG_DIR the server was started with, else ~/.claude.
+# config_dir = "~/.claude-personal"
+# extra_args = []                    # more arguments for every `claude` started
+idle_terminal_s = 900                # a session's terminal nobody is watching is ended after this; it resumes
