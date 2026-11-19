@@ -1,4 +1,4 @@
-"""`chess-tutor`: run the server, fetch the engines, install it as a service."""
+"""`chess-tutor`: run the server, fetch the engines, install it as a service, keep the games in git."""
 
 from __future__ import annotations
 
@@ -282,6 +282,33 @@ def cmd_allie(cfg: Config, args) -> int:
     return 0
 
 
+# ---------- the games, in git ----------
+
+
+def cmd_history(cfg: Config, args) -> int:
+    """`export`: the games and cards as text under the checkout's history/; `push`: that, committed and
+    pushed (what cron runs each night); `import`: the games and cards there that the database does not hold."""
+    from . import history
+    from .store import Store
+
+    checkout = Path(__file__).resolve().parent.parent
+    store = Store(cfg.db_path)
+    try:
+        if args.action == "import":
+            added = history.load(store, checkout / "history")
+            print(f"chess-tutor: added {added['games']} games and {added['cards']} cards from {checkout / 'history'}")
+            return 0
+        games = history.export(store, checkout / "history")
+        said = f"{games} games in {checkout / 'history'}"
+        if args.action == "push":
+            said += f": {history.push(checkout)}"
+        print(f"chess-tutor: {time.strftime('%Y-%m-%d %H:%M')} {said}")
+        return 0
+    except history.HistoryError as e:
+        print(f"chess-tutor: {time.strftime('%Y-%m-%d %H:%M')} {e}", file=sys.stderr)
+        return 1
+
+
 # ---------- the service ----------
 
 
@@ -358,6 +385,9 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("allie", help="Allie, the opponent that plays as people do (a 19 GB install)")
     a.add_argument("action", choices=["install"])
     a.set_defaults(fn=cmd_allie)
+    h = sub.add_parser("history", help="the games and cards as files in the checkout, for git")
+    h.add_argument("action", choices=["export", "import", "push"])
+    h.set_defaults(fn=cmd_history)
     v = sub.add_parser("service", help="run the server as a systemd user service")
     v.add_argument("action", choices=["install", "uninstall"])
     v.set_defaults(fn=cmd_service)

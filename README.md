@@ -225,6 +225,34 @@ there that it scored within 10 centipawns of the first; never the move you playe
 good as those is not known to the card and counts as wrong. All of this is fixed in `chesstutor/cards.py`: there
 are no settings.
 
+## The games, kept in git
+
+The games are in a database on this machine only (`~/.local/share/chess-tutor/games.db`). To keep them in the
+repository as well:
+
+```sh
+./chess-tutor history export   # the games and cards as text under history/ in the checkout
+./chess-tutor history push     # that, then history/ committed on main and pushed
+./chess-tutor history import   # the games and cards in history/ that the database does not hold
+```
+
+`history/games/<id>.jsonl` is one game: its row of the database, its moves and the analysis of each position, a
+row to a line. `history/cards.jsonl` is the cards with where each stands in its schedule. A game that is deleted
+loses its file at the next export. On another machine, or after losing the database, `git pull` and `history
+import` bring the games back; a game or card the database already holds is left as it is. The conversations with
+Claude are not part of it.
+
+`push` commits `history/` and nothing else, whatever else is changed in the checkout, and pushes only when the
+rest of `main` is on GitHub already: work that has not been pushed is never sent along with the games (it says
+so and leaves the commit for the next push). To run it every night at 2, `crontab -e` and:
+
+```
+0 2 * * * PATH=/usr/local/bin:/usr/bin:/bin /path/to/chess-tutor/chess-tutor history push >> ~/.local/share/chess-tutor/history.log 2>&1
+```
+
+with a `PATH` that has Python 3.12 or newer, `git`, and whatever `git push` signs in with. If the repository is
+public, so are the games: every move, and when it was played.
+
 ## From another device, over Tailscale
 
 The server listens on 127.0.0.1 only. `tailscale serve` takes HTTPS for the machine's tailnet name and hands the
@@ -367,6 +395,7 @@ at.
 | `chesstutor/openings.py` | the opening books |
 | `chesstutor/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return |
 | `chesstutor/store.py` | the SQLite database: games, moves, the analysis of each position, the cards |
+| `chesstutor/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
 | `chesstutor/tutor.py` | the Claude Code session of each game: how it is started, resumed and typed into |
 | `chesstutor/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
 | `chesstutor/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
