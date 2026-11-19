@@ -163,10 +163,8 @@ textarea { resize: none; width: 100%; }
 #review { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; --board: min(calc(100dvh - 75px), calc(100vw - 402px), 780px); }
 #card-pane { display: flex; justify-content: center; align-items: flex-start; gap: 14px; }
 #card-side { width: 340px; flex: none; display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-.card-head { display: flex; justify-content: space-between; align-items: baseline; }
-.card-head h2 { margin: 0; }
-#card-count { color: var(--dim); font-weight: 600; font-variant-numeric: tabular-nums; }
-#card-turn { font-weight: 600; }
+#card-side:not(:has(> :not([hidden]))) { visibility: hidden; }  /* nothing in it until the card is answered; it keeps its place beside the board */
+#card-count { font-weight: 600; font-variant-numeric: tabular-nums; }  /* in the bar at the top, after the deck's name */
 #card-result { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; font-variant-numeric: tabular-nums; }
 #card-mine { font-size: 14px; font-weight: 650; }
 #card-mine.right { color: var(--good); }

@@ -656,10 +656,10 @@ function renderReview() {
   $("card-pane").hidden = !c; $("card-done").hidden = !!c;
   const mins = Math.ceil((r.wait || 0) / 60);
   $("card-wait").textContent = c || r.wait === null ? "" : `Next card in ${mins < 2 ? "a minute" : `${mins} minutes`}.`;
+  // The deck and how many of its cards are active go in the bar at the top: beside the board is only what came of your answer.
+  $("crumb").innerHTML = "Review" + (r.name ? ` · <span id="card-deck" data-testid="card-deck">${esc(r.name)}</span> <b id="card-count" data-testid="card-count" title="Active cards in this deck">${r.active}</b>` : "");
   if (!c) return;
   renderBoard();
-  $("card-deck").textContent = r.name; $("card-count").textContent = r.active;
-  $("card-turn").hidden = !!res; $("card-turn").textContent = `${c.turn === "w" ? "White" : "Black"} to move`;
   $("card-result").hidden = !res;
   $("card-tries").hidden = r.tries.length < 2;
   $("card-why").hidden = !res || !res.explanation; $("card-why").textContent = res && res.explanation || "";
