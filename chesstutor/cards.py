@@ -28,6 +28,7 @@ import json
 import random
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from datetime import time as clock
 
@@ -229,6 +230,28 @@ class Cards:
             out["card"] = {"id": row["id"], "fen": row["fen"], "turn": pos.turn, "legal": legal}
         return out
 
+    def _move(self, card_id: int, move: str) -> tuple[dict, Position, str]:
+        """A card, its position, and a move in it (as UCI, given as that or as SAN)."""
+        row = self.store.one("SELECT * FROM cards WHERE id=?", (card_id,))
+        if row is None:
+            raise CardError(f"no card {card_id}")
+        pos = Position.from_fen(row["fen"])
+        try:
+            return row, pos, pos.parse(str(move))
+        except ValueError:
+            raise CardError(f"{move!r} is not a legal move here") from None
+
+    def lost(self, card_id: int, move: str, worth: Callable[[str, str], int]) -> int:
+        """Centipawns a move on a card gives away, against the engine's first choice there. The move of the
+        game lost what the card says, and a move the engine gave a line to what that search made of it; of any
+        other, ``worth`` is asked: what a position (a FEN) is worth to White after a move in it."""
+        row, pos, uci = self._move(card_id, move)
+        if uci == row["uci"]:
+            return row["cpl"]
+        lines = [ln for ln in json.loads(row["lines"]) if ln["moves"]]
+        known = next((ln["value"] for ln in lines if ln["moves"][0] == uci), None)
+        return loss(lines[0]["value"], worth(row["fen"], uci) if known is None else known, pos.turn == "w")
+
     def answer(self, card_id: int, move: str, grade: str | None = None, now: float | None = None) -> dict:
         """Your move on a card. Wrong: the card is rated "again". Right, and with a ``grade`` ("hard", "good"
         or "easy", how it was to remember): it is rated that. Right with none: nothing changes, and "next"
@@ -238,14 +261,7 @@ class Cards:
         if grade is not None and grade not in RATINGS[1:]:
             raise CardError(f"grade must be one of {', '.join(RATINGS[1:])}")
         with self.store.lock:
-            row = self.store.one("SELECT * FROM cards WHERE id=?", (card_id,))
-            if row is None:
-                raise CardError(f"no card {card_id}")
-            pos = Position.from_fen(row["fen"])
-            try:
-                uci = pos.parse(str(move))
-            except ValueError:
-                raise CardError(f"{move!r} is not a legal move here") from None
+            row, pos, uci = self._move(card_id, move)
             lines = json.loads(row["lines"])
             right = uci in right_moves(lines, pos.turn == "w", row["uci"])
             rating = grade if right else "again"

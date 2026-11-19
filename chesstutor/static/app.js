@@ -571,7 +571,7 @@ document.addEventListener("keydown", (ev) => {
 // ---------- review: the cards of a deck, one at a time ----------
 // S.review: the deck (`deck`, `name`, `active`: how many of its cards are active), its card on screen (`card`:
 // null once none is active), when that was shown (`at`), your move on it while the server answers (`pending`),
-// and what the server said of it (`result`).
+// and what the server said of it (`result`; a wrong one is then given `cpl`, what the move lost: see cardLoss).
 function showReview(deck) {
   leaveGame(); leaveReview();
   $("home").hidden = true; $("game").hidden = true; $("review").hidden = false;
@@ -612,7 +612,17 @@ async function answerCard(uci) {
     Object.assign(r, { pending: null, result: res, active: res.active, fast: fast && res.right });
     renderReview();
     if (r.fast) r.timer = setTimeout(nextCard, 900);
+    if (!res.right) cardLoss(r, res);
   } catch (e) { if (S.review === r) { r.pending = null; renderReview(); $("card-err").textContent = e.message; } }
+}
+// What a wrong move lost. Asked for after the answer is shown: the engine may have to look at the move first.
+async function cardLoss(r, res) {
+  try {
+    const d = await api("GET", `/api/cards/${r.card.id}/loss?move=${res.move.uci}`);
+    if (S.review !== r || r.result !== res) return;
+    res.cpl = d.cpl;
+    renderReview();
+  } catch (e) { if (S.review === r && r.result === res) $("card-err").textContent = e.message; }
 }
 async function gradeCard(grade) {
   const r = S.review;
@@ -641,14 +651,15 @@ function renderReview() {
     $(`card-${g}`).querySelector("small").textContent = res && res.next ? res.next[g] : "";
   }
   $("card-next").hidden = !res || res.right;
+  $("card-grade").hidden = !res || r.fast;
   if (!res) return;
   $("card-result").className = res.right ? "right" : "wrong";
-  $("card-result").textContent = res.right ? `✓ ${res.move.san}` : `✗ Wrong: ${res.move.san}`;
+  $("card-result").textContent = res.right ? `✓ ${res.move.san}` : `✗ Wrong: ${res.move.san}` + (res.cpl === undefined ? "" : ` · lost ${res.cpl} cp`);
   const f = c.fen.split(" "), ply = 2 * (+f[5] - 1) + (f[1] === "w" ? 1 : 2), p = res.played;
   const choice = !res.right ? `Right move: <b>${esc(res.best.san)}</b>` : res.best.uci === res.move.uci ? "Engine's line" : `Engine preferred <b>${esc(res.best.san)}</b>`;
   $("card-answer").innerHTML = `<div>${choice} (${showEval(res.best)}): ${esc(numbered(ply, res.best.line))}</div>` +
     `<div>In the game you played <b>${esc(p.san)}${GLYPH[p.deck] || ""}</b> · lost ${p.cpl} cp</div>`;
-  if (!res.right) $("card-next").focus();
+  if (!res.right && res.cpl === undefined) $("card-next").focus();
 }
 
 // ---------- Claude ----------

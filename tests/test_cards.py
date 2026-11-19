@@ -133,6 +133,12 @@ def test_a_card_is_made_once_and_reviewed():
     r = c.answer(cid, "Nh6", now=NOON)
     assert not r["right"] and r["move"]["san"] == "Nh6" and r["best"]["san"] == "g6" and r["best"]["line"] == ["g6", "Qf3"]
     assert r["played"] == {"uci": "g8f6", "san": "Nf6", "cpl": 990, "deck": "blunder"} and r["active"] == 0 and r["next"] is None
+    # what a move loses: the game's as the card has it, one of the engine's lines by that search, another by a new one
+    asked = []
+    worth = lambda fen, uci: asked.append((fen, uci)) or 520  # noqa: E731
+    assert [c.lost(cid, m, worth) for m in ("Nf6", "Nh6", "g6", "Qe7")] == [990, 75, 0, 6] and not asked
+    assert c.lost(cid, "a6", worth) == 500 and asked == [(FEN, "a7a6")]
+    assert c.lost(cid, "a6", lambda fen, uci: -40) == 0  # better than the engine's choice, by a later search: nothing lost
     gone = c.draw("blunder", now=NOON + 30)
     assert gone["card"] is None and gone["wait"] == 30  # nothing to review, and how long until there is
     assert c.draw("blunder", now=NOON + 60)["card"]["id"] == cid
@@ -191,6 +197,8 @@ def test_a_game_makes_cards_and_the_page_reviews_them():
         until(svc, g["id"], lambda s: s["start_eval"] and all("verdict" in m for m in s["moves"]))
         card = svc.cards.draw("blunder")["card"]  # 3... Nf6, made as soon as the engine had seen it
         assert card["fen"] == FEN and svc.cards.answer(card["id"], "Nf6")["played"]["san"] == "Nf6"
+        assert svc.card_loss(card["id"], "a6")["cpl"] > 800  # no line of the card's: the engine is asked, and it is mate here too
+        assert svc._worth("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1", "f7g7") == 10000 and svc._worth("7k/5Q2/5K2/8/8/8/8/8 w - - 0 1", "f6g6") == 0
         before = svc.store.all("SELECT * FROM cards")
         svc._cards_on_file()  # what a restart does: the same games make no more cards and none new again
         assert svc.store.all("SELECT * FROM cards") == before
@@ -215,6 +223,8 @@ def test_the_cards_over_http():
         assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6"})[1]["next"]["good"] == "10m"
         wrong = s.call("POST", f"/api/cards/{cid}/answer", {"move": "h6"})[1]
         assert wrong["right"] is False and wrong["active"] == 0  # hidden for a minute
+        assert s.call("GET", f"/api/cards/{cid}/loss?move=Nh6")[1] == {"cpl": 75}
+        assert s.call("GET", f"/api/cards/{cid}/loss?move=zz")[0] == 400 and s.call("GET", "/api/cards/999/loss?move=g6")[0] == 400
         gone = s.call("GET", "/api/cards/blunder")[1]
         assert gone["card"] is None and 50 < gone["wait"] <= 75
         s.svc.store.run("UPDATE cards SET due=0")  # the minute is over

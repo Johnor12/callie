@@ -210,9 +210,10 @@ of its game. The games already on file when the server starts get their cards th
 The home page shows each deck with its number of active cards (those to review now); a deck opens on one of
 them, drawn at random from the active ones. Move a piece to answer:
 
-- **Wrong**: the board is marked, with where you went in red and an arrow for the right move, and the engine's
-  line and what you played in the game are beside it. The card is hidden for a few minutes and then comes back.
-  Next moves on.
+- **Wrong**: the board is marked, with where you went in red and an arrow for the right move, and beside it are
+  what your move lost in centipawns (against the engine's first choice; a move the card has no line for is
+  searched then, for as long as a game's positions are), the engine's line and what you played in the game. The
+  card is hidden for a few minutes and then comes back. Next moves on.
 - **Right**: you say how it was to remember, Hard, Good or Easy, and each button says how long it hides the card
   for. An answer made within 3 seconds counts as Easy, and the next card comes without the question.
 
