@@ -44,6 +44,13 @@ async function api(method, path, body, signal) {
 }
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
+// A page on screen says so, at once and every 20 seconds: the server keeps Allie in memory for as long as one does.
+// A hidden one (another tab in front, the phone locked or on another app) says nothing, and so is not counted.
+function here() { if (!document.hidden) api("POST", "/api/here").catch(() => {}); }
+document.addEventListener("visibilitychange", here);
+setInterval(here, 20000);
+here();
+
 // ---------- positions ----------
 function fenBoard(fen) {  // the 64 squares, a1 first
   const out = new Array(64).fill(null);

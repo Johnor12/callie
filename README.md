@@ -114,9 +114,12 @@ it one.
 no GPU. `./chess-tutor allie install` puts everything under `~/.local/share/chess-tutor/allie`: a Python 3.12
 environment with PyTorch (CPU) and Allie's code, its engine built from Rust (with a toolchain downloaded for the
 build and removed after it, unless Rust 1.89 or newer is already there), and the weights (18 GB, from Hugging
-Face). To remove it, delete that directory. The model runs in a process of its own, started with the server
-(about a minute to load, in the background), ended after half an hour without a game or a question
-(`[allie] idle_s`) and started again when one next needs it.
+Face). To remove it, delete that directory. The model runs in a process of its own, which is there for as long
+as a browser is: it is started (about a minute to load, in the background) when a browser first has the page on
+screen, whichever page of the app that is, kept while at least one does, and ended 15 minutes after the last of
+them (`[allie] idle_s`). On screen is what counts: each such page tells the server so every 20 seconds, and a
+tab behind another, or a phone that is locked or on another app, tells it nothing. With no browser there, a
+move or a question still starts it, and it is ended 15 minutes after the last of those.
 Its searches are priced for a 16-core server; on a slower or busy machine it searches less in the same think
 time and plays somewhat below its rating.
 

@@ -35,7 +35,7 @@ class Config:
     allie_python_path: Path | None = None  # the Python of the environment Allie is installed in
     allie_model: Path | None = None  # a directory with its weights (None: where `allie install` downloads them)
     allie_threads: int = 0  # 0: Allie's own choice, one per core
-    allie_idle_s: float = 1800.0  # its process is ended after this long unused (it holds 10 GB); it loads again
+    allie_idle_s: float = 900.0  # its process (10 GB) is ended after this long with no browser on the page and nothing asked of it
     # Claude Code
     claude_bin: str = "claude"
     claude_model: str = "claude-fable-5-2"
@@ -103,7 +103,7 @@ def load_config(path: Path | None = None) -> Config:
         allie_python_path=Path(os.path.expanduser(allie["python"])) if allie.get("python") else None,
         allie_model=_expand(allie["model"]) if allie.get("model") else None,
         allie_threads=int(allie.get("threads", 0)),
-        allie_idle_s=float(allie.get("idle_s", 1800)),
+        allie_idle_s=float(allie.get("idle_s", 900)),
         claude_bin=os.environ.get("CHESSTUTOR_CLAUDE_BIN", str(claude.get("bin", "claude"))),
         claude_model=str(claude.get("model", "claude-fable-5-2")),
         claude_effort=str(claude.get("effort", "")),

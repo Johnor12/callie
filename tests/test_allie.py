@@ -14,9 +14,9 @@ from chesstutor.store import Store
 from tests import function_tests, need_engine, scratch_config
 
 
-def service(**fake):
+def service(idle_s=None, **fake):
     """A service whose Allie is the fake one, set to think (and load, and compute) for as long as ``fake`` says."""
-    cfg = scratch_config()
+    cfg = scratch_config(**({} if idle_s is None else {"allie_idle_s": idle_s}))
     need_engine(cfg)
     model = cfg.home / "fake-allie"
     model.mkdir()
@@ -205,17 +205,33 @@ def test_untimed_and_what_claude_is_given():
         done(svc)
 
 
-def test_allie_is_loaded_when_the_server_starts():
-    svc = service(load=0.3)
-    try:
-        deadline = time.time() + 10
-        while not svc.allie.ready and time.time() < deadline:  # no game, and nobody has asked it anything
+def test_allie_is_there_for_as_long_as_a_browser_is():
+    svc = service(idle_s=1.0, load=0.2)
+
+    def until(test, timeout=10, here=False):
+        deadline = time.time() + timeout
+        while not test() and time.time() < deadline:
+            if here:
+                svc.here()
             time.sleep(0.02)
-        assert svc.allie.ready
+        return test()
+
+    try:
+        time.sleep(0.5)
+        assert not svc.allie.ready and svc.allie.loading is None  # the server has started, and no browser has come
+        svc.here()  # one has the page on screen: no game, and nobody has asked it anything
+        assert until(lambda: svc.allie.ready, here=True)
         first = svc.allie.proc
         gid = svc.create("b", 1200, None, None, "allie")["id"]
         seen = watch(svc, gid, lambda s: s["plies"] == 1)
         assert not seen["loading"] and svc.allie.proc is first  # the one that was loaded plays
+        # still there: kept well past the time it is ended after, with nothing asked of it
+        until(lambda: not svc.allie.ready, timeout=2.5, here=True)
+        assert svc.allie.ready and svc.allie.proc is first and first.poll() is None
+        # gone: it is ended, and the next browser to come starts another
+        assert until(lambda: first.poll() is not None) and not svc.allie.ready
+        svc.here()
+        assert until(lambda: svc.allie.ready) and svc.allie.proc is not first
     finally:
         done(svc)
 

@@ -107,8 +107,6 @@ class Service:
 
     def start(self) -> None:
         threading.Thread(target=self._analyse_loop, name="analysis", daemon=True).start()
-        if self.allie.available():
-            self.allie.warm()  # read into memory now, in the background, so that a game against it does not wait for that
 
     def close(self) -> None:
         self.stop.set()
@@ -117,6 +115,14 @@ class Service:
             self.explainer.close()
         for e in (self.review, self.explore, self.opp, self.quiet, self.allie):
             e.close()
+
+    def here(self) -> dict:
+        """A browser has the page on screen, which each says when it comes to be so and every 20 seconds while it
+        is. Allie is read into memory at the first and kept there for as long as they go on: it is ended
+        `[allie] idle_s` after the last (`allie.py`)."""
+        if self.allie.available():
+            self.allie.warm()
+        return {"ok": True}
 
     # ---------- reading ----------
 
@@ -600,8 +606,6 @@ class Service:
             self.thinking.add(gid)
             epoch = self.epochs.setdefault(gid, 0)
             threading.Thread(target=self._reply, args=(gid, epoch), name=f"opponent-{gid}", daemon=True).start()
-        if row["status"] == "active" and row["engine"] == "allie":
-            self.allie.warm()  # someone is on a game against it
         for ply in range(len(moves) + 1):
             if ply not in evals:
                 self._enqueue(gid, ply)

@@ -69,6 +69,7 @@ def _routes(svc: Service, tutor: Tutor):
     return [
         ("GET", r"/api/health", lambda m, b, q: {"ok": True, "games": len(svc.store.all("SELECT id FROM games LIMIT 1"))}),
         ("GET", r"/api/meta", lambda m, b, q: svc.meta()),
+        ("POST", r"/api/here", lambda m, b, q: svc.here()),  # a page on screen (it is what keeps Allie in memory)
         ("GET", r"/api/games", lambda m, b, q: svc.games()),
         ("GET", r"/api/rating", lambda m, b, q: svc.rating()),
         ("POST", r"/api/games", lambda m, b, q: svc.create(b.get("color", "w"), b.get("elo"), b.get("opening"), b.get("time_control"), b.get("engine"))),

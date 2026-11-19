@@ -54,6 +54,7 @@ def test_who_is_answered():
     s = Running()
     try:
         assert s.call("GET", "/api/games") == (200, [])
+        assert s.call("POST", "/api/here") == (200, {"ok": True})  # a page on screen, where Allie is not installed
         assert s.call("GET", "/")[0] == 200 and b"Chess Tutor" in s.call("GET", "/")[1]
         assert s.call("GET", "/static/../config.py")[0] == 404
         assert s.call("GET", "/api/games", headers={"Host": "evil.example"})[0] == 403  # DNS rebinding

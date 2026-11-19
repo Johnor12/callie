@@ -7,9 +7,10 @@ moves, and the move is drawn from the human distribution tilted by those scores,
 strength of people of its rating at the game's time control. It also resigns and offers draws where they do.
 
 It needs torch, its own package and 10 GB of memory, so it lives in a process of its own
-(`allie_worker.py`, in the environment `chess-tutor allie install` makes), started with the server, ended after
-a while with nothing to do and started again when a game next needs it. This module is the server's end of that
-pipe.
+(`allie_worker.py`, in the environment `chess-tutor allie install` makes), started when a browser has the page
+on screen, kept for as long as one does, and ended a while after the last of them has gone (and after anything
+else last asked it something). Asked with no browser there, it is started for that. This module is the server's
+end of that pipe.
 """
 
 from __future__ import annotations
@@ -161,8 +162,8 @@ class Allie:
             self._stop()
 
     def _idle(self) -> None:
-        """Give the memory back when nothing has asked for a while: it loads again when something does."""
-        while not self.closed.wait(30):
+        """Give the memory back when nobody has wanted it for a while: it loads again when somebody does."""
+        while not self.closed.wait(min(30.0, self.cfg.allie_idle_s / 4)):
             with self.lock:
                 if self.ready and not self.waiting and time.monotonic() - self.used > self.cfg.allie_idle_s:
                     self._stop()
@@ -176,8 +177,8 @@ class Allie:
             return self.info
 
     def warm(self) -> None:
-        """It is about to be needed (the server has just started, or a page is on a game against it): keep it
-        loaded, or start loading it now, in the background, so that its first move does not wait for that."""
+        """It is wanted in memory (a browser has the page on screen): keep it loaded, or start loading it now,
+        in the background, so that its first move does not wait for that."""
         self.used = time.monotonic()
         if self.ready or self.warming or time.monotonic() - self.failed < 20:
             return
