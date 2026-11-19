@@ -26,6 +26,9 @@ Then see that it answers: `./callie status`.
 
 ## When a change is done
 
+Run `ruff check --fix . && ruff format .` before committing: the pre-commit hook (`.githooks/pre-commit`) refuses
+a commit whose Python fails either. Fix what ruff reports; do not commit with `--no-verify`.
+
 Commit it and push it, every time, without being asked: once the tests pass and the restarted server answers.
 One commit for the change, with only that change's files in it. If the checkout holds other work that is not
 committed, say so and ask before that goes out too (the repository on GitHub is public).

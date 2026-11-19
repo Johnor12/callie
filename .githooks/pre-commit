@@ -1,0 +1,12 @@
+#!/bin/sh
+# Refuses a commit whose Python fails `ruff check` or `ruff format --check` (settings in pyproject.toml).
+# On for a checkout once `git config core.hooksPath .githooks` has been run in it.
+# A commit with no Python in it, such as the nightly games from cron (whose PATH has no ruff), goes through as it is.
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+[ -z "$files" ] && exit 0
+if ! command -v ruff >/dev/null 2>&1; then
+  echo "pre-commit: ruff is not on PATH (uv tool install ruff)" >&2
+  exit 1
+fi
+echo "$files" | xargs -d '\n' ruff check || { echo "pre-commit: refused; ruff check --fix . fixes most of it" >&2; exit 1; }
+echo "$files" | xargs -d '\n' ruff format --check || { echo "pre-commit: refused; run ruff format ." >&2; exit 1; }

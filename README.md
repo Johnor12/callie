@@ -483,6 +483,9 @@ python3 -m unittest discover -s tests -t .
 Nothing to install. Tests that need the engine are skipped without it; none starts the real Claude Code (sessions
 and explanations are exercised against `tests/fake_claude.py`) or loads Allie (`tests/fake_allie.py` answers in its place).
 
+The Python is kept to `ruff check` and `ruff format` (settings in `pyproject.toml`). `.githooks/pre-commit` refuses
+a commit that is not; turn it on in a checkout with `git config core.hooksPath .githooks`.
+
 ## Licences
 
 This project is MIT licensed. Stockfish is GPLv3 and is not included: `engine install` downloads the official
