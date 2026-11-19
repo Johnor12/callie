@@ -574,7 +574,17 @@ document.addEventListener("keydown", (ev) => {
 // null once none is active), when that was shown (`at`), your move on it while the server answers (`pending`),
 // what the server said of it (`result`), and, once that was wrong, the moves made on the position since, the
 // wrong answer first (`tries`: each with its `cpl`, what it lost, once the server has said), and the last of
-// them (`tried`).
+// them (`tried`). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
+// the same card, as it was, and the next one comes only with Next or a grade.
+const KEPT = (deck) => `chess-tutor.review.${deck}`;
+function keepReview() {
+  const r = S.review;
+  try {
+    if (!r.card) return sessionStorage.removeItem(KEPT(r.deck));
+    const tries = r.tries.map(({ uci, san, cpl }) => ({ uci, san, cpl }));
+    sessionStorage.setItem(KEPT(r.deck), JSON.stringify({ name: r.name, active: r.active, card: r.card, result: r.result, tries, tried: r.tried, fast: r.fast }));
+  } catch (e) { /* no storage */ }
+}
 function showReview(deck) {
   leaveGame(); leaveReview();
   $("home").hidden = true; $("game").hidden = true; $("review").hidden = false;
@@ -582,7 +592,12 @@ function showReview(deck) {
   $("crumb").textContent = "Review"; document.title = "Review · Chess Tutor";
   S.review = { deck, name: "", active: 0, card: null, at: 0, pending: null, result: null, tries: [], tried: null, fast: false, timer: 0 };
   loadMeta().catch(() => {});
-  nextCard();
+  let kept = null;
+  try { kept = JSON.parse(sessionStorage.getItem(KEPT(deck)) || "null"); } catch (e) { /* no storage */ }
+  if (!kept) return nextCard();
+  const r = Object.assign(S.review, kept, { at: performance.now() - FAST_MS });  // seen before: an answer now is not a fast one
+  renderReview();
+  for (const t of r.tries) if (t.cpl === undefined) cardLoss(r, t);  // asked when the page went: asked again
 }
 function leaveReview() { if (S.review) clearTimeout(S.review.timer); S.review = null; }
 async function nextCard() {
@@ -659,6 +674,7 @@ function renderReview() {
   $("card-wait").textContent = c || r.wait === null ? "" : `Next card in ${mins < 2 ? "a minute" : `${mins} minutes`}.`;
   // The deck and how many of its cards are active go in the bar at the top: beside the board is only what came of your answer.
   $("crumb").innerHTML = "Review" + (r.name ? ` · <span id="card-deck" data-testid="card-deck">${esc(r.name)}</span> <b id="card-count" data-testid="card-count" title="Active cards in this deck">${r.active}</b>` : "");
+  keepReview();
   if (!c) return;
   renderBoard();
   $("card-result").hidden = !res;

@@ -222,6 +222,9 @@ them, drawn at random from the active ones, with the opponent's last move marked
 - **Right**: you say how it was to remember, Hard, Good or Easy, and each button says how long it hides the card
   for. An answer made within 3 seconds counts as Easy without the question: the card stays up until Next.
 
+The card you are on stays until you move on: load the page again, or leave the deck and come back in the same
+tab, and it is there as you left it, answered or not, with the moves you tried.
+
 A deck with no active card left says so, and, when a card is only minutes away, in how many: the page shows it
 when it is back.
 
