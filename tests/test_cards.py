@@ -114,7 +114,11 @@ def test_a_card_is_made_once_and_reviewed():
     c.note(FEN, "g7g6", "g6", 250, LINES, NOON)  # the engine's own choice
     assert [d["cards"] for d in c.decks(NOON)] == [0, 0, 0]
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON)
-    c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON)
+    c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON, "f1c4")
+    assert c.draw("blunder", now=NOON)["card"]["last"] is None and c.draw("inaccuracy", now=NOON)["card"]["last"] == "f1c4"
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, "f1c4")  # told again, now with the move that led there: a card from before that was kept
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, "d3c4")  # known already: left as it is
+    assert c.draw("blunder", now=NOON)["card"]["last"] == "f1c4"
     c.note(FEN.replace(" 3 3", " 7 9"), "g8f6", "Nf6", 990, LINES, NOON)  # the same move, told of again
     assert [(d["key"], d["cards"], d["active"]) for d in c.decks(NOON)] == [("blunder", 1, 1), ("mistake", 0, 0), ("inaccuracy", 1, 1)]
     assert c.draw("mistake", now=NOON) == {"deck": "mistake", "name": "Mistakes", "active": 0, "card": None, "wait": None}
@@ -166,7 +170,8 @@ def test_a_card_is_made_once_and_reviewed():
     # the same move played again in a later game: no second card, this one is new again
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON)  # an older game, heard of late: nothing
     assert c.draw("blunder", now=NOON + 4.5 * DAY)["card"] is None
-    c.note(FEN, "g8f6", "Nf6", 150, LINES, NOON + 4.5 * DAY)  # it cost less this time: the card moves deck
+    c.note(FEN, "g8f6", "Nf6", 150, LINES, NOON + 4.5 * DAY, "d3c4")  # it cost less this time: the card moves deck
+    assert c.draw("mistake", now=NOON + 4.5 * DAY)["card"]["last"] == "d3c4"  # and is of that game: reached by another move
     assert [(d["cards"], d["active"]) for d in c.decks(NOON + 4.5 * DAY)] == [(0, 0), (1, 1), (1, 1)]
     assert c.store.one("SELECT state, interval FROM cards WHERE id=?", (cid,)) == {"state": "new", "interval": 0}
     # two active cards: the one just seen is not drawn again, and of several any may come
@@ -197,6 +202,7 @@ def test_a_game_makes_cards_and_the_page_reviews_them():
         until(svc, g["id"], lambda s: s["start_eval"] and all("verdict" in m for m in s["moves"]))
         card = svc.cards.draw("blunder")["card"]  # 3... Nf6, made as soon as the engine had seen it
         assert card["fen"] == FEN and svc.cards.answer(card["id"], "Nf6")["played"]["san"] == "Nf6"
+        assert card["last"] == "f1c4"  # 3. Bc4, the opponent's move before it
         assert svc.card_loss(card["id"], "a6")["cpl"] > 800  # no line of the card's: the engine is asked, and it is mate here too
         assert svc._worth("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1", "f7g7") == 10000 and svc._worth("7k/5Q2/5K2/8/8/8/8/8 w - - 0 1", "f6g6") == 0
         before = svc.store.all("SELECT * FROM cards")

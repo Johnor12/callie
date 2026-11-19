@@ -764,7 +764,7 @@ class Service:
                 continue
             fen = row["start_fen"] if ply == 1 else moves[ply - 2]["fen"]
             grade = self._grade(m, before, after, fen.split()[1] == "w")
-            self.cards.note(fen, m["uci"], m["san"], grade["cpl"], before["lines"], m["played_at"])
+            self.cards.note(fen, m["uci"], m["san"], grade["cpl"], before["lines"], m["played_at"], moves[ply - 2]["uci"] if ply > 1 else None)
 
     def _cards_on_file(self) -> None:
         """Cards for the games already on file: those played before there were cards, or put there by an import."""

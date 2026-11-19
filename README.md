@@ -210,7 +210,8 @@ moves it to the deck of what the move lost this time. A card outlives a take-bac
 of its game. The games already on file when the server starts get their cards then.
 
 The home page shows each deck with its number of active cards (those to review now); a deck opens on one of
-them, drawn at random from the active ones. Move a piece to answer:
+them, drawn at random from the active ones, with the opponent's last move marked on the board as in a game
+(where the game is still on file, for a card made before this was kept). Move a piece to answer:
 
 - **Wrong**: the board is marked, with where you went in red and an arrow for the right move, and beside it, on
   one line, are your move with what it lost in centipawns (against the engine's first choice; a move the card has

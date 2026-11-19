@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   uci TEXT NOT NULL,                    -- the move you played
   san TEXT NOT NULL,
   fen TEXT NOT NULL,                    -- the position before it, in the game it was last played in
+  prev TEXT,                            -- the move that led to that position there (the opponent's); NULL: none, or not known
   cpl INTEGER NOT NULL,                 -- what it lost there, in centipawns: which deck the card is in
   lines TEXT NOT NULL,                  -- JSON: the engine's lines in the position, as in evals
   erred_at REAL NOT NULL,               -- when you last played it
@@ -79,7 +80,7 @@ ADDED = {
     "games": {"engine": "TEXT NOT NULL DEFAULT 'stockfish'", "opp_clock_ms": "INTEGER", "draw_offer": "INTEGER",
               "finished_at": "REAL"},
     "moves": {"clock_ms": "INTEGER"},
-    "cards": {"explanation": "TEXT", "state": "TEXT NOT NULL DEFAULT 'new'", "steps": "INTEGER NOT NULL DEFAULT 0",
+    "cards": {"prev": "TEXT", "explanation": "TEXT", "state": "TEXT NOT NULL DEFAULT 'new'", "steps": "INTEGER NOT NULL DEFAULT 0",
               "ease": "REAL NOT NULL DEFAULT 2.5"},
 }
 

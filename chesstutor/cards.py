@@ -159,27 +159,31 @@ class Cards:
         self.luck = self.rng.random  # what picks a day from around an interval (None from it: the interval itself)
         self.made = threading.Event()  # set when a card is made: what writes their explanations waits on it
 
-    def note(self, fen: str, uci: str, san: str, cpl: int, lines: list[dict], at: float) -> None:
+    def note(self, fen: str, uci: str, san: str, cpl: int, lines: list[dict], at: float, prev: str | None = None) -> None:
         """A move of yours, played at ``at`` in the position ``fen``, with what it lost and the engine's lines
         there: a card if it lost enough, or, where there is one for it already, that card new again.
-        Told of the same move twice (or of an older game after a newer one), it does nothing the second time.
+        ``prev`` is the move that led to the position (None: none did, or it is not known). Told of the same
+        move twice (or of an older game after a newer one), it does nothing the second time, but learn
+        ``prev`` where the card had none.
         """
         if deck_of(cpl) is None or not lines or not lines[0]["moves"] or lines[0]["moves"][0] == uci:
             return
         position = Position.from_fen(fen).key()
         with self.store.lock:
-            have = self.store.one("SELECT id, erred_at FROM cards WHERE position=? AND uci=?", (position, uci))
+            have = self.store.one("SELECT id, erred_at, prev FROM cards WHERE position=? AND uci=?", (position, uci))
             if have is None:
                 self.store.run(
-                    "INSERT INTO cards (position, uci, san, fen, cpl, lines, erred_at, due) VALUES (?,?,?,?,?,?,?,?)",
-                    (position, uci, san, fen, cpl, json.dumps(lines), at, at),
+                    "INSERT INTO cards (position, uci, san, fen, prev, cpl, lines, erred_at, due) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (position, uci, san, fen, prev, cpl, json.dumps(lines), at, at),
                 )
                 self.made.set()
             elif have["erred_at"] < at:
                 self.store.run(
-                    "UPDATE cards SET san=?, fen=?, cpl=?, lines=?, erred_at=?, state='new', steps=0, interval=0, due=? WHERE id=?",
-                    (san, fen, cpl, json.dumps(lines), at, at, have["id"]),
+                    "UPDATE cards SET san=?, fen=?, prev=?, cpl=?, lines=?, erred_at=?, state='new', steps=0, interval=0, due=? WHERE id=?",
+                    (san, fen, prev, cpl, json.dumps(lines), at, at, have["id"]),
                 )
+            elif have["erred_at"] == at and prev and have["prev"] is None:  # a card from before they had it
+                self.store.run("UPDATE cards SET prev=? WHERE id=?", (prev, have["id"]))
 
     def _active(self, deck: str, now: float) -> list[dict]:
         if deck not in [key for key, _, _ in DECKS]:
@@ -215,7 +219,8 @@ class Cards:
 
     def draw(self, deck: str, skip: int | None = None, now: float | None = None) -> dict:
         """An active card of a deck, at random (not ``skip``, the one just seen, while there is another), with
-        every legal move of its position as a game's state has them. "card" is None when none is active;
+        every legal move of its position as a game's state has them, and the move that led to it ("last": None
+        when none did, or it is not known). "card" is None when none is active;
         "wait" is then the seconds until one that is in a step comes back (None: none is)."""
         now = time.time() if now is None else now
         rows = self._active(deck, now)
@@ -227,7 +232,7 @@ class Cards:
             row = self.rng.choice([r for r in rows if r["id"] != skip] or rows)
             pos = Position.from_fen(row["fen"])
             legal = {m: {"san": pos.san(m), "fen": pos.push(m).fen()} for m in pos.legal_moves()}
-            out["card"] = {"id": row["id"], "fen": row["fen"], "turn": pos.turn, "legal": legal}
+            out["card"] = {"id": row["id"], "fen": row["fen"], "turn": pos.turn, "legal": legal, "last": row["prev"]}
         return out
 
     def _move(self, card_id: int, move: str) -> tuple[dict, Position, str]:

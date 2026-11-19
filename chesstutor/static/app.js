@@ -334,10 +334,11 @@ const canMove = () => { const g = S.game; return g && S.view === g.moves.length 
 function onBoard() {
   const r = S.review;
   if (r) {
-    // Your answer stands on the board once made, unless it was wrong: then the position is back, with where
-    // you went marked on it and an arrow for the right move, and other moves can be tried on it (tryCard).
+    // Until you answer, the move that led to the position is marked, as in a game. Your answer stands on the
+    // board once made, unless it was wrong: then the position is back, with where you went marked on it and
+    // an arrow for the right move, and other moves can be tried on it (tryCard).
     const c = r.card, res = r.result, made = res ? (res.right ? res.move : null) : r.pending;
-    return { el: $("card-board"), fen: made ? made.fen : c.fen, last: made ? made.uci : res ? r.tried || res.move.uci : null, san: made ? made.san : "",
+    return { el: $("card-board"), fen: made ? made.fen : c.fen, last: made ? made.uci : res ? r.tried || res.move.uci : c.last, san: made ? made.san : "",
       color: c.turn, flip: c.turn === "b", legal: made ? {} : c.legal, arrow: res && !res.right ? res.best.uci : null,
       mark: res ? (res.right ? "right" : "wrong") : "", send: answerCard };
   }
