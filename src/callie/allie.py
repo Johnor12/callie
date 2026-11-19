@@ -95,10 +95,19 @@ class Allie:
         why = "the server is stopping" if self.closed.is_set() else missing(self.cfg)
         if why:
             raise AllieError(why)
-        argv = [str(self.cfg.allie_python), str(_WORKER), "--model", str(weights(self.cfg)), "--threads", str(self.cfg.allie_threads)]
+        argv = [
+            str(self.cfg.allie_python),
+            str(_WORKER),
+            "--model",
+            str(weights(self.cfg)),
+            "--threads",
+            str(self.cfg.allie_threads),
+        ]
         log = open(self.cfg.home / "allie.log", "ab")
         try:
-            proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True, bufsize=1)
+            proc = subprocess.Popen(
+                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True, bufsize=1
+            )
         except OSError as e:
             raise AllieError(f"cannot start Allie ({argv[0]}): {e}") from None
         finally:
@@ -116,7 +125,9 @@ class Allie:
             first = {"error": "it stopped before loading"}
         if not first.get("ready"):
             proc.kill()
-            raise AllieError(f"Allie did not start: {first.get('error', line.strip())} (see {self.cfg.home / 'allie.log'})")
+            raise AllieError(
+                f"Allie did not start: {first.get('error', line.strip())} (see {self.cfg.home / 'allie.log'})"
+            )
         self.info, self.proc = first, proc
         threading.Thread(target=self._read, args=(proc,), name="allie-answers", daemon=True).start()
 
@@ -241,7 +252,15 @@ class Allie:
         """What players of those ratings play after ``moves``: the likeliest moves with their probabilities,
         the mover's win / draw / loss chances between such players, and the likeliest continuation."""
         return self.call(
-            "predict", moves=moves, clocks=clocks, white_elo=white_elo, black_elo=black_elo, base=base, inc=inc, top=top, line=line
+            "predict",
+            moves=moves,
+            clocks=clocks,
+            white_elo=white_elo,
+            black_elo=black_elo,
+            base=base,
+            inc=inc,
+            top=top,
+            line=line,
         )
 
     def forget(self, game_id: str) -> None:

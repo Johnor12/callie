@@ -36,7 +36,11 @@ from .chess import Position
 from .engine import loss
 from .store import Store
 
-DECKS = (("blunder", "Blunders", 200), ("mistake", "Mistakes", 100), ("inaccuracy", "Inaccuracies", 50))  # centipawns lost, at least
+DECKS = (
+    ("blunder", "Blunders", 200),
+    ("mistake", "Mistakes", 100),
+    ("inaccuracy", "Inaccuracies", 50),
+)  # centipawns lost, at least
 NEAR = 10  # another of the engine's lines within this many centipawns of its first is a right answer too
 RATINGS = ("again", "hard", "good", "easy")
 LEARN_STEPS = (60, 600)  # seconds: the steps of a new card
@@ -46,9 +50,15 @@ EASE, EASE_LEAST = 2.5, 1.3  # what Good multiplies an interval by: to begin wit
 EASE_CHANGE = {"again": -0.2, "hard": -0.15, "good": 0.0, "easy": 0.15}
 HARD_FACTOR, EASY_BONUS = 1.2, 1.3
 LAPSE_FACTOR, LAPSE_LEAST = 0.0, 1  # what is left of the interval of a card that lapsed, and the least it is, in days
-FUZZ = ((2.5, 7.0, 0.15), (7.0, 20.0, 0.1), (20.0, float("inf"), 0.05))  # from, to, days of spread for each day of interval in between
+FUZZ = (
+    (2.5, 7.0, 0.15),
+    (7.0, 20.0, 0.1),
+    (20.0, float("inf"), 0.05),
+)  # from, to, days of spread for each day of interval in between
 LONGEST = 180  # days: however well it is known, a card comes back this often
-DAY_STARTS = 4  # o'clock: a card due on a day is active from then, so one answered late at night is there in the morning
+DAY_STARTS = (
+    4  # o'clock: a card due on a day is active from then, so one answered late at night is there in the morning
+)
 DAY = 86400
 
 
@@ -111,7 +121,9 @@ def rate(card: dict, rating: str, now: float, luck: float | None = None) -> dict
     if card["state"] == "review":
         if rating == "again":  # a lapse
             left = days(max(interval, 1) * LAPSE_FACTOR, LAPSE_LEAST, luck)
-            return step("relearning", len(RELEARN_STEPS), RELEARN_STEPS[0], left, max(EASE_LEAST, ease + EASE_CHANGE["again"]))
+            return step(
+                "relearning", len(RELEARN_STEPS), RELEARN_STEPS[0], left, max(EASE_LEAST, ease + EASE_CHANGE["again"])
+            )
         late = max(0, day_of(now) - day_of(card["due"]))
         base = max(interval, 1)
         hard = days(base * HARD_FACTOR, interval + 1, luck)
@@ -124,9 +136,17 @@ def rate(card: dict, rating: str, now: float, luck: float | None = None) -> dict
     left = len(steps) if card["state"] == "new" else card["steps"]
     at = max(0, min(len(steps) - left, len(steps) - 1))  # the step it is on
     if rating == "again":
-        return step(state, len(steps), steps[0], days(max(interval, 1) * LAPSE_FACTOR, LAPSE_LEAST, luck) if again else 0, ease)
+        return step(
+            state, len(steps), steps[0], days(max(interval, 1) * LAPSE_FACTOR, LAPSE_LEAST, luck) if again else 0, ease
+        )
     if rating == "hard":  # the same step once more; the first one a little longer, so that it is not "again"
-        delay = steps[at] if at else (steps[0] + steps[1]) // 2 if len(steps) > 1 else min(steps[0] * 3 // 2, steps[0] + DAY)
+        delay = (
+            steps[at]
+            if at
+            else (steps[0] + steps[1]) // 2
+            if len(steps) > 1
+            else min(steps[0] * 3 // 2, steps[0] + DAY)
+        )
         return step(state, len(steps) - at, delay, interval, ease)
     if rating == "good" and at + 1 < len(steps):
         return step(state, len(steps) - at - 1, steps[at + 1], interval, ease)
@@ -140,7 +160,9 @@ def waits(card: dict, now: float) -> dict[str, str]:
     out = {}
     for rating in RATINGS[1:]:
         after = rate(card, rating, now)
-        out[rating] = f"{after['interval']}d" if after["state"] == "review" else f"{max(1, _round((after['due'] - now) / 60))}m"
+        out[rating] = (
+            f"{after['interval']}d" if after["state"] == "review" else f"{max(1, _round((after['due'] - now) / 60))}m"
+        )
     return out
 
 
@@ -159,7 +181,9 @@ class Cards:
         self.luck = self.rng.random  # what picks a day from around an interval (None from it: the interval itself)
         self.made = threading.Event()  # set when a card is made: what writes their explanations waits on it
 
-    def note(self, fen: str, uci: str, san: str, cpl: int, lines: list[dict], at: float, prev: str | None = None) -> None:
+    def note(
+        self, fen: str, uci: str, san: str, cpl: int, lines: list[dict], at: float, prev: str | None = None
+    ) -> None:
         """A move of yours, played at ``at`` in the position ``fen``, with what it lost and the engine's lines
         there: a card if it lost enough, or, where there is one for it already, that card new again.
         ``prev`` is the move that led to the position (None: none did, or it is not known). Told of the same
@@ -224,9 +248,17 @@ class Cards:
         "wait" is then the seconds until one that is in a step comes back (None: none is)."""
         now = time.time() if now is None else now
         rows = self._active(deck, now)
-        out = {"deck": deck, "name": next(name for key, name, _ in DECKS if key == deck), "active": len(rows), "card": None, "wait": None}
+        out = {
+            "deck": deck,
+            "name": next(name for key, name, _ in DECKS if key == deck),
+            "active": len(rows),
+            "card": None,
+            "wait": None,
+        }
         if not rows:
-            stepping = self.store.all("SELECT cpl, due FROM cards WHERE state IN ('learning', 'relearning') AND due > ?", (now,))
+            stepping = self.store.all(
+                "SELECT cpl, due FROM cards WHERE state IN ('learning', 'relearning') AND due > ?", (now,)
+            )
             out["wait"] = min((r["due"] - now for r in stepping if deck_of(r["cpl"]) == deck), default=None)
         if rows:
             row = self.rng.choice([r for r in rows if r["id"] != skip] or rows)
@@ -280,7 +312,13 @@ class Cards:
             return {
                 "right": right,
                 "move": {"uci": uci, "san": pos.san(uci), "fen": pos.push(uci).fen()},
-                "best": {"uci": best["moves"][0], "san": best["san"][0], "line": best["san"], "cp": best["cp"], "mate": best["mate"]},
+                "best": {
+                    "uci": best["moves"][0],
+                    "san": best["san"][0],
+                    "line": best["san"],
+                    "cp": best["cp"],
+                    "mate": best["mate"],
+                },
                 "played": {"uci": row["uci"], "san": row["san"], "cpl": row["cpl"], "deck": deck},
                 "explanation": row["explanation"],
                 "next": waits(row, now) if right and grade is None and row["due"] <= now else None,

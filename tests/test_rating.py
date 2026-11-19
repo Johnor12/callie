@@ -19,7 +19,9 @@ def test_one_game_at_a_time():
     lost, _ = rating.after(1500, 350, 1500, 0)
     assert 1674 < won < 1676 and abs((won - 1500) + (lost - 1500)) < 1e-9 and 246 < sure < 248  # Glicko's own numbers
     assert rating.after(1500, 350, 1500, 0.5)[0] == 1500
-    assert rating.after(1500, 350, 1100, 1)[0] - 1500 < 50 < 1500 - rating.after(1500, 350, 1100, 0)[0]  # an upset says more
+    assert (
+        rating.after(1500, 350, 1100, 1)[0] - 1500 < 50 < 1500 - rating.after(1500, 350, 1100, 0)[0]
+    )  # an upset says more
     r, d = 1500.0, 350.0
     for _ in range(60):
         r, d = rating.after(r, d, 1500, 1)
@@ -44,12 +46,23 @@ def test_which_games_count_and_in_what_order():
         game(7, "1-0", elo=1100, at=2.5),  # ended between the second and the third
     ]
     standing, changes = rating.history(games)
-    assert list(standing) == ["untimed", "rapid"] and standing["untimed"]["games"] == 4 and standing["rapid"]["games"] == 1
+    assert (
+        list(standing) == ["untimed", "rapid"] and standing["untimed"]["games"] == 4 and standing["rapid"]["games"] == 1
+    )
     assert set(changes) == {"g1", "g2", "g3", "g6", "g7"}
-    assert changes["g1"]["before"] == 1500 and changes["g1"]["change"] < 0 and changes["g2"]["before"] == changes["g1"]["after"]
+    assert (
+        changes["g1"]["before"] == 1500
+        and changes["g1"]["change"] < 0
+        and changes["g2"]["before"] == changes["g1"]["after"]
+    )
     assert changes["g7"]["before"] == changes["g2"]["after"] and changes["g3"]["before"] == changes["g7"]["after"]
     assert changes["g7"]["change"] > 0 and changes["g3"]["after"] == standing["untimed"]["elo"]
-    assert changes["g6"] == {"format": "rapid", "before": 1500, "after": standing["rapid"]["elo"], "change": standing["rapid"]["elo"] - 1500}
+    assert changes["g6"] == {
+        "format": "rapid",
+        "before": 1500,
+        "after": standing["rapid"]["elo"],
+        "change": standing["rapid"]["elo"] - 1500,
+    }
     assert standing["rapid"]["provisional"] and standing["rapid"]["deviation"] > 240
     total = sum(c["change"] for c in changes.values() if c["format"] == "untimed")
     assert total == standing["untimed"]["elo"] - 1500  # the changes shown add up
@@ -100,7 +113,11 @@ def test_the_service_keeps_score():
         first = svc.rating()
         assert list(first) == ["untimed"] and first["untimed"]["games"] == 1 and first["untimed"]["elo"] < 1500
         row = svc.games()[0]
-        assert row["format"] == "untimed" and row["rating"]["before"] == 1500 and row["rating"]["change"] == first["untimed"]["elo"] - 1500
+        assert (
+            row["format"] == "untimed"
+            and row["rating"]["before"] == 1500
+            and row["rating"]["change"] == first["untimed"]["elo"] - 1500
+        )
         # a game on the clock is rated apart; one against full strength and one that is not over are not rated
         timed = svc.create("w", 1320, None, "10+3")["id"]
         for mine in ("f3", "g4"):
@@ -117,7 +134,12 @@ def test_the_service_keeps_score():
         now = svc.rating()
         assert list(now) == ["untimed", "rapid"] and now["untimed"] == first["untimed"] and now["rapid"]["games"] == 1
         by_id = {g["id"]: g["rating"] for g in svc.games()}
-        assert by_id[full] is None and by_id[live] is None and by_id[timed]["format"] == "rapid" and by_id[timed]["before"] == 1500
+        assert (
+            by_id[full] is None
+            and by_id[live] is None
+            and by_id[timed]["format"] == "rapid"
+            and by_id[timed]["before"] == 1500
+        )
         # resigning the live one counts it; taking the move back reopens it, and it no longer does
         svc.resign(live)
         assert svc.rating()["untimed"]["games"] == 2 and svc.rating()["untimed"]["elo"] < first["untimed"]["elo"]

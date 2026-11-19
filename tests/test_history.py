@@ -17,7 +17,17 @@ def filled(home):
     store = Store(home / "games.db")
     now = time.time()
     start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    store.add_game({"id": "ab12", "created_at": now, "updated_at": now, "user_color": "w", "elo": 1200, "start_fen": start, "session_id": "s"})
+    store.add_game(
+        {
+            "id": "ab12",
+            "created_at": now,
+            "updated_at": now,
+            "user_color": "w",
+            "elo": 1200,
+            "start_fen": start,
+            "session_id": "s",
+        }
+    )
     store.add_move("ab12", 1, "e2e4", "e4", "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1", "user")
     store.add_move("ab12", 2, "e7e5", "e5", "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2", "engine")
     store.put_eval("ab12", 0, start, 20, 30, 30, None, LINES)
@@ -36,7 +46,9 @@ def test_written_and_read_back():
     assert history.export(store, root) == 1
     game = (root / "games" / "ab12.jsonl").read_text().splitlines()
     assert [line.split(",")[0] for line in game] == ['["games"', '["moves"', '["moves"', '["evals"']
-    assert '"lines": [{"moves": ["g7g6", "h5f3"]' in (root / "cards.jsonl").read_text()  # as what it is, not as a string
+    assert (
+        '"lines": [{"moves": ["g7g6", "h5f3"]' in (root / "cards.jsonl").read_text()
+    )  # as what it is, not as a string
     stamp = (root / "cards.jsonl").stat().st_mtime_ns
     history.export(store, root)
     assert (root / "cards.jsonl").stat().st_mtime_ns == stamp  # nothing changed: nothing written
@@ -72,14 +84,22 @@ def test_committed_and_pushed():
     for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
         git("config", k, v)
     (work / "code.py").write_text("1\n")
-    git("add", "."), git("commit", "-q", "-m", "first"), git("remote", "add", "origin", str(bare)), git("push", "-q", "origin", "main")
+    (
+        git("add", "."),
+        git("commit", "-q", "-m", "first"),
+        git("remote", "add", "origin", str(bare)),
+        git("push", "-q", "origin", "main"),
+    )
     store = filled(home)
     history.export(store, work / "history")
     (work / "code.py").write_text("2\n")  # work in progress, not committed: it stays out of it
     assert history.push(work) == "committed; pushed to origin/main"
     assert git("rev-parse", "main", at=bare) == git("rev-parse", "HEAD") and git("status", "--short") == "M code.py"
     assert git("show", "--stat", "--format=%s", "HEAD").splitlines()[0].startswith("Game history, 20")
-    assert set(git("show", "--name-only", "--format=", "HEAD").splitlines()) == {"history/cards.jsonl", "history/games/ab12.jsonl"}
+    assert set(git("show", "--name-only", "--format=", "HEAD").splitlines()) == {
+        "history/cards.jsonl",
+        "history/games/ab12.jsonl",
+    }
     assert history.push(work) == "nothing new; nothing to push"
     # a commit of something else that is not on the remote yet is not sent along
     git("commit", "-q", "-am", "second")
@@ -92,7 +112,10 @@ def test_committed_and_pushed():
         assert "committed, not pushed" in str(e)
     assert git("log", "--format=%s", "main", at=bare) == "Game history, " + time.strftime("%Y-%m-%d") + "\nfirst"
     git("push", "-q", "origin", "main")
-    assert history.push(work) == "nothing new; nothing to push" and not (work / "history" / "games" / "ab12.jsonl").exists()
+    assert (
+        history.push(work) == "nothing new; nothing to push"
+        and not (work / "history" / "games" / "ab12.jsonl").exists()
+    )
     git("checkout", "-q", "-b", "side")
     try:
         history.push(work)

@@ -116,9 +116,15 @@ def test_playing_black_and_being_mated():
             until(svc, g["id"], lambda s: s["plies"] == n + 2)
         s = until(svc, g["id"], analysed)
         assert s["status"] == "finished" and s["result"] == "1-0" and s["reason"] == "checkmate" and s["legal"] == {}
-        assert s["moves"][-1]["san"] == "Qxf7#" and s["moves"][-1]["eval"]["mate"] == 0 and s["moves"][-1]["eval"]["value"] > 9000
+        assert (
+            s["moves"][-1]["san"] == "Qxf7#"
+            and s["moves"][-1]["eval"]["mate"] == 0
+            and s["moves"][-1]["eval"]["value"] > 9000
+        )
         assert s["moves"][5]["verdict"] == "blunder"  # 3... Nf6 allows mate
-        assert s["moves"][5]["best"]["line"] and s["moves"][5]["best"]["uci"] != "g8f6"  # over: what the engine preferred
+        assert (
+            s["moves"][5]["best"]["line"] and s["moves"][5]["best"]["uci"] != "g8f6"
+        )  # over: what the engine preferred
         try:
             svc.move(g["id"], "Ke7")
             raise AssertionError("a move was accepted after the game ended")

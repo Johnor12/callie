@@ -49,7 +49,9 @@ def _tool(svc: Service, game_id: str, b: dict) -> dict:
     if name == "game":
         return {"text": svc.tool_game(game_id)}
     if name == "review":
-        return {"text": svc.tool_review(game_id, args.get("from_ply"), args.get("to_ply"), args.get("who") or "student")}
+        return {
+            "text": svc.tool_review(game_id, args.get("from_ply"), args.get("to_ply"), args.get("who") or "student")
+        }
     if name == "position":
         return {"text": svc.tool_position(game_id, **where)}
     if name == "analyze":
@@ -57,7 +59,9 @@ def _tool(svc: Service, game_id: str, b: dict) -> dict:
         return {"text": svc.tool_analyze(game_id, **where, **extra, quiet=quiet)}
     if name == "human_moves":
         if args.get("fen"):
-            raise GameError("human_moves reads a game from its first move: give a ply of this game and moves to play on from it, not a FEN")
+            raise GameError(
+                "human_moves reads a game from its first move: give a ply of this game and moves to play on from it, not a FEN"
+            )
         extra = {k: args[k] for k in ("elo", "top", "line") if args.get(k) is not None}
         return {"text": svc.tool_humans(game_id, args.get("ply"), args.get("moves"), **extra, quiet=quiet)}
     raise GameError(f"no tool {name!r}")
@@ -67,12 +71,22 @@ def _routes(svc: Service, tutor: Tutor):
     ok = {"ok": True}
     since = lambda q: int(q["since"]) if q.get("since", "").lstrip("-").isdigit() else None  # noqa: E731
     return [
-        ("GET", r"/api/health", lambda m, b, q: {"ok": True, "games": len(svc.store.all("SELECT id FROM games LIMIT 1"))}),
+        (
+            "GET",
+            r"/api/health",
+            lambda m, b, q: {"ok": True, "games": len(svc.store.all("SELECT id FROM games LIMIT 1"))},
+        ),
         ("GET", r"/api/meta", lambda m, b, q: svc.meta()),
         ("POST", r"/api/here", lambda m, b, q: svc.here()),  # a page on screen (it is what keeps Allie in memory)
         ("GET", r"/api/games", lambda m, b, q: svc.games()),
         ("GET", r"/api/rating", lambda m, b, q: svc.rating()),
-        ("POST", r"/api/games", lambda m, b, q: svc.create(b.get("color", "w"), b.get("elo"), b.get("opening"), b.get("time_control"), b.get("engine"))),
+        (
+            "POST",
+            r"/api/games",
+            lambda m, b, q: svc.create(
+                b.get("color", "w"), b.get("elo"), b.get("opening"), b.get("time_control"), b.get("engine")
+            ),
+        ),
         ("GET", rf"/api/games/{_ID}", lambda m, b, q: svc.state(m[1], since(q))),
         ("POST", rf"/api/games/{_ID}/move", lambda m, b, q: svc.move(m[1], b.get("move", ""))),
         ("POST", rf"/api/games/{_ID}/resign", lambda m, b, q: svc.resign(m[1])),
@@ -82,8 +96,16 @@ def _routes(svc: Service, tutor: Tutor):
         ("POST", rf"/api/games/{_ID}/delete", lambda m, b, q: svc.delete(m[1])),
         # the cards of your errors: an active one of a deck, your move on it, and what a move on it loses
         ("GET", r"/api/cards", lambda m, b, q: svc.cards.decks()),
-        ("GET", r"/api/cards/(blunder|mistake|inaccuracy)", lambda m, b, q: svc.cards.draw(m[1], int(q["skip"]) if q.get("skip", "").isdigit() else None)),
-        ("POST", r"/api/cards/(\d+)/answer", lambda m, b, q: svc.cards.answer(int(m[1]), b.get("move", ""), b.get("grade"))),
+        (
+            "GET",
+            r"/api/cards/(blunder|mistake|inaccuracy)",
+            lambda m, b, q: svc.cards.draw(m[1], int(q["skip"]) if q.get("skip", "").isdigit() else None),
+        ),
+        (
+            "POST",
+            r"/api/cards/(\d+)/answer",
+            lambda m, b, q: svc.cards.answer(int(m[1]), b.get("move", ""), b.get("grade")),
+        ),
         ("GET", r"/api/cards/(\d+)/loss", lambda m, b, q: svc.card_loss(int(m[1]), q.get("move", ""))),
         # Claude: nothing starts unless one of these is called
         ("POST", rf"/api/games/{_ID}/claude/analyse", lambda m, b, q: tutor.analyse(m[1], *_size(b))),
@@ -91,7 +113,11 @@ def _routes(svc: Service, tutor: Tutor):
         ("POST", rf"/api/games/{_ID}/claude/resume", lambda m, b, q: tutor.resume(m[1], *_size(b))),
         ("POST", rf"/api/games/{_ID}/claude/close", lambda m, b, q: tutor.close_terminal(m[1])),
         ("POST", rf"/api/games/{_ID}/claude/reset", lambda m, b, q: tutor.reset(m[1])),
-        ("POST", rf"/api/terminals/{_ID}/input", lambda m, b, q: tutor.terminal(m[1]).write(str(b.get("data", "")).encode()) or ok),
+        (
+            "POST",
+            rf"/api/terminals/{_ID}/input",
+            lambda m, b, q: tutor.terminal(m[1]).write(str(b.get("data", "")).encode()) or ok,
+        ),
         ("POST", rf"/api/terminals/{_ID}/resize", lambda m, b, q: tutor.terminal(m[1]).resize(*_size(b)) or ok),
         # what a Claude session's tools call (src/callie/mcp.py)
         ("POST", rf"/api/games/{_ID}/tool", lambda m, b, q: _tool(svc, m[1], b)),
@@ -241,7 +267,9 @@ def make_handler(svc: Service, tutor: Tutor, bind_host: str):
     return Handler
 
 
-def make_server(cfg: Config, host: str | None = None, port: int | None = None) -> tuple[ThreadingHTTPServer, Service, Tutor]:
+def make_server(
+    cfg: Config, host: str | None = None, port: int | None = None
+) -> tuple[ThreadingHTTPServer, Service, Tutor]:
     host, port = host or cfg.host, cfg.port if port is None else port
     svc = Service(cfg)
     tutor = Tutor(cfg, svc)
@@ -283,4 +311,3 @@ def serve(cfg: Config, host: str | None = None, port: int | None = None) -> None
                 pidfile.unlink()
         except (OSError, ValueError):
             pass
-

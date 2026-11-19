@@ -48,7 +48,9 @@ def watch(svc, game_id, test, timeout=20):
         if test(state):
             return state
         time.sleep(0.05)
-    raise AssertionError(f"timed out; last state: plies={state['plies']} status={state['status']} clock={state['clock']}")
+    raise AssertionError(
+        f"timed out; last state: plies={state['plies']} status={state['status']} clock={state['clock']}"
+    )
 
 
 def test_allie_is_an_engine_only_where_it_is_installed():
@@ -57,7 +59,11 @@ def test_allie_is_an_engine_only_where_it_is_installed():
     svc = Service(cfg)
     try:
         engines = {e["key"]: e for e in svc.meta()["engines"]}
-        assert engines["stockfish"]["available"] and not engines["allie"]["available"] and "allie install" in engines["allie"]["missing"]
+        assert (
+            engines["stockfish"]["available"]
+            and not engines["allie"]["available"]
+            and "allie install" in engines["allie"]["missing"]
+        )
         for bad in (dict(engine="allie", elo=1500), dict(engine="lc0")):
             try:
                 svc.create(**bad)
@@ -72,15 +78,29 @@ def test_allie_is_an_engine_only_where_it_is_installed():
             assert "allie install" in str(e)
     finally:
         svc.close()
-    assert allie.speed(600, 3) == "rapid" and allie.speed(180, 0) == "blitz" and allie.speed(60, 0) == "bullet" and allie.speed(1800, 20) == "classical"
+    assert (
+        allie.speed(600, 3) == "rapid"
+        and allie.speed(180, 0) == "blitz"
+        and allie.speed(60, 0) == "bullet"
+        and allie.speed(1800, 20) == "classical"
+    )
 
 
 def test_allie_plays_to_the_same_clock():
     svc = service(think=2.5)
     try:
         engines = {e["key"]: e for e in svc.meta()["engines"]}
-        assert engines["allie"]["available"] and engines["allie"]["elo"]["min"] == allie.ELO_MIN and not engines["allie"]["full"]
-        for bad in (dict(elo=None), dict(elo=allie.ELO_MIN - 10), dict(elo=1500, time_control="2.5+0"), dict(elo=1500, time_control="5+0.5")):
+        assert (
+            engines["allie"]["available"]
+            and engines["allie"]["elo"]["min"] == allie.ELO_MIN
+            and not engines["allie"]["full"]
+        )
+        for bad in (
+            dict(elo=None),
+            dict(elo=allie.ELO_MIN - 10),
+            dict(elo=1500, time_control="2.5+0"),
+            dict(elo=1500, time_control="5+0.5"),
+        ):
             try:
                 svc.create(engine="allie", **bad)
                 raise AssertionError(f"accepted {bad}")
@@ -99,7 +119,13 @@ def test_allie_plays_to_the_same_clock():
         s = svc.state(gid)
         assert s["clock"]["ms"] == 603000 and s["clock"]["opponent"]["ms"] == 603000  # the increment, nothing charged
         first = asked(svc, "decide")[0]
-        assert (first["white_elo"], first["black_elo"], first["base"], first["inc"], first["speed"]) == (1500, 1500, 600, 3, "rapid")
+        assert (first["white_elo"], first["black_elo"], first["base"], first["inc"], first["speed"]) == (
+            1500,
+            1500,
+            600,
+            3,
+            "rapid",
+        )
         assert first["moves"] == ["e2e4"] and first["clocks"] == [603.0] and first["clock"] == 600.0
         # from its second move its clock runs, but only while a page is on the game: left alone, it does not move
         svc.move(gid, "Nf3")
@@ -186,7 +212,10 @@ def test_untimed_and_what_claude_is_given():
         text = svc.tool_humans(gid, moves=["Nf3"], top=3, line=2)
         assert "then Nf3" in text and "Black to move. What players rated 1100 play here" in text
         assert " 1. a4" in text and "(3 of " in text and "win 50%, draw 10%, loss 40%" in text
-        assert "Likeliest continuation, each side's most played move: 2... a4 (" in text and "check any line with analyze" in text
+        assert (
+            "Likeliest continuation, each side's most played move: 2... a4 (" in text
+            and "check any line with analyze" in text
+        )
         told = asked(svc, "predict")[0]
         assert told["moves"] == ["e2e4", "a7a5", "g1f3"] and (told["white_elo"], told["black_elo"]) == (1100, 1100)
         assert "players rated 2000" in svc.tool_humans(gid, ply=1, elo=2000)
@@ -291,7 +320,12 @@ def test_allie_offers_draws():
         assert svc.store.game(gid)["draw_offer"] is None
         assert watch(svc, gid, lambda s: s["plies"] == 8)["draw_offer"]
         s = svc.draw(gid, True)
-        assert s["status"] == "finished" and s["result"] == "1/2-1/2" and s["reason"] == "agreement" and not s["draw_offer"]
+        assert (
+            s["status"] == "finished"
+            and s["result"] == "1/2-1/2"
+            and s["reason"] == "agreement"
+            and not s["draw_offer"]
+        )
         assert "1/2-1/2" in s["pgn"] and "Finished: 1/2-1/2 by agreement" in svc.tool_game(gid)
         s = svc.takeback(gid)  # the move the offer answered goes, and the offer with it
         assert s["status"] == "active" and s["plies"] == 6 and not s["draw_offer"]
@@ -313,7 +347,12 @@ def test_allie_resigns():
         watch(svc, gid, lambda s: s["plies"] == 2)
         svc.move(gid, "d4")
         s = watch(svc, gid, lambda s: s["status"] == "finished" and not s["thinking"])
-        assert s["result"] == "1-0" and s["reason"] == "resignation" and s["plies"] == 3 and not s["clock"]["opponent"]["running"]
+        assert (
+            s["result"] == "1-0"
+            and s["reason"] == "resignation"
+            and s["plies"] == 3
+            and not s["clock"]["opponent"]["running"]
+        )
         s = svc.takeback(gid)
         assert s["status"] == "active" and s["plies"] == 2 and s["turn"] == "w"
     finally:

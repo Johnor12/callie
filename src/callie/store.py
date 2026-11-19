@@ -77,11 +77,20 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
 """
 # Columns added since the first release: a database made before them gets them here.
 ADDED = {
-    "games": {"engine": "TEXT NOT NULL DEFAULT 'stockfish'", "opp_clock_ms": "INTEGER", "draw_offer": "INTEGER",
-              "finished_at": "REAL"},
+    "games": {
+        "engine": "TEXT NOT NULL DEFAULT 'stockfish'",
+        "opp_clock_ms": "INTEGER",
+        "draw_offer": "INTEGER",
+        "finished_at": "REAL",
+    },
     "moves": {"clock_ms": "INTEGER"},
-    "cards": {"prev": "TEXT", "explanation": "TEXT", "state": "TEXT NOT NULL DEFAULT 'new'", "steps": "INTEGER NOT NULL DEFAULT 0",
-              "ease": "REAL NOT NULL DEFAULT 2.5"},
+    "cards": {
+        "prev": "TEXT",
+        "explanation": "TEXT",
+        "state": "TEXT NOT NULL DEFAULT 'new'",
+        "steps": "INTEGER NOT NULL DEFAULT 0",
+        "ease": "REAL NOT NULL DEFAULT 2.5",
+    },
 }
 
 
@@ -114,7 +123,9 @@ class Store:
         with self.lock:
             if self.conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
                 return
-            for r in self.conn.execute("SELECT id, elo FROM games WHERE engine = 'stockfish' AND elo IS NOT NULL").fetchall():
+            for r in self.conn.execute(
+                "SELECT id, elo FROM games WHERE engine = 'stockfish' AND elo IS NOT NULL"
+            ).fetchall():
                 self.conn.execute("UPDATE games SET elo = ? WHERE id = ?", (round(rated(r["elo"])), r["id"]))
             self.conn.execute("PRAGMA user_version = 1")
 
@@ -170,7 +181,9 @@ class Store:
     def moves(self, game_id: str) -> list[dict]:
         return self.all("SELECT * FROM moves WHERE game_id=? ORDER BY ply", (game_id,))
 
-    def add_move(self, game_id: str, ply: int, uci: str, san: str, fen: str, source: str, clock_ms: int | None = None) -> None:
+    def add_move(
+        self, game_id: str, ply: int, uci: str, san: str, fen: str, source: str, clock_ms: int | None = None
+    ) -> None:
         with self.lock:
             self.conn.execute(
                 "INSERT INTO moves (game_id, ply, uci, san, fen, source, played_at, clock_ms) VALUES (?,?,?,?,?,?,?,?)",

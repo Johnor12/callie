@@ -279,7 +279,8 @@ class Tutor:
         with self.lock:
             self._drop(game_id)
             self.svc.store.run(
-                "UPDATE games SET session_id=?, session_started=0, analysed_ply=0 WHERE id=?", (str(uuid.uuid4()), game_id)
+                "UPDATE games SET session_id=?, session_started=0, analysed_ply=0 WHERE id=?",
+                (str(uuid.uuid4()), game_id),
             )
         self.svc._bump(game_id)
         return {"ok": True}

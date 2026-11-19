@@ -69,7 +69,12 @@ def main() -> int:
         name = model.config.get("name", "allie")
         if name != "allie-2.1":
             log(f"{name} is playing the calibration fitted for allie-2.1")
-        info = {"ready": True, "name": name, "threads": model.fast.threads, "load_s": round(time.monotonic() - started, 1)}
+        info = {
+            "ready": True,
+            "name": name,
+            "threads": model.fast.threads,
+            "load_s": round(time.monotonic() - started, 1),
+        }
     except BaseException as e:  # noqa: BLE001
         traceback.print_exc()
         say({"error": f"{type(e).__name__}: {e}"})
@@ -88,7 +93,9 @@ def main() -> int:
         with glock:
             have = games.get(r["game"])
             if have is None or have[0] != key:
-                g = Game(engine, r["white_elo"], r["black_elo"], r.get("base"), r.get("inc"), r.get("speed") or "classical")
+                g = Game(
+                    engine, r["white_elo"], r["black_elo"], r.get("base"), r.get("inc"), r.get("speed") or "classical"
+                )
                 have = (key, g, threading.Lock())
             games[r["game"]] = have
             games.move_to_end(r["game"])

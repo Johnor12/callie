@@ -105,7 +105,9 @@ class Position:
         # Rights are kept only where the king and rook still stand on their squares.
         homes = {"K": (4, 7, "K", "R"), "Q": (4, 0, "K", "R"), "k": (60, 63, "k", "r"), "q": (60, 56, "k", "r")}
         castling = "".join(
-            c for c in "KQkq" if c in parts[2] and board[homes[c][0]] == homes[c][2] and board[homes[c][1]] == homes[c][3]
+            c
+            for c in "KQkq"
+            if c in parts[2] and board[homes[c][0]] == homes[c][2] and board[homes[c][1]] == homes[c][3]
         )
         ep = None
         if parts[3] != "-":
@@ -262,7 +264,11 @@ class Position:
                         if not self.attacked(home + 1, them) and not self.attacked(home + 2, them):
                             yield frm, home + 2, None
                     if qs in self.castling and b[home - 4] == rook and b[home - 1] is None and b[home - 2] is None:
-                        if b[home - 3] is None and not self.attacked(home - 1, them) and not self.attacked(home - 2, them):
+                        if (
+                            b[home - 3] is None
+                            and not self.attacked(home - 1, them)
+                            and not self.attacked(home - 2, them)
+                        ):
                             yield frm, home - 2, None
             else:
                 rays = _RAYS[frm]
@@ -478,7 +484,15 @@ def describe(pos: Position) -> str:
     legal = pos.legal_moves()
     mat = pos.material()
     side = "White" if pos.turn == "w" else "Black"
-    state = "checkmated" if pos.in_check() and not legal else "stalemated" if not legal else "in check" if pos.in_check() else ""
+    state = (
+        "checkmated"
+        if pos.in_check() and not legal
+        else "stalemated"
+        if not legal
+        else "in check"
+        if pos.in_check()
+        else ""
+    )
     out = [
         f"FEN: {pos.fen()}",
         *rows,

@@ -90,7 +90,9 @@ class Service:
         self.lock = threading.RLock()  # one change to a game at a time
         self.changed = threading.Condition()
         self.versions: dict[str, int] = {}
-        self.epochs: dict[str, int] = {}  # bumped by every move and take-back: a reply computed for an older one is dropped
+        self.epochs: dict[
+            str, int
+        ] = {}  # bumped by every move and take-back: a reply computed for an older one is dropped
         self.thinking: set[str] = set()
         self.clocks: dict[str, float] = {}  # games whose clock is running, and when it was last charged
         self.looked: dict[str, float] = {}  # when a page last looked at a game that has a clock
@@ -263,7 +265,10 @@ class Service:
         }
         changes = rating.history(self.store.rated_games())[1]
         # "rating": what the game did to yours in its format ({"before", "after", "change"}); None: it does not count
-        return [{**self.summary(r, r["plies"], last.get(r["id"])), "rating": changes.get(r["id"])} for r in self.store.games()]
+        return [
+            {**self.summary(r, r["plies"], last.get(r["id"])), "rating": changes.get(r["id"])}
+            for r in self.store.games()
+        ]
 
     def rating(self) -> dict:
         """Your rating in each time format that has one, from the finished games of that format against an
@@ -369,7 +374,9 @@ class Service:
                 minutes, _, seconds = str(time_control).partition("+")
                 clock_ms, increment_ms = int(float(minutes) * 60000), int(float(seconds or 0) * 1000)
             except ValueError:
-                raise GameError(f'time control must be "untimed" or minutes+seconds like "10+3", not {time_control!r}') from None
+                raise GameError(
+                    f'time control must be "untimed" or minutes+seconds like "10+3", not {time_control!r}'
+                ) from None
             if clock_ms <= 0 or increment_ms < 0:
                 raise GameError("a time control needs more than no time")
         if color == "random":
@@ -380,16 +387,24 @@ class Service:
             try:
                 elo = int(elo)
             except (TypeError, ValueError):
-                raise GameError("elo must be a number" + ("" if engine == "allie" else ", or null for full strength")) from None
+                raise GameError(
+                    "elo must be a number" + ("" if engine == "allie" else ", or null for full strength")
+                ) from None
         if engine == "allie":
             why = allie.missing(self.cfg)
             if why:
                 raise GameError(why)
             if elo is None or not allie.ELO_MIN <= elo <= allie.ELO_MAX:
-                raise GameError(f"Allie plays as a player rated {allie.ELO_MIN} to {allie.ELO_MAX}: elo must be in that range")
+                raise GameError(
+                    f"Allie plays as a player rated {allie.ELO_MIN} to {allie.ELO_MAX}: elo must be in that range"
+                )
             # Allie reads the time control as one of the settings its games were played at
-            if clock_ms and not (clock_ms in (15000, 30000, 45000, 90000) or clock_ms % 60000 == 0 and clock_ms <= 10800000):
-                raise GameError("against Allie the clock starts at a whole number of minutes (up to 180), or 15, 30, 45 or 90 seconds")
+            if clock_ms and not (
+                clock_ms in (15000, 30000, 45000, 90000) or clock_ms % 60000 == 0 and clock_ms <= 10800000
+            ):
+                raise GameError(
+                    "against Allie the clock starts at a whole number of minutes (up to 180), or 15, 30, 45 or 90 seconds"
+                )
             if clock_ms and (increment_ms % 1000 or increment_ms > 180000):
                 raise GameError("against Allie the increment is a whole number of seconds, up to 180")
         elif elo is not None and not opponent.ELO_MIN <= elo <= opponent.ELO_MAX:
@@ -515,7 +530,9 @@ class Service:
             self._bump(game_id)
         return self.state(game_id)
 
-    def _apply(self, row: dict, moves: list[dict], game: Game, uci: str, source: str, clock_ms: int | None = None) -> None:
+    def _apply(
+        self, row: dict, moves: list[dict], game: Game, uci: str, source: str, clock_ms: int | None = None
+    ) -> None:
         """Play a move that is known to be legal, and end the game if it does. ``clock_ms``: what the move left on
         its mover's clock. Called with the lock held."""
         san = game.position.san(uci)
@@ -547,11 +564,17 @@ class Service:
         with self.lock:
             self._tick(game_id)
             row = self._row(game_id)
-            if row["status"] != "active" or row["draw_offer"] is None or row["draw_offer"] != len(self.store.moves(game_id)):
+            if (
+                row["status"] != "active"
+                or row["draw_offer"] is None
+                or row["draw_offer"] != len(self.store.moves(game_id))
+            ):
                 raise GameError("there is no draw offer to answer")
             if accept:
                 self.clocks.pop(game_id, None)
-                self.store.update_game(game_id, status="finished", result="1/2-1/2", reason="agreement", draw_offer=None)
+                self.store.update_game(
+                    game_id, status="finished", result="1/2-1/2", reason="agreement", draw_offer=None
+                )
                 self.epochs[game_id] = self.epochs.get(game_id, 0) + 1
             else:
                 self.store.run("UPDATE games SET draw_offer=NULL WHERE id=?", (game_id,))
@@ -571,7 +594,12 @@ class Service:
             keep = mine[-1] - 1
             self.store.truncate(game_id, keep)
             self.store.update_game(
-                game_id, status="active", result=None, reason=None, analysed_ply=min(row["analysed_ply"], keep), draw_offer=None
+                game_id,
+                status="active",
+                result=None,
+                reason=None,
+                analysed_ply=min(row["analysed_ply"], keep),
+                draw_offer=None,
             )
             self.epochs[game_id] = self.epochs.get(game_id, 0) + 1
             self.thinking.discard(game_id)
@@ -602,7 +630,12 @@ class Service:
         gid = row["id"]
         failed = self.trouble.get(gid)
         waiting = failed is not None and time.monotonic() - failed[0] < RETRY_S
-        if row["status"] == "active" and game.position.turn != row["user_color"] and gid not in self.thinking and not waiting:
+        if (
+            row["status"] == "active"
+            and game.position.turn != row["user_color"]
+            and gid not in self.thinking
+            and not waiting
+        ):
             self.thinking.add(gid)
             epoch = self.epochs.setdefault(gid, 0)
             threading.Thread(target=self._reply, args=(gid, epoch), name=f"opponent-{gid}", daemon=True).start()
@@ -671,7 +704,10 @@ class Service:
                 self._second_thoughts(game_id, epoch + 1)
         except Exception as e:  # noqa: BLE001
             traceback.print_exc(file=sys.stderr)
-            self.trouble[game_id] = (time.monotonic(), str(e) if isinstance(e, (AllieError, EngineError)) else f"{type(e).__name__}: {e}")
+            self.trouble[game_id] = (
+                time.monotonic(),
+                str(e) if isinstance(e, (AllieError, EngineError)) else f"{type(e).__name__}: {e}",
+            )
         finally:
             with self.lock:
                 if self.epochs.get(game_id, 0) in (epoch, epoch + 1):
@@ -760,7 +796,9 @@ class Service:
             self.queue.append((game_id, ply))
             self.work.set()
 
-    def _cards(self, row: dict, moves: list[dict], evals: dict[int, dict], plies: tuple[int, ...] | None = None) -> None:
+    def _cards(
+        self, row: dict, moves: list[dict], evals: dict[int, dict], plies: tuple[int, ...] | None = None
+    ) -> None:
         """Tell the cards of your moves (those at ``plies``; None: all of them) that the engine has seen both
         sides of: one that lost enough becomes a card."""
         for m in moves:
@@ -770,7 +808,15 @@ class Service:
                 continue
             fen = row["start_fen"] if ply == 1 else moves[ply - 2]["fen"]
             grade = self._grade(m, before, after, fen.split()[1] == "w")
-            self.cards.note(fen, m["uci"], m["san"], grade["cpl"], before["lines"], m["played_at"], moves[ply - 2]["uci"] if ply > 1 else None)
+            self.cards.note(
+                fen,
+                m["uci"],
+                m["san"],
+                grade["cpl"],
+                before["lines"],
+                m["played_at"],
+                moves[ply - 2]["uci"] if ply > 1 else None,
+            )
 
     def _cards_on_file(self) -> None:
         """Cards for the games already on file: those played before there were cards, or put there by an import."""
@@ -828,7 +874,9 @@ class Service:
                 return
             for ln in res.lines:
                 cut = ln.moves[:PV_PLIES]
-                lines.append({"moves": cut, "san": _line_sans(pos, cut), "cp": ln.cp, "mate": ln.mate, "value": ln.value})
+                lines.append(
+                    {"moves": cut, "san": _line_sans(pos, cut), "cp": ln.cp, "mate": ln.mate, "value": ln.value}
+                )
             depth, cp, mate, value = res.depth, res.lines[0].cp, res.lines[0].mate, res.lines[0].value
         with self.lock:
             row = self._row(game_id)
@@ -844,7 +892,10 @@ class Service:
 
     def in_play(self) -> bool:
         """A game is being played: what works in the background takes nothing it would miss."""
-        return self.store.one("SELECT id FROM games WHERE status='active' AND updated_at > ?", (time.time() - IN_PLAY_S,)) is not None
+        return (
+            self.store.one("SELECT id FROM games WHERE status='active' AND updated_at > ?", (time.time() - IN_PLAY_S,))
+            is not None
+        )
 
     def explained(self, game_id: str | None = None) -> None:
         """An explanation was written: the pages on games (or on one) show it."""
@@ -873,7 +924,9 @@ class Service:
         one the move was last played in ("0", which is no game, when that is no longer on file)."""
         pos = Position.from_fen(card["fen"])
         best = json.loads(card["lines"])[0]
-        kind = {"blunder": "a blunder", "mistake": "a mistake", "inaccuracy": "inaccurate"}[deck_of(card["cpl"]) or "inaccuracy"]
+        kind = {"blunder": "a blunder", "mistake": "a mistake", "inaccuracy": "inaccurate"}[
+            deck_of(card["cpl"]) or "inaccuracy"
+        ]
         out = [
             f"Explain why this move was {kind}.",
             "",
@@ -882,7 +935,10 @@ class Service:
             f"It lost {card['cpl']} centipawns. The engine preferred {best['san'][0]} ({show(best['cp'], best['mate'])}, "
             f"for White): {_numbered(pos.fullmove, pos.turn, best['san'])}",
         ]
-        at = self.store.one("SELECT game_id, ply FROM moves WHERE played_at=? AND uci=? AND source='user'", (card["erred_at"], card["uci"]))
+        at = self.store.one(
+            "SELECT game_id, ply FROM moves WHERE played_at=? AND uci=? AND source='user'",
+            (card["erred_at"], card["uci"]),
+        )
         if at is None:
             out.append("The game it was played in is no longer on file, so `game`, `review` and `human_moves` have nothing "
                        "to read: work from the FEN, with `position` and `analyze`.")  # fmt: skip
@@ -977,14 +1033,20 @@ class Service:
             if not 0 <= n <= len(moves):
                 raise GameError(f"ply must be 0 to {len(moves)} (the game has {len(moves)} half-moves so far)")
             pos, base, played = game.positions[n], row["start_fen"], [m["uci"] for m in moves[:n]]
-            label = "the start position" if n == 0 else f"the position after ply {n} ({_numbered(game.positions[n - 1].fullmove, game.positions[n - 1].turn, [moves[n - 1]['san']])})"
+            label = (
+                "the start position"
+                if n == 0
+                else f"the position after ply {n} ({_numbered(game.positions[n - 1].fullmove, game.positions[n - 1].turn, [moves[n - 1]['san']])})"
+            )
         added = []
         for text in extra or []:
             try:
                 uci = pos.parse(str(text))
             except ValueError:
                 legal = " ".join(sorted(pos.san(m) for m in pos.legal_moves()))
-                raise GameError(f"{text!r} is not legal after {' '.join(added) or 'no extra moves'}. Legal: {legal}") from None
+                raise GameError(
+                    f"{text!r} is not legal after {' '.join(added) or 'no extra moves'}. Legal: {legal}"
+                ) from None
             added.append(pos.san(uci))
             played.append(uci)
             pos = pos.push(uci)
@@ -996,7 +1058,9 @@ class Service:
         _, _, pos, label = self._resolve(game_id, ply, fen, moves)
         return f"{label[0].upper()}{label[1:]}:\n{describe(pos)}"
 
-    def tool_analyze(self, game_id: str, ply=None, fen=None, moves=None, seconds=2.0, lines=3, candidates=None, quiet=False) -> str:
+    def tool_analyze(
+        self, game_id: str, ply=None, fen=None, moves=None, seconds=2.0, lines=3, candidates=None, quiet=False
+    ) -> str:
         base, played, pos, label = self._resolve(game_id, ply, fen, moves)
         if not pos.legal_moves():
             return f"{label[0].upper()}{label[1:]} ({pos.fen()}): no legal moves, it is {'checkmate' if pos.in_check() else 'stalemate'}."
@@ -1009,12 +1073,19 @@ class Service:
         n = len(only) if only else max(1, min(int(lines or 3), 8))
         if quiet:  # from the background: a search of a set size on the engine that gives way to all the others
             engine = self.quiet
-            res = engine.search(base, played, nodes=int(max(0.1, min(float(seconds or 2.0), QUIET_S)) * QUIET_NPS), multipv=n, only=only)
+            res = engine.search(
+                base, played, nodes=int(max(0.1, min(float(seconds or 2.0), QUIET_S)) * QUIET_NPS), multipv=n, only=only
+            )
         else:
             engine = self.explore
-            res = engine.search(base, played, ms=int(max(0.1, min(float(seconds or 2.0), 20.0)) * 1000), multipv=n, only=only)
+            res = engine.search(
+                base, played, ms=int(max(0.1, min(float(seconds or 2.0), 20.0)) * 1000), multipv=n, only=only
+            )
         side = "White" if pos.turn == "w" else "Black"
-        out = [f"{label[0].upper()}{label[1:]}: {pos.fen()}", f"{side} to move. {engine.name}, depth {res.depth}, {res.ms / 1000:.1f} s."]
+        out = [
+            f"{label[0].upper()}{label[1:]}: {pos.fen()}",
+            f"{side} to move. {engine.name}, depth {res.depth}, {res.ms / 1000:.1f} s.",
+        ]
         for i, ln in enumerate(res.lines, 1):
             sans = _line_sans(pos, ln.moves[:14])
             out.append(f"{i}. {show(ln.cp, ln.mate):>6}  {_numbered(pos.fullmove, pos.turn, sans)}")
@@ -1028,7 +1099,9 @@ class Service:
             raise GameError(why)
         if quiet:  # from the background: Allie is not read into memory during a game, nor asked while it is on a move
             if not self.allie.ready and self.in_play():
-                raise GameError("Allie is not in memory and a game is being played, so it is not loaded for this: do without human_moves")
+                raise GameError(
+                    "Allie is not in memory and a game is being played, so it is not loaded for this: do without human_moves"
+                )
             waited = time.monotonic()
             while self.thinking and time.monotonic() - waited < 120:
                 time.sleep(0.25)
@@ -1060,19 +1133,29 @@ class Service:
             out.append(f"{i:>2}. {pos.san(uci):<7} {100 * p:4.0f}%")
         covered = sum(p for _, p in found["moves"])
         if found["legal"] > len(found["moves"]):
-            out.append(f"({len(found['moves'])} of {found['legal']} legal moves, {100 * covered:.0f}% of what is played.)")
+            out.append(
+                f"({len(found['moves'])} of {found['legal']} legal moves, {100 * covered:.0f}% of what is played.)"
+            )
         w, d, lost = found["wdl"]
         out.append(
             f"How such a game ends from here, for {side}: win {100 * w:.0f}%, draw {100 * d:.0f}%, loss {100 * lost:.0f}%."
-            + (f" Typical think on this move: {found['think_time']:.0f} s." if found.get("think_time") is not None and row["time_control"] else "")
+            + (
+                f" Typical think on this move: {found['think_time']:.0f} s."
+                if found.get("think_time") is not None and row["time_control"]
+                else ""
+            )
         )
         if found["line"]:
             sans, at = [], pos
             for uci, p in found["line"]:
                 sans.append(f"{at.san(uci)} ({100 * p:.0f}%)")
                 at = at.push(uci)
-            out.append("Likeliest continuation, each side's most played move: " + _numbered(pos.fullmove, pos.turn, sans))
-        out.append("These are predictions of what people play, mistakes included, not judgements of the moves: check any line with analyze.")
+            out.append(
+                "Likeliest continuation, each side's most played move: " + _numbered(pos.fullmove, pos.turn, sans)
+            )
+        out.append(
+            "These are predictions of what people play, mistakes included, not judgements of the moves: check any line with analyze."
+        )
         return "\n".join(out)
 
     def tool_review(self, game_id: str, from_ply=None, to_ply=None, who: str = "student") -> str:
@@ -1097,10 +1180,14 @@ class Service:
             said = why.get((game.positions[ply - 1].key(), m["uci"])) if m["source"] == "user" else None
             out.append(text + (f"\nPrevious analysis of the move, {self._written_by()}: {said}" if said else ""))
         if waiting:
-            out.append(f"({waiting} move(s) in that range are still being analysed by the engine: ask again in a few seconds.)")
+            out.append(
+                f"({waiting} move(s) in that range are still being analysed by the engine: ask again in a few seconds.)"
+            )
         if not out:
             return "No moves in that range." if moves else "No move has been played yet."
-        out.append("Evaluations are for White (positive: White is better); #n is a forced mate in n, #-n a mate for Black.")
+        out.append(
+            "Evaluations are for White (positive: White is better); #n is a forced mate in n, #-n a mate for Black."
+        )
         return "\n\n".join(out)
 
     def tool_game(self, game_id: str) -> str:

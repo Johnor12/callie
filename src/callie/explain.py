@@ -106,7 +106,11 @@ class Explainer:
         env = {"CALLIE_URL": self.cfg.url, "CALLIE_GAME": game_id, "CALLIE_QUIET": "1"}
         if self.svc.allie.available():
             env["CALLIE_ALLIE"] = "1"
-        mcp = {"mcpServers": {"chess": {"command": sys.executable, "args": [str(Path(__file__).with_name("mcp.py"))], "env": env}}}
+        mcp = {
+            "mcpServers": {
+                "chess": {"command": sys.executable, "args": [str(Path(__file__).with_name("mcp.py"))], "env": env}
+            }
+        }
         s, m = self.dir / "explain.settings.json", self.dir / "explain.mcp.json"
         s.write_text(json.dumps({"permissions": {"allow": ["mcp__chess"]}}, indent=2))  # its own tools never ask
         m.write_text(json.dumps(mcp, indent=2))
@@ -116,16 +120,40 @@ class Explainer:
         """Run Claude on one card and return what it wrote."""
         game_id, prompt = self.svc.card_request(card)
         settings, mcp = self._files(game_id)
-        argv = ["nice", "-n", "19", self.cfg.claude_bin, "-p", "--output-format", "json", "--model", self.cfg.claude_model]
+        argv = [
+            "nice",
+            "-n",
+            "19",
+            self.cfg.claude_bin,
+            "-p",
+            "--output-format",
+            "json",
+            "--model",
+            self.cfg.claude_model,
+        ]
         if self.cfg.claude_effort:
             argv += ["--effort", self.cfg.claude_effort]
         # No tools but the game's, and no session kept: it is one question, asked once.
-        argv += ["--settings", str(settings), "--mcp-config", str(mcp), "--strict-mcp-config", "--tools", "", "--no-session-persistence"]
+        argv += [
+            "--settings",
+            str(settings),
+            "--mcp-config",
+            str(mcp),
+            "--strict-mcp-config",
+            "--tools",
+            "",
+            "--no-session-persistence",
+        ]
         argv += ["--system-prompt", SYSTEM.replace("{allie}", ALLIE if self.svc.allie.available() else "")]
         argv += [*self.cfg.claude_args, "--", _clean(prompt)]
         with open(self.cfg.home / "claude.log", "ab") as log:
             self.proc = subprocess.Popen(
-                argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=log, env=environment(self.cfg), cwd=str(self.cfg.workspace)
+                argv,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=log,
+                env=environment(self.cfg),
+                cwd=str(self.cfg.workspace),
             )
         try:
             out, _ = self.proc.communicate(timeout=TIMEOUT_S)
@@ -141,5 +169,7 @@ class Explainer:
             answer = {}
         text = _clean(str(answer.get("result") or ""))
         if code or answer.get("is_error") or not text:
-            raise RuntimeError(f"Claude Code ({self.cfg.claude_bin}) gave no answer: {text or out.decode(errors='replace').strip()[-300:] or f'exit {code}'}")
+            raise RuntimeError(
+                f"Claude Code ({self.cfg.claude_bin}) gave no answer: {text or out.decode(errors='replace').strip()[-300:] or f'exit {code}'}"
+            )
         return text

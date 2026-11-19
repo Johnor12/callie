@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 import platform
-import shlex
 import shutil
 import signal
 import subprocess
@@ -98,11 +97,17 @@ def cmd_status(cfg: Config, args) -> int:
     print(f"server: {info['url']}, pid {info['pid']}" if info else "server: not running (`callie start`)")
     print(f"engine: {cfg.engine}" + ("" if cfg.engine.exists() else "  MISSING: run `callie engine install`"))
     why = allie.missing(cfg)
-    print(f"allie: {allie.weights(cfg)}, run by {cfg.allie_python}" if why is None else f"allie: not installed (`callie allie install`): {why}")
+    print(
+        f"allie: {allie.weights(cfg)}, run by {cfg.allie_python}"
+        if why is None
+        else f"allie: not installed (`callie allie install`): {why}"
+    )
     claude = shutil.which(cfg.claude_bin)
     print(f"claude: {claude or cfg.claude_bin + '  NOT ON THE PATH'}, model {cfg.claude_model}, "
           f"account {cfg.claude_config_dir or os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'}")  # fmt: skip
-    print(f"service: {'installed (' + str(UNIT) + ')' if UNIT.exists() else 'not installed (`callie service install`)'}")
+    print(
+        f"service: {'installed (' + str(UNIT) + ')' if UNIT.exists() else 'not installed (`callie service install`)'}"
+    )
     print(f"config: {cfg.source or 'defaults (no config file)'}; state: {cfg.home}")
     for line in _tailnet(cfg):
         print(line)
@@ -147,13 +152,19 @@ def cmd_engine(cfg: Config, args) -> int:
     system = {"Linux": "linux", "Darwin": "macos"}.get(platform.system())
     arch = {"x86_64": "x86-64", "amd64": "x86-64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
     if not system or not arch:
-        print(f"no Stockfish build known for {platform.system()} {platform.machine()}: put one at {cfg.engine}", file=sys.stderr)
+        print(
+            f"no Stockfish build known for {platform.system()} {platform.machine()}: put one at {cfg.engine}",
+            file=sys.stderr,
+        )
         return 1
     release = json.load(urllib.request.urlopen(RELEASE, timeout=30))
     want = "stockfish-macos-universal" if system == "macos" else f"stockfish-{system}-{arch}"
     asset = next((a for a in release["assets"] if a["name"].startswith(want) and a["name"].endswith(".tar.gz")), None)
     if asset is None:
-        print(f"release {release['tag_name']} has no {want}*.tar.gz: put a Stockfish binary at {cfg.engine}", file=sys.stderr)
+        print(
+            f"release {release['tag_name']} has no {want}*.tar.gz: put a Stockfish binary at {cfg.engine}",
+            file=sys.stderr,
+        )
         return 1
     print(f"downloading {asset['name']} ({asset['size'] >> 20} MB) of {release['name']} ...", flush=True)
     with tempfile.TemporaryDirectory(dir=cfg.home) as tmp:
@@ -163,7 +174,11 @@ def cmd_engine(cfg: Config, args) -> int:
         unpacked = Path(tmp) / "unpacked"
         with tarfile.open(archive) as tar:
             tar.extractall(unpacked, filter="data")
-        binaries = [p for p in unpacked.rglob("stockfish*") if p.is_file() and p.suffix == "" or p.name.startswith(want) and p.is_file()]
+        binaries = [
+            p
+            for p in unpacked.rglob("stockfish*")
+            if p.is_file() and p.suffix == "" or p.name.startswith(want) and p.is_file()
+        ]
         binary = max(binaries, key=lambda p: p.stat().st_size, default=None)
         if binary is None:
             print("the archive holds no stockfish binary", file=sys.stderr)
@@ -188,7 +203,10 @@ def _pinned(python: Path) -> bool:
         "at = lambda n: json.loads(d(n).read_text('direct_url.json'))['vcs_info']['commit_id']\n"
         "sys.exit(not (at('allie') == at('allie-fast') == sys.argv[1]))"
     )
-    return python.is_file() and subprocess.run([str(python), "-c", check, allie.COMMIT], capture_output=True).returncode == 0
+    return (
+        python.is_file()
+        and subprocess.run([str(python), "-c", check, allie.COMMIT], capture_output=True).returncode == 0
+    )
 
 
 def _cargo(home: Path, env: dict) -> Path | None:
@@ -258,7 +276,10 @@ def cmd_allie(cfg: Config, args) -> int:
                 shutil.rmtree(private, ignore_errors=True)  # it was only needed for the build
         if allie.weights(cfg) is None:
             if cfg.allie_model:
-                print(f"[allie] model is set, but {cfg.allie_model} holds no config.json and model.safetensors", file=sys.stderr)
+                print(
+                    f"[allie] model is set, but {cfg.allie_model} holds no config.json and model.safetensors",
+                    file=sys.stderr,
+                )
                 return 1
             print(f"downloading {allie.REPO} from Hugging Face (18 GB) ...", flush=True)
             fetch = (
@@ -279,7 +300,9 @@ def cmd_allie(cfg: Config, args) -> int:
         return 1
     finally:
         engine.close()
-    print(f"installed {allie.NAME} ({info['name']}, {info['threads']} threads, loads in {info['load_s']:.0f} s) in {home}")
+    print(
+        f"installed {allie.NAME} ({info['name']}, {info['threads']} threads, loads in {info['load_s']:.0f} s) in {home}"
+    )
     print("it is offered as an opponent from the next time the page is loaded")
     return 0
 
@@ -350,7 +373,12 @@ def cmd_service(cfg: Config, args) -> int:
         return 0
     root = Path(__file__).resolve().parent.parent
     UNIT.parent.mkdir(parents=True, exist_ok=True)
-    UNIT.write_text(unit_text([sys.executable, "-m", "callie.cli", "serve"], {"PYTHONPATH": str(root), **{k: os.environ[k] for k in _CARRIED if os.environ.get(k)}}))
+    UNIT.write_text(
+        unit_text(
+            [sys.executable, "-m", "callie.cli", "serve"],
+            {"PYTHONPATH": str(root), **{k: os.environ[k] for k in _CARRIED if os.environ.get(k)}},
+        )
+    )
     cmd_stop(cfg, args, quiet=True)  # one started by hand holds the port
     for a in (("daemon-reload",), ("enable", UNIT.name), ("restart", UNIT.name)):
         r = systemctl(*a)

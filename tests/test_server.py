@@ -78,7 +78,9 @@ def test_who_is_answered():
 
 def test_a_terminal():
     cfg = scratch_config()
-    t = Terminal(["sh", "-c", "stty size; read x; echo got:$x"], dict(os.environ), str(cfg.home), 91, 27, cfg.home / "t.log")
+    t = Terminal(
+        ["sh", "-c", "stty size; read x; echo got:$x"], dict(os.environ), str(cfg.home), 91, 27, cfg.home / "t.log"
+    )
     assert "27 91" in output(t, "27 91")  # the program sees the window size it was given
     t.resize(100, 30)
     t.resize(100, 30)  # the same size again: a repaint, not an error
@@ -98,7 +100,10 @@ def test_a_claude_session_is_started_resumed_and_talked_to():
         gid = g["id"]
         assert g["claude"] == {"started": False, "analysed_ply": 0, "terminal": None}
         assert s.call("POST", f"/api/games/{gid}/claude/resume")[0] == 400  # nothing to resume yet
-        assert s.call("POST", f"/api/games/{gid}/draw", {"accept": True}) == (400, {"error": "there is no draw offer to answer"})
+        assert s.call("POST", f"/api/games/{gid}/draw", {"accept": True}) == (
+            400,
+            {"error": "there is no draw offer to answer"},
+        )
         s.call("POST", f"/api/games/{gid}/move", {"move": "e4"})
         # the button: a new session, told what the game is and what is wanted
         code, r = s.call("POST", f"/api/games/{gid}/claude/analyse", {"cols": 100, "rows": 30})
@@ -109,7 +114,11 @@ def test_a_claude_session_is_started_resumed_and_talked_to():
         assert first["cwd"] == str(s.cfg.workspace)  # every game's session runs in the one directory
         assert first["prompt"].startswith("[analysis request] Game " + gid) and "French Defence" in first["prompt"]
         state = s.call("GET", f"/api/games/{gid}")[1]
-        assert state["claude"]["started"] and state["claude"]["terminal"] == term.id and state["claude"]["analysed_ply"] >= 1
+        assert (
+            state["claude"]["started"]
+            and state["claude"]["terminal"] == term.id
+            and state["claude"]["analysed_ply"] >= 1
+        )
         # the box under the terminal types into it
         s.call("POST", f"/api/games/{gid}/claude/say", {"text": "why not 1. d4?"})
         assert "why not 1. d4?" in output(term, "heard:")  # pasted, then Enter
@@ -164,7 +173,9 @@ def test_the_tools_claude_is_given():
         need_engine(s.cfg)
         _, g = s.call("POST", "/api/games", {"color": "w", "elo": 1320})
         assert mcp.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
-        init = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}})
+        init = mcp.handle(
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}
+        )
         assert init["result"]["capabilities"] == {"tools": {}} and init["result"]["protocolVersion"] == "2025-06-18"
         names = [t["name"] for t in mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
         assert names == ["game", "review", "position", "analyze"]

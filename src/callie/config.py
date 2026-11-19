@@ -35,7 +35,9 @@ class Config:
     allie_python_path: Path | None = None  # the Python of the environment Allie is installed in
     allie_model: Path | None = None  # a directory with its weights (None: where `allie install` downloads them)
     allie_threads: int = 0  # 0: Allie's own choice, one per core
-    allie_idle_s: float = 900.0  # its process (10 GB) is ended after this long with no browser on the page and nothing asked of it
+    allie_idle_s: float = (
+        900.0  # its process (10 GB) is ended after this long with no browser on the page and nothing asked of it
+    )
     # Claude Code
     claude_bin: str = "claude"
     claude_model: str = "claude-fable-5-2"

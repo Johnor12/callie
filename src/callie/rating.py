@@ -72,7 +72,12 @@ def history(games: list[dict]) -> tuple[dict[str, dict], dict[str, dict]]:
         before = at[0]
         at[0], at[1] = after(at[0], at[1], g["elo"], got)
         at[2] += 1
-        changes[g["id"]] = {"format": fmt, "before": round(before), "after": round(at[0]), "change": round(at[0]) - round(before)}
+        changes[g["id"]] = {
+            "format": fmt,
+            "before": round(before),
+            "after": round(at[0]),
+            "change": round(at[0]) - round(before),
+        }
     standing = {
         fmt: {"elo": round(r), "deviation": round(d), "provisional": d > PROVISIONAL, "games": n}
         for fmt in FORMATS

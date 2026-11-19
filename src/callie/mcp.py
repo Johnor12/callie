@@ -101,7 +101,10 @@ HUMAN_MOVES = {
                 "description": "The rating of both players (Lichess scale, 400 to 3200). Default: the opponent's "
                 "rating when the opponent is Allie, else 1500.",
             },
-            "top": {"type": "integer", "description": "How many of the most played moves to list (1 to 15, default 5)."},
+            "top": {
+                "type": "integer",
+                "description": "How many of the most played moves to list (1 to 15, default 5).",
+            },
             "line": {
                 "type": "integer",
                 "description": "Also follow each side's most played move for this many half-moves (up to 16, default 0).",
@@ -117,7 +120,9 @@ def tools() -> list[dict]:
 
 def call(name: str, arguments: dict) -> tuple[str, bool]:
     url = f"{os.environ.get('CALLIE_URL', 'http://127.0.0.1:8750')}/api/games/{os.environ.get('CALLIE_GAME', '')}/tool"
-    body = json.dumps({"name": name, "arguments": arguments or {}, "quiet": os.environ.get("CALLIE_QUIET") == "1"}).encode()
+    body = json.dumps(
+        {"name": name, "arguments": arguments or {}, "quiet": os.environ.get("CALLIE_QUIET") == "1"}
+    ).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=180) as r:  # Allie, asked cold, loads for a minute first

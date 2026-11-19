@@ -78,7 +78,9 @@ def sample(engine: Engine, fen: str, moves: list[str], temp: float, rng: random.
     return rng.choices([m for m, _ in scored], weights)[0]
 
 
-def pick(engine: Engine, fen: str, moves: list[str], elo: int | None, ms: int, rng: random.Random | None = None) -> str | None:
+def pick(
+    engine: Engine, fen: str, moves: list[str], elo: int | None, ms: int, rng: random.Random | None = None
+) -> str | None:
     """The opponent's move at ``elo`` (None: full strength)."""
     if elo is None:
         return engine.search(fen, moves, ms=ms).best

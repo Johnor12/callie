@@ -43,12 +43,22 @@ def after(c, rating, now=NOON, luck=None):
 
 
 def test_decks_and_what_answers_a_card():
-    assert [cards.deck_of(n) for n in (49, 50, 99, 100, 199, 200, 1000)] == [None, "inaccuracy", "inaccuracy", "mistake", "mistake", "blunder", "blunder"]
+    assert [cards.deck_of(n) for n in (49, 50, 99, 100, 199, 200, 1000)] == [
+        None,
+        "inaccuracy",
+        "inaccuracy",
+        "mistake",
+        "mistake",
+        "blunder",
+        "blunder",
+    ]
     # due at the start of a day, which is at four in the morning
     assert cards.due_in(1, at(2026, 11, 19, 21)) == at(2026, 11, 20, 4)
     assert cards.due_in(1, at(2026, 11, 20, 1)) == at(2026, 11, 20, 4)  # one in the morning is still the day before
     assert cards.due_in(4, at(2026, 11, 19, 12)) == at(2026, 11, 23, 4)
-    assert cards.day_of(at(2026, 11, 20, 3)) == cards.day_of(at(2026, 11, 19, 5)) == cards.day_of(at(2026, 11, 20, 5)) - 1
+    assert (
+        cards.day_of(at(2026, 11, 20, 3)) == cards.day_of(at(2026, 11, 19, 5)) == cards.day_of(at(2026, 11, 20, 5)) - 1
+    )
     # the engine's first choice and a line as good as it; never the move the card is about
     assert cards.right_moves(LINES, False, "g8f6") == ["g7g6", "d8e7"]
     assert cards.right_moves(LINES, False, "d8e7") == ["g7g6"]
@@ -115,13 +125,27 @@ def test_a_card_is_made_once_and_reviewed():
     assert [d["cards"] for d in c.decks(NOON)] == [0, 0, 0]
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON)
     c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON, "f1c4")
-    assert c.draw("blunder", now=NOON)["card"]["last"] is None and c.draw("inaccuracy", now=NOON)["card"]["last"] == "f1c4"
-    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, "f1c4")  # told again, now with the move that led there: a card from before that was kept
+    assert (
+        c.draw("blunder", now=NOON)["card"]["last"] is None and c.draw("inaccuracy", now=NOON)["card"]["last"] == "f1c4"
+    )
+    c.note(
+        FEN, "g8f6", "Nf6", 990, LINES, NOON, "f1c4"
+    )  # told again, now with the move that led there: a card from before that was kept
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, "d3c4")  # known already: left as it is
     assert c.draw("blunder", now=NOON)["card"]["last"] == "f1c4"
     c.note(FEN.replace(" 3 3", " 7 9"), "g8f6", "Nf6", 990, LINES, NOON)  # the same move, told of again
-    assert [(d["key"], d["cards"], d["active"]) for d in c.decks(NOON)] == [("blunder", 1, 1), ("mistake", 0, 0), ("inaccuracy", 1, 1)]
-    assert c.draw("mistake", now=NOON) == {"deck": "mistake", "name": "Mistakes", "active": 0, "card": None, "wait": None}
+    assert [(d["key"], d["cards"], d["active"]) for d in c.decks(NOON)] == [
+        ("blunder", 1, 1),
+        ("mistake", 0, 0),
+        ("inaccuracy", 1, 1),
+    ]
+    assert c.draw("mistake", now=NOON) == {
+        "deck": "mistake",
+        "name": "Mistakes",
+        "active": 0,
+        "card": None,
+        "wait": None,
+    }
     drawn = c.draw("blunder", now=NOON)
     one = drawn["card"]
     cid = one["id"]
@@ -135,14 +159,22 @@ def test_a_card_is_made_once_and_reviewed():
             pass
     # wrong: the answer is given, and the card is hidden for a minute
     r = c.answer(cid, "Nh6", now=NOON)
-    assert not r["right"] and r["move"]["san"] == "Nh6" and r["best"]["san"] == "g6" and r["best"]["line"] == ["g6", "Qf3"]
-    assert r["played"] == {"uci": "g8f6", "san": "Nf6", "cpl": 990, "deck": "blunder"} and r["active"] == 0 and r["next"] is None
+    assert (
+        not r["right"] and r["move"]["san"] == "Nh6" and r["best"]["san"] == "g6" and r["best"]["line"] == ["g6", "Qf3"]
+    )
+    assert (
+        r["played"] == {"uci": "g8f6", "san": "Nf6", "cpl": 990, "deck": "blunder"}
+        and r["active"] == 0
+        and r["next"] is None
+    )
     # what a move loses: the game's as the card has it, one of the engine's lines by that search, another by a new one
     asked = []
     worth = lambda fen, uci: asked.append((fen, uci)) or 520  # noqa: E731
     assert [c.lost(cid, m, worth) for m in ("Nf6", "Nh6", "g6", "Qe7")] == [990, 75, 0, 6] and not asked
     assert c.lost(cid, "a6", worth) == 500 and asked == [(FEN, "a7a6")]
-    assert c.lost(cid, "a6", lambda fen, uci: -40) == 0  # better than the engine's choice, by a later search: nothing lost
+    assert (
+        c.lost(cid, "a6", lambda fen, uci: -40) == 0
+    )  # better than the engine's choice, by a later search: nothing lost
     gone = c.draw("blunder", now=NOON + 30)
     assert gone["card"] is None and gone["wait"] == 30  # nothing to review, and how long until there is
     assert c.draw("blunder", now=NOON + 60)["card"]["id"] == cid
@@ -165,13 +197,19 @@ def test_a_card_is_made_once_and_reviewed():
     c.answer(cid, "Nh6", now=NOON + 4 * DAY)
     assert c.draw("blunder", now=NOON + 4 * DAY)["wait"] == 600
     c.answer(cid, "g6", "good", now=NOON + 4 * DAY + 600)
-    assert c.store.one("SELECT state, interval, ease FROM cards WHERE id=?", (cid,)) == {"state": "review", "interval": 1, "ease": 2.3}
+    assert c.store.one("SELECT state, interval, ease FROM cards WHERE id=?", (cid,)) == {
+        "state": "review",
+        "interval": 1,
+        "ease": 2.3,
+    }
     assert c.draw("blunder", now=NOON + 4.5 * DAY)["card"] is None and c.draw("blunder", now=NOON + 5 * DAY)["card"]
     # the same move played again in a later game: no second card, this one is new again
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON)  # an older game, heard of late: nothing
     assert c.draw("blunder", now=NOON + 4.5 * DAY)["card"] is None
     c.note(FEN, "g8f6", "Nf6", 150, LINES, NOON + 4.5 * DAY, "d3c4")  # it cost less this time: the card moves deck
-    assert c.draw("mistake", now=NOON + 4.5 * DAY)["card"]["last"] == "d3c4"  # and is of that game: reached by another move
+    assert (
+        c.draw("mistake", now=NOON + 4.5 * DAY)["card"]["last"] == "d3c4"
+    )  # and is of that game: reached by another move
     assert [(d["cards"], d["active"]) for d in c.decks(NOON + 4.5 * DAY)] == [(0, 0), (1, 1), (1, 1)]
     assert c.store.one("SELECT state, interval FROM cards WHERE id=?", (cid,)) == {"state": "new", "interval": 0}
     # two active cards: the one just seen is not drawn again, and of several any may come
@@ -187,7 +225,11 @@ def test_cards_from_before_they_had_a_state():
     store = Store(home / "old.db")
     Cards(store).note(FEN, "g8f6", "Nf6", 990, LINES, NOON)
     store.run("UPDATE cards SET interval=4")  # as the first version left a card it had hidden for four days
-    assert Store(home / "old.db").one("SELECT state, steps, ease FROM cards") == {"state": "review", "steps": 0, "ease": 2.5}
+    assert Store(home / "old.db").one("SELECT state, steps, ease FROM cards") == {
+        "state": "review",
+        "steps": 0,
+        "ease": 2.5,
+    }
 
 
 def test_a_game_makes_cards_and_the_page_reviews_them():
@@ -203,8 +245,13 @@ def test_a_game_makes_cards_and_the_page_reviews_them():
         card = svc.cards.draw("blunder")["card"]  # 3... Nf6, made as soon as the engine had seen it
         assert card["fen"] == FEN and svc.cards.answer(card["id"], "Nf6")["played"]["san"] == "Nf6"
         assert card["last"] == "f1c4"  # 3. Bc4, the opponent's move before it
-        assert svc.card_loss(card["id"], "a6")["cpl"] > 800  # no line of the card's: the engine is asked, and it is mate here too
-        assert svc._worth("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1", "f7g7") == 10000 and svc._worth("7k/5Q2/5K2/8/8/8/8/8 w - - 0 1", "f6g6") == 0
+        assert (
+            svc.card_loss(card["id"], "a6")["cpl"] > 800
+        )  # no line of the card's: the engine is asked, and it is mate here too
+        assert (
+            svc._worth("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1", "f7g7") == 10000
+            and svc._worth("7k/5Q2/5K2/8/8/8/8/8 w - - 0 1", "f6g6") == 0
+        )
         before = svc.store.all("SELECT * FROM cards")
         svc._cards_on_file()  # what a restart does: the same games make no more cards and none new again
         assert svc.store.all("SELECT * FROM cards") == before
@@ -230,14 +277,27 @@ def test_the_cards_over_http():
         wrong = s.call("POST", f"/api/cards/{cid}/answer", {"move": "h6"})[1]
         assert wrong["right"] is False and wrong["active"] == 0  # hidden for a minute
         assert s.call("GET", f"/api/cards/{cid}/loss?move=Nh6")[1] == {"cpl": 75}
-        assert s.call("GET", f"/api/cards/{cid}/loss?move=zz")[0] == 400 and s.call("GET", "/api/cards/999/loss?move=g6")[0] == 400
+        assert (
+            s.call("GET", f"/api/cards/{cid}/loss?move=zz")[0] == 400
+            and s.call("GET", "/api/cards/999/loss?move=g6")[0] == 400
+        )
         gone = s.call("GET", "/api/cards/blunder")[1]
         assert gone["card"] is None and 50 < gone["wait"] <= 75
         s.svc.store.run("UPDATE cards SET due=0")  # the minute is over
         done = s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6", "grade": "easy"})[1]
-        assert done["right"] and done["active"] == 0 and set(done) == {"right", "active", "move", "best", "played", "explanation", "next"}
+        assert (
+            done["right"]
+            and done["active"] == 0
+            and set(done) == {"right", "active", "move", "best", "played", "explanation", "next"}
+        )
         assert s.svc.store.one("SELECT state, interval FROM cards")["state"] == "review"
-        assert s.call("GET", "/api/cards/blunder")[1] | {"deck": 0, "name": 0} == {"deck": 0, "name": 0, "active": 0, "card": None, "wait": None}
+        assert s.call("GET", "/api/cards/blunder")[1] | {"deck": 0, "name": 0} == {
+            "deck": 0,
+            "name": 0,
+            "active": 0,
+            "card": None,
+            "wait": None,
+        }
         assert b'id="card-board"' in s.call("GET", "/")[1]
     finally:
         s.close()
@@ -283,14 +343,25 @@ def test_a_card_is_explained_in_the_background():
         s.svc.explained()
         assert s.svc.state(gid)["version"] != state["version"]  # a page waiting on the game is told of a new one
         assert [m.get("explanation") for m in state["moves"]] == [None] * 5 + [why, None]
-        tool = lambda name, **b: s.call("POST", f"/api/games/{gid}/tool", {"name": name, "arguments": b.pop("arguments", {}), **b})[1]["text"]  # noqa: E731
+
+        def tool(name, **b):
+            return s.call("POST", f"/api/games/{gid}/tool", {"name": name, "arguments": b.pop("arguments", {}), **b})[
+                1
+            ]["text"]
+
         by = "generated by Claude with access to Stockfish"
         assert f"Previous analysis of the student's moves below, {by}:\n3... Nf6: {why}" in tool("game")
         assert f"Previous analysis of the move, {by}: {why}" in tool("review", arguments={"from_ply": 6})
         assert "Previous analysis" not in tool("review", arguments={"to_ply": 5})
         # asked from the background, the engine is the one that gives way: a search of a set size, however long was asked for
         text = tool("analyze", arguments={"ply": 5, "seconds": 60, "lines": 2}, quiet=True)
-        assert "Black to move" in text and text.count("3... ") >= 2 and s.svc.quiet.nice and s.svc.quiet.proc and not s.svc.explore.proc
+        assert (
+            "Black to move" in text
+            and text.count("3... ") >= 2
+            and s.svc.quiet.nice
+            and s.svc.quiet.proc
+            and not s.svc.explore.proc
+        )
         assert s.svc.in_play() is False  # the game is over
     finally:
         opponent.pick = old

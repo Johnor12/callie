@@ -133,7 +133,9 @@ def fit(rows: list[dict], quiet: bool = False) -> dict[str, float]:
     if not quiet:
         for (a, b), (score, games) in sorted(totals.items()):
             e = 1 / (1 + 10 ** ((rating[b] - rating[a]) / 400))
-            print(f"  {a:>8} vs {b:<8} {score:6.1f}/{games:<5.0f} = {score / games:5.1%}   (fitted ratings predict {e:5.1%})")
+            print(
+                f"  {a:>8} vs {b:<8} {score:6.1f}/{games:<5.0f} = {score / games:5.1%}   (fitted ratings predict {e:5.1%})"
+            )
     return rating
 
 
@@ -149,7 +151,9 @@ def pooled(rating: dict[str, float]) -> list[list[float]]:
             r1, lt1, n1 = pools.pop()
             pools[-1] = [pools[-1][0] + r1, pools[-1][1] + lt1, pools[-1][2] + n1]
     return sorted(
-        [round(rs / n), round(math.exp(lts / n), 1)] for rs, lts, n in pools if FLOOR - 150 <= rs / n <= opponent.SF_MIN + 250
+        [round(rs / n), round(math.exp(lts / n), 1)]
+        for rs, lts, n in pools
+        if FLOOR - 150 <= rs / n <= opponent.SF_MIN + 250
     )
 
 
@@ -322,7 +326,9 @@ def next_game(rows: list[dict], levels: list, rng: random.Random) -> tuple[str, 
     scale = Scale(versus(rows, levels))
     level = (lambda s: scale(s)) if len(rows) >= 10 else (lambda s: s + FIRST_GUESS)
     played = {p: [r for r in rows if r["a"] == p] for p in VERSUS}
-    within = [p for p in VERSUS if allie_mod.ELO_MIN - 150 <= level(own(p, levels)) <= allie_mod.ELO_MAX + 150] or VERSUS
+    within = [
+        p for p in VERSUS if allie_mod.ELO_MIN - 150 <= level(own(p, levels)) <= allie_mod.ELO_MAX + 150
+    ] or VERSUS
     fewest = min(len(played[p]) for p in within)
     sf = rng.choice([p for p in within if len(played[p]) == fewest])
     rating = round((level(own(sf, levels)) + rng.choice((-100, 0, 100))) / 50) * 50
@@ -457,7 +463,9 @@ def main() -> int:
             "scale": [[round(s), round(scale(s))] for s in scale.knots] if scale else [],
         }
         Path(opponent._LEVELS_FILE).write_text(json.dumps(out, indent=2) + "\n")
-        print(f"wrote {opponent._LEVELS_FILE}: {out['levels']}, scale {out['scale']}, offered from {out['min']} to {out['max']}")
+        print(
+            f"wrote {opponent._LEVELS_FILE}: {out['levels']}, scale {out['scale']}, offered from {out['min']} to {out['max']}"
+        )
     return 0
 
 

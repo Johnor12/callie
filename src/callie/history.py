@@ -109,6 +109,8 @@ def push(checkout: Path, remote: str = "origin", branch: str = "main") -> str:
     if not git("rev-list", f"{theirs}..HEAD").stdout.strip():
         return f"{said}; nothing to push"
     if git("diff", "--quiet", theirs, "HEAD", "--", ".", ":(exclude)history", ok=(0, 1)).returncode:
-        raise HistoryError(f"{said}, not pushed: {branch} and {theirs} differ in more than history/ (push or pull that first)")
+        raise HistoryError(
+            f"{said}, not pushed: {branch} and {theirs} differ in more than history/ (push or pull that first)"
+        )
     git("push", "-q", remote, branch)
     return f"{said}; pushed to {theirs}"

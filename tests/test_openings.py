@@ -69,7 +69,9 @@ def test_the_two_scales_read_each_other():
         opponent.SCALE = [(500.0, 800.0), (1320.0, 1700.0), (2500.0, 2700.0)]
         assert opponent.rated(1320) == 1700 and opponent.own(1700) == 1320
         assert round(opponent.rated(910)) == 1250 and round(opponent.own(2200)) == 1910
-        assert round(opponent.rated(300)) == 580 and round(opponent.rated(3190)) == 3285  # past the ends, the lines go on
+        assert (
+            round(opponent.rated(300)) == 580 and round(opponent.rated(3190)) == 3285
+        )  # past the ends, the lines go on
         opponent.SCALE = []  # not measured: one scale
         assert opponent.rated(1234) == 1234 and opponent.own(1234) == 1234
     finally:
