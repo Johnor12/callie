@@ -44,7 +44,9 @@ git clone https://github.com/Johnor12/chess-tutor && cd chess-tutor
 ```
 
 `./chess-tutor serve` runs it in the terminal instead, `stop` stops it, and `service install` makes it a systemd
-user service that starts with the machine. Settings live in `~/.config/chess-tutor/config.toml`
+user service that starts with the machine. The service runs no shell profile: of the shell `service install` is
+run in it keeps the `PATH` (where `claude` is found) and the `CHESSTUTOR_` variables, and nothing else, so run
+`service install` again when one of those changes. Settings live in `~/.config/chess-tutor/config.toml`
 ([config.example.toml](config.example.toml) lists every key); games, the engine and logs live in
 `~/.local/share/chess-tutor`.
 

@@ -26,7 +26,9 @@ RUSTUP = "https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rust
 RUST_MIN = (1, 89)  # what Allie's engine is written for
 TORCH = ("torch==2.10.*", "https://download.pytorch.org/whl/cpu")  # the version Allie was trained with, without CUDA
 UNIT = Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser() / "systemd" / "user" / "chess-tutor.service"
-_CARRIED = ("CHESSTUTOR_CONFIG", "CHESSTUTOR_HOME", "CHESSTUTOR_CLAUDE_BIN", "CHESSTUTOR_PYTHON")
+# What the service is given of the environment `service install` is run in: where `claude` and the rest are found
+# (Claude Code is started by the server and inherits its environment), and this program's own settings.
+_CARRIED = ("PATH", "CHESSTUTOR_CONFIG", "CHESSTUTOR_HOME", "CHESSTUTOR_CLAUDE_BIN", "CHESSTUTOR_PYTHON")
 
 
 # ---------- the server ----------
@@ -312,6 +314,30 @@ def cmd_history(cfg: Config, args) -> int:
 # ---------- the service ----------
 
 
+def unit_text(argv: list[str], env: dict[str, str]) -> str:
+    """The systemd unit that runs ``argv`` with ``env``. No shell starts it, so nothing of a shell's profile
+    runs or reaches it: beyond ``env`` it has what systemd gives a user's services (HOME, USER, LANG)."""
+    word = lambda s: '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'  # noqa: E731
+    return "\n".join(
+        [
+            "# Written by `chess-tutor service install`; `chess-tutor service uninstall` removes it.",
+            "[Unit]",
+            "Description=Chess Tutor: play against a calibrated engine with Stockfish and Claude analysis",
+            "StartLimitIntervalSec=0",
+            "",
+            "[Service]",
+            *(f"Environment={word(f'{k}={v}')}" for k, v in env.items()),
+            "ExecStart=" + " ".join(word(a).replace("$", "$$") for a in argv),
+            "Restart=always",
+            "RestartSec=2",
+            "",
+            "[Install]",
+            "WantedBy=default.target",
+            "",
+        ]
+    )
+
+
 def cmd_service(cfg: Config, args) -> int:
     def systemctl(*a: str) -> subprocess.CompletedProcess:
         return subprocess.run(["systemctl", "--user", *a], capture_output=True, text=True)
@@ -322,33 +348,9 @@ def cmd_service(cfg: Config, args) -> int:
         systemctl("daemon-reload")
         print(f"removed {UNIT}")
         return 0
-    # Claude Code is started by the server and inherits its environment, so the unit runs it through a login
-    # shell: the same PATH and variables as when it is started by hand from a new terminal.
     root = Path(__file__).resolve().parent.parent
-    run = shlex.join([sys.executable, "-m", "chesstutor.cli", "serve"])
-    shell = os.environ.get("SHELL") or "/bin/bash"
-    env = {"PYTHONPATH": str(root), **{k: os.environ[k] for k in _CARRIED if os.environ.get(k)}}
     UNIT.parent.mkdir(parents=True, exist_ok=True)
-    UNIT.write_text(
-        "\n".join(
-            [
-                "# Written by `chess-tutor service install`; `chess-tutor service uninstall` removes it.",
-                "[Unit]",
-                "Description=Chess Tutor: play against a calibrated engine with Stockfish and Claude analysis",
-                "StartLimitIntervalSec=0",
-                "",
-                "[Service]",
-                *(f"Environment={k}={v}" for k, v in env.items()),
-                f"ExecStart={shell} -lic 'exec {run}'",
-                "Restart=always",
-                "RestartSec=2",
-                "",
-                "[Install]",
-                "WantedBy=default.target",
-                "",
-            ]
-        )
-    )
+    UNIT.write_text(unit_text([sys.executable, "-m", "chesstutor.cli", "serve"], {"PYTHONPATH": str(root), **{k: os.environ[k] for k in _CARRIED if os.environ.get(k)}}))
     cmd_stop(cfg, args, quiet=True)  # one started by hand holds the port
     for a in (("daemon-reload",), ("enable", UNIT.name), ("restart", UNIT.name)):
         r = systemctl(*a)
