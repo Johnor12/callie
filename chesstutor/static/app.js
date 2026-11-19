@@ -9,6 +9,7 @@ const PHONE = matchMedia("(max-width: 760px)");  // the one-column layout of sty
 const FILES = "abcdefgh";
 const FORM = "chess-tutor.form";
 const FAST_MS = 3000;  // a card answered right this soon was easy: it is not asked how hard it was
+const GRADES = ["hard", "good", "easy"];  // what a right answer is rated: how it was to remember
 
 const S = {
   meta: null,
@@ -588,10 +589,12 @@ async function nextCard() {
   try {
     const d = await api("GET", `/api/cards/${r.deck}` + (r.card ? `?skip=${r.card.id}` : ""));
     if (S.review !== r) return;
-    Object.assign(r, { name: d.name, active: d.active, card: d.card, pending: null, result: null, fast: false });
+    Object.assign(r, { name: d.name, active: d.active, card: d.card, wait: d.wait, pending: null, result: null, fast: false });
     S.sel = null; S.promo = null;
     renderReview();
     r.at = performance.now();
+    clearTimeout(r.timer);
+    if (!d.card && d.wait !== null) r.timer = setTimeout(nextCard, Math.min(d.wait * 1000 + 500, 3600000));  // a card in a step: here when it is back
   } catch (e) { if (S.review === r) $("card-err").textContent = e.message; }
 }
 // Your move on the card. One made within FAST_MS is sent as an easy one: if it is right, the card is put away
@@ -613,26 +616,30 @@ async function answerCard(uci) {
 }
 async function gradeCard(grade) {
   const r = S.review;
-  $("card-hard").disabled = $("card-easy").disabled = true;
+  for (const g of GRADES) $(`card-${g}`).disabled = true;
   try {
     await api("POST", `/api/cards/${r.card.id}/answer`, { move: r.result.move.uci, grade });
     if (S.review === r) await nextCard();
   } catch (e) { if (S.review === r) $("card-err").textContent = e.message; }
-  $("card-hard").disabled = $("card-easy").disabled = false;
+  for (const g of GRADES) $(`card-${g}`).disabled = false;
 }
-$("card-hard").onclick = () => gradeCard("hard");
-$("card-easy").onclick = () => gradeCard("easy");
+for (const g of GRADES) $(`card-${g}`).onclick = () => gradeCard(g);
 $("card-next").onclick = nextCard;
 function renderReview() {
   const r = S.review, c = r.card, res = r.result;
   $("card-pane").hidden = !c; $("card-done").hidden = !!c;
+  const mins = Math.ceil((r.wait || 0) / 60);
+  $("card-wait").textContent = c || r.wait === null ? "" : `Next card in ${mins < 2 ? "a minute" : `${mins} minutes`}.`;
   if (!c) return;
   renderBoard();
   $("card-deck").textContent = r.name; $("card-count").textContent = r.active;
   $("card-turn").hidden = !!res; $("card-turn").textContent = `${c.turn === "w" ? "White" : "Black"} to move`;
   $("card-result").hidden = $("card-answer").hidden = !res;
   $("card-why").hidden = !res || !res.explanation; $("card-why").textContent = res && res.explanation || "";
-  $("card-hard").hidden = $("card-easy").hidden = !res || !res.right || r.fast;
+  for (const g of GRADES) {  // how it was to remember, each with how long it hides the card for
+    $(`card-${g}`).hidden = !res || !res.right || r.fast;
+    $(`card-${g}`).querySelector("small").textContent = res && res.next ? res.next[g] : "";
+  }
   $("card-next").hidden = !res || res.right;
   if (!res) return;
   $("card-result").className = res.right ? "right" : "wrong";

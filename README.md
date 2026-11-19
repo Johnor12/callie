@@ -203,24 +203,48 @@ chances):
 | Inaccuracies | 50 to 99 |
 
 A card is one position with one move played in it. The same move in the same position in another game (an
-opening you keep getting wrong) makes no second card: it marks the first as not learned, so it is active again,
-and moves it to the deck of what the move lost this time. A card outlives a take-back of its move and the
-deletion of its game. The games already on file when the server starts get their cards then.
+opening you keep getting wrong) makes no second card: it makes the first a new card again, active at once, and
+moves it to the deck of what the move lost this time. A card outlives a take-back of its move and the deletion
+of its game. The games already on file when the server starts get their cards then.
 
 The home page shows each deck with its number of active cards (those to review now); a deck opens on one of
-them, picked at random. Move a piece to answer:
+them, drawn at random from the active ones. Move a piece to answer:
 
 - **Wrong**: the board is marked, with where you went in red and an arrow for the right move, and the engine's
-  line and what you played in the game are beside it. The card stays active, and comes round again in the same
-  sitting (after the others, while there are others). Next moves on.
-- **Right**: you say whether it was Hard or Easy to remember, and the card is hidden: for 1 day after a first
-  hard answer or 4 after a first easy one, and from then on for 1.2 times as long as the last time after a hard
-  answer (a day longer at least) and 2.5 times after an easy one: 4 days, 10, 25, 62, 155. It is never hidden
-  for more than 180 days, so a card you know well still comes back twice a year. An answer made within 3 seconds
-  counts as easy, and the next card comes without the question.
+  line and what you played in the game are beside it. The card is hidden for a few minutes and then comes back.
+  Next moves on.
+- **Right**: you say how it was to remember, Hard, Good or Easy, and each button says how long it hides the card
+  for. An answer made within 3 seconds counts as Easy, and the next card comes without the question.
 
-A deck with no active card left says so. Days start at 4 in the morning, as in Anki: a card answered late in the
-evening and hidden for a day is there the next morning.
+A deck with no active card left says so, and, when a card is only minutes away, in how many: the page shows it
+when it is back.
+
+### When a card comes back
+
+The schedule is Anki's, with Anki's default settings: the rules of its scheduler
+([`rslib/src/scheduler/states`](https://github.com/ankitects/anki/tree/main/rslib/src/scheduler/states)) written
+again in `chesstutor/cards.py`, not its code, and tested against the values Anki's own tests expect. A wrong
+answer is Anki's "Again".
+
+- **A new card** is learned in two steps, of 1 and 10 minutes. Good moves it a step on, and after the second to
+  an interval of a day; Easy takes it straight to four days; Hard repeats the step (the first after 5½ minutes);
+  a wrong answer puts it back on the first, a minute away.
+- **A learned card** comes back after its interval in days, and a right answer lengthens that: Hard to 1.2
+  times, Good by the card's ease (2.5 to begin with), Easy by the ease and 1.3 more. An answer given late counts
+  the days the card was remembered for beyond its interval. Hard lowers the ease by 0.15 and Easy raises it by
+  as much, so a card that keeps being hard comes back more often than one that never is.
+- **A learned card answered wrong** lapses: its ease drops by 0.2 (never below 1.3), its interval to a day, and
+  it is back in 10 minutes to be learned again, from where Good returns it to that interval. So a well known
+  card that is missed is shown often again, and its intervals grow more slowly than they did.
+- The day a card comes back on is drawn from the days around its interval (a day either side from 3 days, two at
+  a week, five at two months), so that the cards of one game do not all come back together.
+- Days start at 4 in the morning: a card answered late in the evening with a day to wait is there the next morning.
+
+Two things are not Anki's defaults. No interval is longer than 180 days (Anki's limit is a hundred years), so
+that a card you know well still comes back twice a year. And a card in a step stays hidden until the step is
+over, even when nothing else is left in the deck (Anki would show it up to twenty minutes early). Left out are
+Anki's other scheduler, FSRS (off by default there too), its evening out of reviews across days, leeches and
+daily limits.
 
 What counts as right is the engine's first choice in the position, or another of the three lines it searched
 there that it scored within 10 centipawns of the first; never the move you played in the game. A fourth move as

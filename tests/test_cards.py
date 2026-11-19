@@ -26,31 +26,86 @@ def at(*when):
 
 
 def scratch():
-    return Cards(Store(scratch_config().home / "cards.db"))
+    c = Cards(Store(scratch_config().home / "cards.db"))
+    c.luck = lambda: None  # no day drawn from around an interval: the interval itself
+    return c
 
 
-def test_decks_and_how_long_a_card_is_hidden():
+def card(state="new", steps=0, interval=0, ease=2.5, due=NOON):
+    return {"state": state, "steps": steps, "interval": interval, "ease": ease, "due": due}
+
+
+def after(c, rating, now=NOON, luck=None):
+    """A card's schedule after an answer, with its due time as seconds (in a step) or days (learned) from ``now``."""
+    new = cards.rate(c, rating, now, luck)
+    wait = round(new.pop("due") - now) if new["state"] != "review" else cards.day_of(new["due"]) - cards.day_of(now)
+    return (new["state"], new["steps"], new["interval"], round(new["ease"], 2), wait)
+
+
+def test_decks_and_what_answers_a_card():
     assert [cards.deck_of(n) for n in (49, 50, 99, 100, 199, 200, 1000)] == [None, "inaccuracy", "inaccuracy", "mistake", "mistake", "blunder", "blunder"]
-    easy, days = [], 0
-    for _ in range(7):
-        days = cards.hidden_for(days, "easy")
-        easy.append(days)
-    assert easy == [4, 10, 25, 62, 155, 180, 180]  # longer each time, up to a ceiling
-    assert [cards.hidden_for(n, "hard") for n in (0, 1, 4, 25, 170, 180)] == [1, 2, 5, 30, 180, 180]
-    try:
-        cards.hidden_for(3, "good")
-        raise AssertionError("an unknown grade was accepted")
-    except CardError:
-        pass
     # due at the start of a day, which is at four in the morning
     assert cards.due_in(1, at(2026, 11, 19, 21)) == at(2026, 11, 20, 4)
     assert cards.due_in(1, at(2026, 11, 20, 1)) == at(2026, 11, 20, 4)  # one in the morning is still the day before
     assert cards.due_in(4, at(2026, 11, 19, 12)) == at(2026, 11, 23, 4)
+    assert cards.day_of(at(2026, 11, 20, 3)) == cards.day_of(at(2026, 11, 19, 5)) == cards.day_of(at(2026, 11, 20, 5)) - 1
     # the engine's first choice and a line as good as it; never the move the card is about
     assert cards.right_moves(LINES, False, "g8f6") == ["g7g6", "d8e7"]
     assert cards.right_moves(LINES, False, "d8e7") == ["g7g6"]
     mates = [{"moves": ["a1a8"], "value": 9999}, {"moves": ["a1a7"], "value": 9997}, {"moves": ["a1a6"], "value": 400}]
     assert cards.right_moves(mates, True, "h2h3") == ["a1a8", "a1a7"]  # a slower mate is as good
+
+
+def test_the_schedule_is_ankis():
+    # a new card: steps of 1 and 10 minutes, then a day; easy goes straight to four days
+    assert after(card(), "again") == ("learning", 2, 0, 2.5, 60)
+    assert after(card(), "hard") == ("learning", 2, 0, 2.5, 330)  # between the two steps
+    assert after(card(), "good") == ("learning", 1, 0, 2.5, 600)
+    assert after(card(), "easy") == ("review", 0, 4, 2.5, 4)
+    assert after(card("learning", 2), "good") == ("learning", 1, 0, 2.5, 600)
+    assert after(card("learning", 1), "again") == ("learning", 2, 0, 2.5, 60)
+    assert after(card("learning", 1), "hard") == ("learning", 1, 0, 2.5, 600)  # the same step again
+    assert after(card("learning", 1), "good") == ("review", 0, 1, 2.5, 1)
+    assert after(card("learning", 1), "easy") == ("review", 0, 4, 2.5, 4)
+    # a learned card: hard by 1.2 and a lower ease, good by the ease, easy by the ease and 1.3 more and a higher ease
+    known = card("review", 0, 10, 2.5)
+    assert after(known, "hard") == ("review", 0, 12, 2.35, 12)
+    assert after(known, "good") == ("review", 0, 25, 2.5, 25)
+    assert after(known, "easy") == ("review", 0, 33, 2.65, 33)
+    short = card("review", 0, 1, 2.5)  # each longer than the one before, whatever the arithmetic says
+    assert [after(short, r)[2] for r in ("hard", "good", "easy")] == [2, 3, 4]
+    assert after(short, "easy")[3] == 2.65  # as Anki's own test has it: 4 days, ease 2650
+    assert after(card("review", 0, 10, 1.35), "hard")[3] == 1.3  # the ease has a floor
+    # answered late, a right answer counts the days it was remembered for: half of them for good, all for easy
+    late = card("review", 0, 10, 2.5, due=NOON - 8 * DAY)
+    assert [after(late, r)[2] for r in ("hard", "good", "easy")] == [12, 35, 59]
+    # and none is longer than the longest
+    assert [after(card("review", 0, 170, 2.5), r)[2] for r in ("hard", "good", "easy")] == [180, 180, 180]
+    # a lapse: the ease drops, the interval is a day, and it is back in ten minutes to be learned again
+    assert after(known, "again") == ("relearning", 1, 1, 2.3, 600)
+    lapsed = card("relearning", 1, 1, 2.3)
+    assert after(lapsed, "again") == ("relearning", 1, 1, 2.3, 600)  # no further drop
+    assert after(lapsed, "hard") == ("relearning", 1, 1, 2.3, 900)
+    assert after(lapsed, "good") == ("review", 0, 1, 2.3, 1)
+    assert after(lapsed, "easy") == ("review", 0, 2, 2.3, 2)
+    try:
+        cards.rate(known, "soso", NOON)
+        raise AssertionError("an unknown rating was accepted")
+    except CardError:
+        pass
+    # the day drawn from around an interval (Anki's own expected values: lowest, middle, highest)
+    for interval, least, most, want in (
+        (1.0, 1, 1000, (1, 1, 1)), (2.49, 1, 1000, (2, 2, 2)), (2.5, 1, 1000, (2, 3, 4)), (7.0, 1, 1000, (5, 7, 9)),
+        (17.0, 1, 1000, (14, 17, 20)), (37.0, 1, 1000, (33, 37, 41)), (2.0, 3, 1000, (3, 4, 4)), (2.0, 3, 3, (3, 3, 3)),
+        (19.9, 3, 1000, (17, 20, 23)), (100.0, 101, 1000, (101, 105, 108)), (100.0, 1, 99, (92, 96, 99)), (100.0, 97, 103, (97, 100, 103)),
+    ):  # fmt: skip
+        assert tuple(cards.days(interval, least, luck, most) for luck in (0.0, 0.5, 0.99)) == want, interval
+    assert [cards.days(1.5, 1, None, 100), cards.days(0.1, 1, None, 100), cards.days(101, 1, None, 100)] == [2, 1, 100]
+    assert {after(card(), "easy", luck=luck)[2] for luck in (0.0, 0.4, 0.8)} == {3, 4, 5}
+    assert after(card(), "good", luck=0.99)[4] == 600 + 148  # a step is stretched by up to a quarter
+    assert after(card("review", 0, 10), "again", luck=0.99)[4] == 600 + 148  # and by five minutes at most
+    assert cards.waits(card(), NOON) == {"hard": "6m", "good": "10m", "easy": "4d"}
+    assert cards.waits(known, NOON) == {"hard": "12d", "good": "25d", "easy": "33d"}
 
 
 def test_a_card_is_made_once_and_reviewed():
@@ -62,46 +117,66 @@ def test_a_card_is_made_once_and_reviewed():
     c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON)
     c.note(FEN.replace(" 3 3", " 7 9"), "g8f6", "Nf6", 990, LINES, NOON)  # the same move, told of again
     assert [(d["key"], d["cards"], d["active"]) for d in c.decks(NOON)] == [("blunder", 1, 1), ("mistake", 0, 0), ("inaccuracy", 1, 1)]
-    assert c.draw("mistake", now=NOON) == {"deck": "mistake", "name": "Mistakes", "active": 0, "card": None}
+    assert c.draw("mistake", now=NOON) == {"deck": "mistake", "name": "Mistakes", "active": 0, "card": None, "wait": None}
     drawn = c.draw("blunder", now=NOON)
-    card = drawn["card"]
-    assert drawn["active"] == 1 and card["fen"] == FEN and card["turn"] == "b" and card["legal"]["g7g6"]["san"] == "g6"
-    assert c.draw("blunder", skip=card["id"], now=NOON)["card"]["id"] == card["id"]  # the only one: it is shown again
-    try:
-        c.answer(card["id"], "e2e4")
-        raise AssertionError("an illegal move was accepted")
-    except CardError:
-        pass
-    # wrong: the answer is given and the card stays active
-    r = c.answer(card["id"], "Nh6", now=NOON)
+    one = drawn["card"]
+    cid = one["id"]
+    assert drawn["active"] == 1 and one["fen"] == FEN and one["turn"] == "b" and one["legal"]["g7g6"]["san"] == "g6"
+    assert c.draw("blunder", skip=cid, now=NOON)["card"]["id"] == cid  # the only one: it is shown again
+    for bad in (dict(move="e2e4"), dict(move="g6", grade="soso"), dict(move="g6", grade="again")):
+        try:
+            c.answer(cid, **bad)
+            raise AssertionError(f"accepted {bad}")
+        except CardError:
+            pass
+    # wrong: the answer is given, and the card is hidden for a minute
+    r = c.answer(cid, "Nh6", now=NOON)
     assert not r["right"] and r["move"]["san"] == "Nh6" and r["best"]["san"] == "g6" and r["best"]["line"] == ["g6", "Qf3"]
-    assert r["played"] == {"uci": "g8f6", "san": "Nf6", "cpl": 990, "deck": "blunder"} and r["active"] == 1
-    assert not c.answer(card["id"], "Nf6", "easy", now=NOON)["right"]  # the move of the game is wrong, however fast
-    # right, but not yet said how hard: still active
-    r = c.answer(card["id"], "Qe7", now=NOON)
+    assert r["played"] == {"uci": "g8f6", "san": "Nf6", "cpl": 990, "deck": "blunder"} and r["active"] == 0 and r["next"] is None
+    gone = c.draw("blunder", now=NOON + 30)
+    assert gone["card"] is None and gone["wait"] == 30  # nothing to review, and how long until there is
+    assert c.draw("blunder", now=NOON + 60)["card"]["id"] == cid
+    assert not c.answer(cid, "Nf6", "easy", now=NOON + 60)["right"]  # the move of the game is wrong, however fast
+    # right, but not yet said how hard: still active, and told what each answer would do
+    r = c.answer(cid, "Qe7", now=NOON + 120)
     assert r["right"] and r["active"] == 1 and r["move"]["fen"].startswith("r1b1kbnr/ppppqppp")
-    # right and easy: hidden for four days, then for ten
-    assert c.answer(card["id"], "g6", "easy", now=NOON)["active"] == 0
+    assert r["next"] == {"hard": "6m", "good": "10m", "easy": "4d"}
+    # good: ten minutes, then a day, then three
+    assert c.answer(cid, "g6", "good", now=NOON + 120)["active"] == 0
+    assert c.draw("blunder", now=NOON + 600)["card"] is None and c.draw("blunder", now=NOON + 720)["card"]
+    c.answer(cid, "g6", "good", now=NOON + 720)
+    assert c.draw("blunder", now=NOON + 720)["wait"] is None  # learned: it is not a matter of minutes
+    assert c.draw("blunder", now=NOON + 0.5 * DAY)["card"] is None and c.draw("blunder", now=NOON + DAY)["card"]
+    c.answer(cid, "g6", "easy", now=NOON + 0.5 * DAY)  # not active: rated already, nothing changes
+    assert c.store.one("SELECT state, interval FROM cards WHERE id=?", (cid,)) == {"state": "review", "interval": 1}
+    c.answer(cid, "g6", "good", now=NOON + DAY)
     assert c.draw("blunder", now=NOON + 3 * DAY)["card"] is None and c.draw("blunder", now=NOON + 4 * DAY)["card"]
-    c.answer(card["id"], "g6", "easy", now=NOON + 2 * DAY)  # not active: graded already, nothing changes
-    assert c.draw("blunder", now=NOON + 4 * DAY)["card"]
-    c.answer(card["id"], "g6", "easy", now=NOON + 4 * DAY)
-    assert c.draw("blunder", now=NOON + 13 * DAY)["card"] is None and c.draw("blunder", now=NOON + 14 * DAY)["card"]
-    # answered wrong when it comes back: not learned, and after that a hard right answer hides it for a day
-    c.answer(card["id"], "Nh6", now=NOON + 14 * DAY)
-    assert c.draw("blunder", now=NOON + 14 * DAY)["active"] == 1
-    c.answer(card["id"], "g6", "hard", now=NOON + 14 * DAY)
-    assert c.draw("blunder", now=NOON + 14.5 * DAY)["card"] is None and c.draw("blunder", now=NOON + 15 * DAY)["card"]
-    # the same move played again in a later game: no second card, this one is not learned again
-    c.answer(card["id"], "g6", "easy", now=NOON + 15 * DAY)
+    # answered wrong when it comes back: a lapse, back in ten minutes and then tomorrow, with a lower ease
+    c.answer(cid, "Nh6", now=NOON + 4 * DAY)
+    assert c.draw("blunder", now=NOON + 4 * DAY)["wait"] == 600
+    c.answer(cid, "g6", "good", now=NOON + 4 * DAY + 600)
+    assert c.store.one("SELECT state, interval, ease FROM cards WHERE id=?", (cid,)) == {"state": "review", "interval": 1, "ease": 2.3}
+    assert c.draw("blunder", now=NOON + 4.5 * DAY)["card"] is None and c.draw("blunder", now=NOON + 5 * DAY)["card"]
+    # the same move played again in a later game: no second card, this one is new again
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON)  # an older game, heard of late: nothing
-    assert c.draw("blunder", now=NOON + 16 * DAY)["card"] is None
-    c.note(FEN, "g8f6", "Nf6", 150, LINES, NOON + 16 * DAY)  # it cost less this time: the card moves deck
-    assert [(d["cards"], d["active"]) for d in c.decks(NOON + 16 * DAY)] == [(0, 0), (1, 1), (1, 1)]
-    # two active cards: the one just seen is not drawn again
-    c.note(FEN, "a7a6", "a6", 120, LINES, NOON + 16 * DAY)
-    for _ in range(20):
-        assert c.draw("mistake", skip=card["id"], now=NOON + 16 * DAY)["card"]["id"] != card["id"]
+    assert c.draw("blunder", now=NOON + 4.5 * DAY)["card"] is None
+    c.note(FEN, "g8f6", "Nf6", 150, LINES, NOON + 4.5 * DAY)  # it cost less this time: the card moves deck
+    assert [(d["cards"], d["active"]) for d in c.decks(NOON + 4.5 * DAY)] == [(0, 0), (1, 1), (1, 1)]
+    assert c.store.one("SELECT state, interval FROM cards WHERE id=?", (cid,)) == {"state": "new", "interval": 0}
+    # two active cards: the one just seen is not drawn again, and of several any may come
+    c.note(FEN, "a7a6", "a6", 120, LINES, NOON + 4.5 * DAY)
+    c.note(FEN, "b7b6", "b6", 130, LINES, NOON + 4.5 * DAY)
+    seen = {c.draw("mistake", skip=cid, now=NOON + 5 * DAY)["card"]["id"] for _ in range(60)}
+    assert len(seen) == 2 and cid not in seen
+    assert len({c.draw("mistake", now=NOON + 5 * DAY)["card"]["id"] for _ in range(60)}) == 3
+
+
+def test_cards_from_before_they_had_a_state():
+    home = scratch_config().home
+    store = Store(home / "old.db")
+    Cards(store).note(FEN, "g8f6", "Nf6", 990, LINES, NOON)
+    store.run("UPDATE cards SET interval=4")  # as the first version left a card it had hidden for four days
+    assert Store(home / "old.db").one("SELECT state, steps, ease FROM cards") == {"state": "review", "steps": 0, "ease": 2.5}
 
 
 def test_a_game_makes_cards_and_the_page_reviews_them():
@@ -117,7 +192,7 @@ def test_a_game_makes_cards_and_the_page_reviews_them():
         card = svc.cards.draw("blunder")["card"]  # 3... Nf6, made as soon as the engine had seen it
         assert card["fen"] == FEN and svc.cards.answer(card["id"], "Nf6")["played"]["san"] == "Nf6"
         before = svc.store.all("SELECT * FROM cards")
-        svc._cards_on_file()  # what a restart does: the same games make no more cards and unlearn none
+        svc._cards_on_file()  # what a restart does: the same games make no more cards and none new again
         assert svc.store.all("SELECT * FROM cards") == before
         svc.delete(g["id"])
         assert svc.store.all("SELECT * FROM cards") == before  # a card outlives its game
@@ -136,11 +211,17 @@ def test_the_cards_over_http():
         assert drawn["name"] == "Blunders" and s.call("GET", f"/api/cards/blunder?skip={cid}")[1]["card"]["id"] == cid
         assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "zz"})[0] == 400
         assert s.call("POST", "/api/cards/999/answer", {"move": "g6"})[0] == 400
-        assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "h6"})[1]["right"] is False
         assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6", "grade": "soso"})[0] == 400
+        assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6"})[1]["next"]["good"] == "10m"
+        wrong = s.call("POST", f"/api/cards/{cid}/answer", {"move": "h6"})[1]
+        assert wrong["right"] is False and wrong["active"] == 0  # hidden for a minute
+        gone = s.call("GET", "/api/cards/blunder")[1]
+        assert gone["card"] is None and 50 < gone["wait"] <= 75
+        s.svc.store.run("UPDATE cards SET due=0")  # the minute is over
         done = s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6", "grade": "easy"})[1]
-        assert done["right"] and done["active"] == 0 and set(done) == {"right", "active", "move", "best", "played", "explanation"}
-        assert s.call("GET", "/api/cards/blunder")[1]["card"] is None
+        assert done["right"] and done["active"] == 0 and set(done) == {"right", "active", "move", "best", "played", "explanation", "next"}
+        assert s.svc.store.one("SELECT state, interval FROM cards")["state"] == "review"
+        assert s.call("GET", "/api/cards/blunder")[1] | {"deck": 0, "name": 0} == {"deck": 0, "name": 0, "active": 0, "card": None, "wait": None}
         assert b'id="card-board"' in s.call("GET", "/")[1]
     finally:
         s.close()

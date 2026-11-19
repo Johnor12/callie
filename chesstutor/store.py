@@ -64,7 +64,10 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   cpl INTEGER NOT NULL,                 -- what it lost there, in centipawns: which deck the card is in
   lines TEXT NOT NULL,                  -- JSON: the engine's lines in the position, as in evals
   erred_at REAL NOT NULL,               -- when you last played it
-  interval INTEGER NOT NULL DEFAULT 0,  -- days it was last hidden for; 0: not learned (new, answered wrong, played again)
+  state TEXT NOT NULL DEFAULT 'new',    -- where it is in its schedule (cards.py): 'new', 'learning', 'review', 'relearning'
+  steps INTEGER NOT NULL DEFAULT 0,     -- while it is being learned: the steps it has yet to pass
+  interval INTEGER NOT NULL DEFAULT 0,  -- once learned: the days between two reviews of it
+  ease REAL NOT NULL DEFAULT 2.5,       -- what a good answer multiplies the interval by
   due REAL NOT NULL,                    -- from when it is to be reviewed
   reviewed_at REAL,                     -- when it was last answered
   explanation TEXT,                     -- why the move was bad, as Claude wrote it; NULL: not written yet
@@ -76,7 +79,8 @@ ADDED = {
     "games": {"engine": "TEXT NOT NULL DEFAULT 'stockfish'", "opp_clock_ms": "INTEGER", "draw_offer": "INTEGER",
               "finished_at": "REAL"},
     "moves": {"clock_ms": "INTEGER"},
-    "cards": {"explanation": "TEXT"},
+    "cards": {"explanation": "TEXT", "state": "TEXT NOT NULL DEFAULT 'new'", "steps": "INTEGER NOT NULL DEFAULT 0",
+              "ease": "REAL NOT NULL DEFAULT 2.5"},
 }
 
 
@@ -95,6 +99,8 @@ class Store:
                 for name, kind in columns.items():
                     if name not in have:
                         self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+            # Cards from before they had a state: one with an interval had been learned.
+            self.conn.execute("UPDATE cards SET state = 'review' WHERE state = 'new' AND interval > 0")
             # Games that ended before that was recorded: at their last move, near enough.
             self.conn.execute(
                 "UPDATE games SET finished_at = coalesce((SELECT max(played_at) FROM moves WHERE game_id = games.id), "
