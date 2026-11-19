@@ -36,7 +36,7 @@ Needs Linux (it was built and tried on Linux only; macOS may work), Python 3.12 
 [Claude Code](https://claude.com/claude-code) logged in for the Claude pane. Everything else works without it.
 
 ```sh
-git clone https://github.com/Johnor12/chess-tutor && cd chess-tutor
+git clone https://github.com/Johnor12/callie && cd callie
 ./chess-tutor engine install     # downloads the latest Stockfish release (about 80 MB) into the state directory
 ./chess-tutor allie install      # optional: Allie, the opponent that plays as people do (19 GB; see "Allie" below)
 ./chess-tutor start              # serves http://127.0.0.1:8750 in the background
@@ -315,7 +315,7 @@ rest of `main` is on GitHub already: work that has not been pushed is never sent
 so and leaves the commit for the next push). To run it every night at 2, `crontab -e` and:
 
 ```
-0 2 * * * PATH=/usr/local/bin:/usr/bin:/bin /path/to/chess-tutor/chess-tutor history push >> ~/.local/share/chess-tutor/history.log 2>&1
+0 2 * * * PATH=/usr/local/bin:/usr/bin:/bin /path/to/callie/chess-tutor history push >> ~/.local/share/chess-tutor/history.log 2>&1
 ```
 
 with a `PATH` that has Python 3.12 or newer, `git`, and whatever `git push` signs in with. If the repository is
