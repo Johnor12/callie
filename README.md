@@ -210,8 +210,10 @@ chances):
 
 A card is one position with one move played in it. The same move in the same position in another game (an
 opening you keep getting wrong) makes no second card: it makes the first a new card again, active at once, and
-moves it to the deck of what the move lost this time. A card outlives a take-back of its move and the deletion
-of its game. The games already on file when the server starts get their cards then.
+moves it to the deck of what the move lost this time. A card outlives a take-back of its move, and is deleted
+with its game: the game the move was last played in. If an earlier game still on file has the same move in the
+same position, the card stays, as that game's, where it stood in its schedule. The games already on file when
+the server starts get their cards then.
 
 The home page shows each deck with its number of active cards (those to review now); a deck opens on one of
 them, drawn at random from the active ones, with the opponent's last move marked on the board as in a game
@@ -306,7 +308,7 @@ repository as well:
 
 `history/games/<id>.jsonl` is one game: its row of the database, its moves and the analysis of each position, a
 row to a line. `history/cards.jsonl` is the cards with where each stands in its schedule. A game that is deleted
-loses its file at the next export. On another machine, or after losing the database, `git pull` and `history
+loses its file at the next export, and its cards their lines. On another machine, or after losing the database, `git pull` and `history
 import` bring the games back; a game or card the database already holds is left as it is. The conversations with
 Claude are not part of it.
 

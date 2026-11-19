@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   due REAL NOT NULL,                    -- from when it is to be reviewed
   reviewed_at REAL,                     -- when it was last answered
   explanation TEXT,                     -- why the move was bad, as Claude wrote it; NULL: not written yet
+  game_id TEXT,                         -- the game it was last played in, which it is deleted with; NULL: not known
   UNIQUE (position, uci)
 );
 """
@@ -90,6 +91,7 @@ ADDED = {
         "state": "TEXT NOT NULL DEFAULT 'new'",
         "steps": "INTEGER NOT NULL DEFAULT 0",
         "ease": "REAL NOT NULL DEFAULT 2.5",
+        "game_id": "TEXT",
     },
 }
 

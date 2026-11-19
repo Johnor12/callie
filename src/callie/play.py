@@ -616,6 +616,7 @@ class Service:
             if self.tutor:
                 self.tutor.forget(game_id)
             self.store.delete_game(game_id)
+            self._drop_cards(game_id)
             self.epochs[game_id] = self.epochs.get(game_id, 0) + 1
             for kept in (self._chess, self.clocks, self.looked, self.replies, self.trouble):
                 kept.pop(game_id, None)
@@ -816,7 +817,24 @@ class Service:
                 before["lines"],
                 m["played_at"],
                 moves[ply - 2]["uci"] if ply > 1 else None,
+                row["id"],
             )
+
+    def _drop_cards(self, game_id: str) -> None:
+        """A game was deleted: its cards go with it. One whose move a game still on file has too, in the same
+        position, is that game's card from here on, and stands where it stood in its schedule."""
+        with self.store.lock:  # what explains the cards sees none of them on its way back
+            for card in self.cards.drop(game_id):
+                board = " ".join(card["position"].split()[:2]) + " "  # the pieces and the side to move, as a FEN begins
+                for at in self.store.all(
+                    "SELECT m.game_id, m.ply FROM moves m JOIN games g ON g.id = m.game_id "
+                    "LEFT JOIN moves p ON p.game_id = m.game_id AND p.ply = m.ply - 1 "
+                    "WHERE m.source = 'user' AND m.uci = ? AND instr(coalesce(p.fen, g.start_fen), ?) = 1",
+                    (card["uci"], board),
+                ):
+                    row, moves = self._row(at["game_id"]), self.store.moves(at["game_id"])
+                    self._cards(row, moves, self._evals(row, moves), (at["ply"],))
+                self.cards.resume(card)
 
     def _cards_on_file(self) -> None:
         """Cards for the games already on file: those played before there were cards, or put there by an import."""

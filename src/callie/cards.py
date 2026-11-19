@@ -1,7 +1,8 @@
 """Flashcards of your own errors: the position before a move that lost too much, to find the better move in.
 
 Three decks, by what the move lost. A card is one position with one move played in it: the same move in the same
-position in another game makes no second card, it makes the first a new card again.
+position in another game makes no second card, it makes the first a new card again, and a card of that game: a
+card is deleted with the game its move was last played in.
 
 When a card is shown is Anki's scheduling, with Anki's default settings: the rules of its scheduler
 (https://github.com/ankitects/anki, rslib/src/scheduler/states, read at commit 0302650) written again here, not
@@ -182,32 +183,67 @@ class Cards:
         self.made = threading.Event()  # set when a card is made: what writes their explanations waits on it
 
     def note(
-        self, fen: str, uci: str, san: str, cpl: int, lines: list[dict], at: float, prev: str | None = None
+        self,
+        fen: str,
+        uci: str,
+        san: str,
+        cpl: int,
+        lines: list[dict],
+        at: float,
+        prev: str | None = None,
+        game: str | None = None,
     ) -> None:
         """A move of yours, played at ``at`` in the position ``fen``, with what it lost and the engine's lines
         there: a card if it lost enough, or, where there is one for it already, that card new again.
-        ``prev`` is the move that led to the position (None: none did, or it is not known). Told of the same
-        move twice (or of an older game after a newer one), it does nothing the second time, but learn
-        ``prev`` where the card had none.
+        ``prev`` is the move that led to the position (None: none did, or it is not known), ``game`` the game
+        it was played in (None: not known). Told of the same move twice (or of an older game after a newer
+        one), it does nothing the second time, but learn ``prev`` and ``game`` where the card had none.
         """
         if deck_of(cpl) is None or not lines or not lines[0]["moves"] or lines[0]["moves"][0] == uci:
             return
         position = Position.from_fen(fen).key()
         with self.store.lock:
-            have = self.store.one("SELECT id, erred_at, prev FROM cards WHERE position=? AND uci=?", (position, uci))
+            have = self.store.one(
+                "SELECT id, erred_at, prev, game_id FROM cards WHERE position=? AND uci=?", (position, uci)
+            )
             if have is None:
                 self.store.run(
-                    "INSERT INTO cards (position, uci, san, fen, prev, cpl, lines, erred_at, due) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (position, uci, san, fen, prev, cpl, json.dumps(lines), at, at),
+                    "INSERT INTO cards (position, uci, san, fen, prev, cpl, lines, erred_at, due, game_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (position, uci, san, fen, prev, cpl, json.dumps(lines), at, at, game),
                 )
                 self.made.set()
             elif have["erred_at"] < at:
                 self.store.run(
-                    "UPDATE cards SET san=?, fen=?, prev=?, cpl=?, lines=?, erred_at=?, state='new', steps=0, interval=0, due=? WHERE id=?",
-                    (san, fen, prev, cpl, json.dumps(lines), at, at, have["id"]),
+                    "UPDATE cards SET san=?, fen=?, prev=?, cpl=?, lines=?, erred_at=?, state='new', steps=0, interval=0, "
+                    "due=?, game_id=? WHERE id=?",
+                    (san, fen, prev, cpl, json.dumps(lines), at, at, game, have["id"]),
                 )
-            elif have["erred_at"] == at and prev and have["prev"] is None:  # a card from before they had it
-                self.store.run("UPDATE cards SET prev=? WHERE id=?", (prev, have["id"]))
+            elif have["erred_at"] == at and (
+                (prev and have["prev"] is None) or (game and have["game_id"] is None)
+            ):  # a card from before they had these
+                self.store.run(
+                    "UPDATE cards SET prev=coalesce(prev, ?), game_id=coalesce(game_id, ?) WHERE id=?",
+                    (prev, game, have["id"]),
+                )
+
+    def drop(self, game_id: str) -> list[dict]:
+        """Remove the cards of a game (it was deleted): those whose move was last played in it. Returns them
+        as they were."""
+        with self.store.lock:
+            rows = self.store.all("SELECT * FROM cards WHERE game_id=?", (game_id,))
+            self.store.run("DELETE FROM cards WHERE game_id=?", (game_id,))
+        return rows
+
+    def resume(self, card: dict) -> None:
+        """A card that was dropped and has been made again, of another game with the same move in the same
+        position: it stands where it stood in its schedule, and keeps its explanation."""
+        self.store.run(
+            "UPDATE cards SET state=?, steps=?, interval=?, ease=?, due=?, reviewed_at=?, explanation=? "
+            "WHERE position=? AND uci=?",
+            (*(card[k] for k in ("state", "steps", "interval", "ease", "due", "reviewed_at", "explanation")),
+             card["position"], card["uci"]),
+        )  # fmt: skip
 
     def _active(self, deck: str, now: float) -> list[dict]:
         if deck not in [key for key, _, _ in DECKS]:
@@ -224,8 +260,13 @@ class Cards:
         rows = self.store.all("SELECT * FROM cards WHERE explanation IS NULL ORDER BY erred_at DESC")
         return next((r for r in rows if r["id"] not in skip), None)
 
-    def explain(self, card_id: int, text: str) -> None:
-        self.store.run("UPDATE cards SET explanation=? WHERE id=?", (text, card_id))
+    def explain(self, card: dict, text: str) -> None:
+        """Keep what was written for a card, if it is still there: the number of one deleted with its game
+        meanwhile may be another card's by now."""
+        self.store.run(
+            "UPDATE cards SET explanation=? WHERE id=? AND position=? AND uci=?",
+            (text, card["id"], card["position"], card["uci"]),
+        )
 
     def decks(self, now: float | None = None) -> list[dict]:
         """Each deck with how many cards it holds and how many of them are active."""

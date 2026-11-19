@@ -220,6 +220,37 @@ def test_a_card_is_made_once_and_reviewed():
     assert len({c.draw("mistake", now=NOON + 5 * DAY)["card"]["id"] for _ in range(60)}) == 3
 
 
+def test_a_card_is_dropped_with_its_game():
+    c = scratch()
+    games = lambda: {r["uci"]: r["game_id"] for r in c.store.all("SELECT uci, game_id FROM cards")}  # noqa: E731
+    c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON)  # a card from before its game was kept
+    c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON, game="aa11")  # told of it again: learned
+    c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON, game="cc33")  # known already: left as it is
+    c.note(FEN, "a7a6", "a6", 120, LINES, NOON, game="aa11")
+    c.note(FEN, "a7a6", "a6", 120, LINES, NOON + DAY, game="bb22")  # played again in a later game: that game's now
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, game="aa11")
+    c.note(FEN, "b7b6", "b6", 130, LINES, NOON)  # of no game that is known: never dropped
+    assert games() == {"g8h6": "aa11", "a7a6": "bb22", "g8f6": "aa11", "b7b6": None}
+    last = c.store.one("SELECT * FROM cards WHERE uci='g8f6'")
+    c.store.run("UPDATE cards SET state='review', interval=9, explanation='why' WHERE id=?", (last["id"],))
+    gone = c.drop("aa11")
+    assert sorted(r["uci"] for r in gone) == ["g8f6", "g8h6"] and games() == {"a7a6": "bb22", "b7b6": None}
+    assert c.drop("aa11") == [] and c.drop("zz99") == []
+    # a card made after it may take its number: what was being written for the one that went is not kept for it
+    c.note(FEN, "h7h6", "h6", 300, LINES, NOON, game="bb22")
+    c.explain(last, "of another card")
+    assert c.explained() == {}
+    # made again of another game, a dropped card is where it was
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON - DAY, game="dd44")
+    c.resume(next(r for r in gone if r["uci"] == "g8f6"))
+    c.resume(next(r for r in gone if r["uci"] == "g8h6"))  # not made again: nothing
+    again = c.store.one("SELECT * FROM cards WHERE uci='g8f6'")
+    assert (again["game_id"], again["erred_at"], again["state"], again["interval"]) == ("dd44", NOON - DAY, "review", 9)
+    assert c.explained() == {(again["position"], "g8f6"): "why"} and "g8h6" not in games()
+    c.explain(again, "why not")
+    assert c.explained() == {(again["position"], "g8f6"): "why not"}
+
+
 def test_cards_from_before_they_had_a_state():
     home = scratch_config().home
     store = Store(home / "old.db")
@@ -255,8 +286,32 @@ def test_a_game_makes_cards_and_the_page_reviews_them():
         before = svc.store.all("SELECT * FROM cards")
         svc._cards_on_file()  # what a restart does: the same games make no more cards and none new again
         assert svc.store.all("SELECT * FROM cards") == before
+        assert before and {c["game_id"] for c in before} == {g["id"]}
+        # the same game on file once more, played the day before: the cards stay the later game's
+        svc.store.add_game({**svc.store.game(g["id"]), "id": "older"})
+        svc.store.run(
+            "INSERT INTO moves (game_id, ply, uci, san, fen, source, played_at, clock_ms) "
+            "SELECT 'older', ply, uci, san, fen, source, played_at - 86400, clock_ms FROM moves WHERE game_id=?",
+            (g["id"],),
+        )
+        svc.store.run(
+            "INSERT INTO evals (game_id, ply, fen, depth, value, cp, mate, lines) "
+            "SELECT 'older', ply, fen, depth, value, cp, mate, lines FROM evals WHERE game_id=?",
+            (g["id"],),
+        )
+        svc._cards_on_file()
+        assert svc.store.all("SELECT * FROM cards") == before
+        # a game's cards are deleted with it; those the older game has too are its cards now, where they stood
+        svc.store.run("UPDATE cards SET state='review', interval=4, explanation='why' WHERE id=?", (card["id"],))
         svc.delete(g["id"])
-        assert svc.store.all("SELECT * FROM cards") == before  # a card outlives its game
+        left = svc.store.all("SELECT * FROM cards")
+        assert len(left) == len(before) and {c["game_id"] for c in left} == {"older"}
+        nf6 = next(c for c in left if c["uci"] == "g8f6")
+        was = next(c for c in before if c["uci"] == "g8f6")
+        assert (nf6["state"], nf6["interval"], nf6["explanation"]) == ("review", 4, "why")
+        assert nf6["erred_at"] == was["erred_at"] - 86400 and nf6["due"] == was["due"]
+        svc.delete("older")
+        assert svc.store.all("SELECT * FROM cards") == []
     finally:
         done(svc)
 

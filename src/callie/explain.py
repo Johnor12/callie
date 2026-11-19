@@ -89,7 +89,7 @@ class Explainer:
                 self.svc.cards.made.wait(60)  # a card was made, or it is time to look at those that failed
                 continue
             try:
-                self.svc.cards.explain(card["id"], self.write(card))
+                self.svc.cards.explain(card, self.write(card))
                 self.svc.explained()
                 failures = 0
             except Exception as e:  # noqa: BLE001

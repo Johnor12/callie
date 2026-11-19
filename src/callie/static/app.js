@@ -198,7 +198,7 @@ function renderGames(games) {
 $("game-list").onclick = async (ev) => {
   const del = ev.target.closest("[data-del]"), row = ev.target.closest("li");
   if (del) {
-    if (!confirm("Delete this game and its analysis?")) return;
+    if (!confirm("Delete this game, its analysis and its cards?")) return;
     await api("POST", `/api/games/${del.dataset.del}/delete`).catch(() => {});
     return showHome();
   }
