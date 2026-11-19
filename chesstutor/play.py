@@ -1,4 +1,5 @@
-"""Games: making moves, the opponent's replies, the clocks, and the engine's analysis of every position.
+"""Games: making moves, the opponent's replies, the clocks, and the engine's analysis of every position (from
+which the cards of your errors are made: `cards.py`).
 
 Three Stockfish processes: `review` analyses each position of a game once, at full strength; `explore` answers
 the tutor's own questions; `opp` plays the opponent at its chosen strength. The opponent can instead be Allie
@@ -21,6 +22,7 @@ from collections import deque
 
 from . import allie, openings, opponent, rating
 from .allie import Allie, AllieError
+from .cards import Cards
 from .chess import START_FEN, Game, Position, describe
 from .config import Config
 from .engine import MATE_CP, Engine, EngineError, loss, show, verdict, win_percent
@@ -71,6 +73,7 @@ class Service:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.store = Store(cfg.db_path)
+        self.cards = Cards(self.store)  # your errors, to review
         if opponent.SCALE:  # Stockfish's ratings are given on Allie's scale: games from before are told so
             self.store.rescale(opponent.rated)
         path = str(cfg.engine)
@@ -740,7 +743,30 @@ class Service:
             self.queue.append((game_id, ply))
             self.work.set()
 
+    def _cards(self, row: dict, moves: list[dict], evals: dict[int, dict], plies: tuple[int, ...] | None = None) -> None:
+        """Tell the cards of your moves (those at ``plies``; None: all of them) that the engine has seen both
+        sides of: one that lost enough becomes a card."""
+        for m in moves:
+            ply = m["ply"]
+            before, after = evals.get(ply - 1), evals.get(ply)
+            if m["source"] != "user" or (plies is not None and ply not in plies) or not before or not after:
+                continue
+            fen = row["start_fen"] if ply == 1 else moves[ply - 2]["fen"]
+            grade = self._grade(m, before, after, fen.split()[1] == "w")
+            self.cards.note(fen, m["uci"], m["san"], grade["cpl"], before["lines"], m["played_at"])
+
+    def _cards_on_file(self) -> None:
+        """Cards for the games already on file: those played before there were cards, or put there by an import."""
+        for row in self.store.all("SELECT * FROM games"):
+            with self.lock:
+                moves = self.store.moves(row["id"])
+                self._cards(row, moves, self._evals(row, moves))
+
     def _analyse_loop(self) -> None:
+        try:
+            self._cards_on_file()
+        except Exception:  # noqa: BLE001
+            traceback.print_exc(file=sys.stderr)
         while not self.stop.is_set():
             if not self.queue:
                 self.work.clear()
@@ -794,6 +820,7 @@ class Service:
             if current != fen:
                 return  # taken back while it was being analysed
             self.store.put_eval(game_id, ply, fen, depth, value, cp, mate, lines)
+            self._cards(row, now, self._evals(row, now), (ply, ply + 1))  # the moves either side of this position
         self._bump(game_id)
 
     # ---------- what Claude is given ----------

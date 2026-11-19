@@ -1,4 +1,5 @@
-"""The database: games, their moves, and the engine's analysis of each position. SQLite, one file."""
+"""The database: games, their moves, the engine's analysis of each position, and the cards made of your errors.
+SQLite, one file."""
 
 from __future__ import annotations
 
@@ -53,6 +54,20 @@ CREATE TABLE IF NOT EXISTS evals (      -- the position after `ply` moves (0: th
   mate INTEGER,
   lines TEXT NOT NULL,                  -- JSON: [{"moves": [uci...], "cp": n, "mate": n}], best first
   PRIMARY KEY (game_id, ply)
+);
+CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for each position and the move played in it
+  id INTEGER PRIMARY KEY,
+  position TEXT NOT NULL,               -- what makes it the same position in any game: the FEN less its move counters
+  uci TEXT NOT NULL,                    -- the move you played
+  san TEXT NOT NULL,
+  fen TEXT NOT NULL,                    -- the position before it, in the game it was last played in
+  cpl INTEGER NOT NULL,                 -- what it lost there, in centipawns: which deck the card is in
+  lines TEXT NOT NULL,                  -- JSON: the engine's lines in the position, as in evals
+  erred_at REAL NOT NULL,               -- when you last played it
+  interval INTEGER NOT NULL DEFAULT 0,  -- days it was last hidden for; 0: not learned (new, answered wrong, played again)
+  due REAL NOT NULL,                    -- from when it is to be reviewed
+  reviewed_at REAL,                     -- when it was last answered
+  UNIQUE (position, uci)
 );
 """
 # Columns added since the first release: a database made before them gets them here.

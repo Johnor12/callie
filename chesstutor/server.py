@@ -24,6 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qsl
 
+from .cards import CardError
 from .config import Config
 from .engine import EngineError
 from .play import GameError, Service
@@ -76,6 +77,10 @@ def _routes(svc: Service, tutor: Tutor):
         ("POST", rf"/api/games/{_ID}/draw", lambda m, b, q: svc.draw(m[1], bool(b.get("accept")))),
         ("POST", rf"/api/games/{_ID}/pause", lambda m, b, q: svc.pause(m[1], bool(b.get("paused", True)))),
         ("POST", rf"/api/games/{_ID}/delete", lambda m, b, q: svc.delete(m[1])),
+        # the cards of your errors: an active one of a deck, and your move on it
+        ("GET", r"/api/cards", lambda m, b, q: svc.cards.decks()),
+        ("GET", r"/api/cards/(blunder|mistake|inaccuracy)", lambda m, b, q: svc.cards.draw(m[1], int(q["skip"]) if q.get("skip", "").isdigit() else None)),
+        ("POST", r"/api/cards/(\d+)/answer", lambda m, b, q: svc.cards.answer(int(m[1]), b.get("move", ""), b.get("grade"))),
         # Claude: nothing starts unless one of these is called
         ("POST", rf"/api/games/{_ID}/claude/analyse", lambda m, b, q: tutor.analyse(m[1], *_size(b))),
         ("POST", rf"/api/games/{_ID}/claude/say", lambda m, b, q: tutor.say(m[1], str(b.get("text", "")), *_size(b))),
@@ -175,7 +180,7 @@ def make_handler(svc: Service, tutor: Tutor, bind_host: str):
                 if m and meth == method:
                     try:
                         return self._json(200, fn(m, body, dict(parse_qsl(query))))
-                    except (GameError, TutorError, EngineError) as e:
+                    except (GameError, CardError, TutorError, EngineError) as e:
                         return self._json(400, {"error": str(e)})
                     except Exception as e:  # noqa: BLE001
                         return self._json(500, {"error": f"{type(e).__name__}: {e}"})

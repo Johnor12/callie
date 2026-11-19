@@ -8,6 +8,7 @@ const TOUCH = matchMedia("(pointer: coarse)");
 const PHONE = matchMedia("(max-width: 760px)");  // the one-column layout of style.css
 const FILES = "abcdefgh";
 const FORM = "chess-tutor.form";
+const FAST_MS = 3000;  // a card answered right this soon was easy: it is not asked how hard it was
 
 const S = {
   meta: null,
@@ -24,6 +25,7 @@ const S = {
   clockAt: 0,      // when the clock in S.game was read
   term: null,
   reopen: false,   // the game's session is to be shown again if its terminal has ended (once each time you come back)
+  review: null,    // the deck being reviewed and its card on screen (see showReview)
   rating: {},      // yours in each time format, as the server last reckoned them
   // elo: the opponent's strength. It is not kept: null until you set it, and until then it follows your rating
   form: { engine: "stockfish", color: "w", elo: null, full: false, opening: "", time: "untimed" },
@@ -70,8 +72,8 @@ const GLYPH = { blunder: "??", mistake: "?", inaccuracy: "?!" };
 
 // ---------- routing ----------
 function route() {
-  const m = /^#\/game\/([0-9a-f]+)/.exec(location.hash);
-  if (m) showGame(m[1]); else showHome();
+  const m = /^#\/game\/([0-9a-f]+)/.exec(location.hash), deck = /^#\/review\/([a-z]+)/.exec(location.hash);
+  if (m) showGame(m[1]); else if (deck) showReview(deck[1]); else showHome();
 }
 addEventListener("hashchange", route);
 
@@ -85,13 +87,14 @@ async function loadMeta() {
 
 // ---------- home ----------
 async function showHome() {
-  leaveGame();
-  $("game").hidden = true; $("home").hidden = false; $("crumb").textContent = "";
+  leaveGame(); leaveReview();
+  $("game").hidden = true; $("review").hidden = true; $("home").hidden = false; $("crumb").textContent = "";
   document.title = "Chess Tutor";
   try {
-    const [, rating, games] = await Promise.all([loadMeta(), api("GET", "/api/rating"), api("GET", "/api/games")]);
+    const [, rating, games, decks] = await Promise.all([loadMeta(), api("GET", "/api/rating"), api("GET", "/api/games"), api("GET", "/api/cards")]);
     S.rating = rating; S.form.elo = null;
     renderForm();
+    renderDecks(decks);
     renderRating();
     renderGames(games);
   } catch (e) { $("f-err").textContent = e.message; }
@@ -166,6 +169,11 @@ function renderRating() {
   $("rating").innerHTML = "Your Elo" + all.map(([format, r]) =>
     `<span data-testid="rating-${format}">${format[0].toUpperCase() + format.slice(1)} <b>${r.elo}${r.provisional ? "?" : ""}</b></span>`).join("");
 }
+function renderDecks(decks) {  // each with its active cards; one with none cannot be opened
+  $("decks").innerHTML = decks.map((d) =>
+    `<button class="${d.key}" data-deck="${d.key}" data-testid="deck-${d.key}"${d.active ? "" : " disabled"}>${esc(d.name)} <b>${d.active}</b></button>`).join("");
+}
+$("decks").onclick = (ev) => { const b = ev.target.closest("button"); if (b && !b.disabled) location.hash = `#/review/${b.dataset.deck}`; };
 function renderGames(games) {
   $("game-empty").hidden = games.length > 0;
   $("game-list").innerHTML = games.map((g) => {
@@ -190,7 +198,8 @@ $("game-list").onclick = async (ev) => {
 
 // ---------- a game ----------
 function showGame(id) {
-  $("home").hidden = true; $("game").hidden = false;
+  $("home").hidden = true; $("review").hidden = true; $("game").hidden = false;
+  leaveReview();
   if (S.gid === id) return;
   leaveGame();
   Object.assign(S, { gid: id, game: null, view: 0, follow: true, flip: false, sel: null, drag: null, promo: null, pending: null, reopen: true });
@@ -316,39 +325,53 @@ function shown() {
 }
 const flipped = () => (S.game.user_color === "b") !== S.flip;
 const canMove = () => { const g = S.game; return g && S.view === g.moves.length && !S.pending && g.status === "active" && g.turn === g.user_color; };
-const targets = (from) => canMove() ? Object.keys(S.game.legal).filter((u) => u.startsWith(from)).map((u) => u.slice(2, 4)) : [];
+// The board in use, a game's or the card's under review: what is on it, whose pieces move and where to (`legal`:
+// none when nothing can be moved), the arrow drawn on it, how it is marked, and what a move made on it does.
+function onBoard() {
+  const r = S.review;
+  if (r) {
+    // Your answer stands on the board once made, unless it was wrong: then the position is back, with where
+    // you went marked on it and an arrow for the right move.
+    const c = r.card, res = r.result, made = res ? (res.right ? res.move : null) : r.pending;
+    return { el: $("card-board"), fen: made ? made.fen : c.fen, last: made ? made.uci : res ? res.move.uci : null, san: made ? made.san : "",
+      color: c.turn, flip: c.turn === "b", legal: res || r.pending ? {} : c.legal, arrow: res && !res.right ? res.best.uci : null,
+      mark: res ? (res.right ? "right" : "wrong") : "", send: answerCard };
+  }
+  const g = S.game, pos = shown(), m = pos.move;
+  // The arrow: where the engine would have gone instead of the move shown (the server says only once the game is over).
+  return { el: $("board"), fen: pos.fen, last: pos.last, san: pos.san, color: g.user_color, flip: flipped(), legal: canMove() ? g.legal : {},
+    arrow: m && m.best && m.best.uci !== m.uci ? m.best.uci : null, mark: pos.live ? "" : "review", send: sendMove };
+}
+const targets = (from) => Object.keys(onBoard().legal).filter((u) => u.startsWith(from)).map((u) => u.slice(2, 4));
 
 function renderBoard() {
-  const g = S.game, pos = shown(), board = fenBoard(pos.fen), flip = flipped(), movable = canMove();
-  const white = pos.fen.split(" ")[1] === "w";
-  const inCheck = /[+#]$/.test(pos.san) ? sqName(board.indexOf(white ? "K" : "k")) : null;
+  const b = onBoard(), board = fenBoard(b.fen), flip = b.flip, movable = Object.keys(b.legal).length > 0;
+  const white = b.fen.split(" ")[1] === "w";
+  const inCheck = /[+#]$/.test(b.san) ? sqName(board.indexOf(white ? "K" : "k")) : null;
   const marks = S.sel ? targets(S.sel) : [];
   let html = "";
   for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
     const file = flip ? 7 - c : c, rank = flip ? r : 7 - r, i = file + 8 * rank, name = sqName(i), p = board[i];
     const cls = ["sq"];
     if ((file + rank) % 2 === 0) cls.push("dk");
-    if (pos.last && (pos.last.slice(0, 2) === name || pos.last.slice(2, 4) === name)) cls.push("last");
+    if (b.last && (b.last.slice(0, 2) === name || b.last.slice(2, 4) === name)) cls.push("last");
     if (S.sel === name) cls.push("sel");
     if (inCheck === name) cls.push("check");
     if (marks.includes(name)) cls.push("target", p ? "occupied" : "");
-    if (movable && p && (p === p.toUpperCase()) === (g.user_color === "w")) cls.push("movable");
+    if (movable && p && (p === p.toUpperCase()) === (b.color === "w")) cls.push("movable");
     html += `<div class="${cls.join(" ")}" data-sq="${name}">` +
       (c === 0 ? `<span class="coord rank">${rank + 1}</span>` : "") + (r === 7 ? `<span class="coord file">${FILES[file]}</span>` : "") +
       (p ? pieceSvg(p).replace('class="pc', `class="pc${S.drag && S.drag.moved && S.drag.from === name ? " dragging" : ""}`) : "") + `</div>`;
   }
-  // Where the engine would have gone instead of the move shown (the server says only once the game is over).
-  const m = pos.move;
-  if (m && m.best && m.best.uci !== m.uci) html += arrow(m.best.uci, flip);
+  if (b.arrow) html += arrow(b.arrow, flip);
   if (S.promo) {
     const c = (flip ? 7 - FILES.indexOf(S.promo.to[0]) : FILES.indexOf(S.promo.to[0])), top = (+S.promo.to[1] === 8) !== flip;
-    const pieces = (g.user_color === "w" ? "QRBN" : "qrbn").split("");
+    const pieces = (b.color === "w" ? "QRBN" : "qrbn").split("");
     html += `<div id="promo" style="left:${c * 12.5}%;${top ? "top:0" : "bottom:0;flex-direction:column-reverse"}">` +
       pieces.map((p) => `<button data-promo="${p.toLowerCase()}" title="${p}">${pieceSvg(p)}</button>`).join("") + `</div>`;
   }
-  $("board").innerHTML = html;
-  $("board").classList.toggle("review", !pos.live);
-  $("evalbar").classList.toggle("flip", flip);
+  b.el.innerHTML = html;
+  for (const mark of ["review", "right", "wrong"]) b.el.classList.toggle(mark, b.mark === mark);
 }
 function arrow(uci, flip) {
   const at = (name) => { const f = FILES.indexOf(name[0]), r = +name[1] - 1; return [(flip ? 7 - f : f) + 0.5, (flip ? r : 7 - r) + 0.5]; };
@@ -362,36 +385,39 @@ function arrow(uci, flip) {
 
 // ---------- moving pieces: drag one, or click it and then its square ----------
 const squareAt = (x, y) => { const el = document.elementFromPoint(x, y); const s = el && el.closest && el.closest(".sq"); return s ? s.dataset.sq : null; };
-$("board").addEventListener("pointerdown", (ev) => {
+function pickUp(ev) {
+  if (S.review ? !S.review.card : !S.game) return;
+  const b = onBoard();
   const promo = ev.target.closest("[data-promo]");
-  if (promo) return sendMove(S.promo.from + S.promo.to + promo.dataset.promo);
+  if (promo) return b.send(S.promo.from + S.promo.to + promo.dataset.promo);
   if (S.promo) { S.promo = null; return renderBoard(); }
   const sq = squareAt(ev.clientX, ev.clientY);
-  if (!sq || ev.button || !canMove()) return;
+  if (!sq || ev.button || !Object.keys(b.legal).length) return;
   ev.preventDefault();
   if (S.sel && targets(S.sel).includes(sq)) return tryMove(S.sel, sq);
-  const p = fenBoard(shown().fen)[sqIndex(sq)];
-  if (p && (p === p.toUpperCase()) === (S.game.user_color === "w")) {
+  const p = fenBoard(b.fen)[sqIndex(sq)];
+  if (p && (p === p.toUpperCase()) === (b.color === "w")) {
     S.drag = { from: sq, piece: p, x: ev.clientX, y: ev.clientY, moved: false, again: S.sel === sq };
     S.sel = sq;
-    try { $("board").setPointerCapture(ev.pointerId); } catch (e) { /* a synthetic event */ }
+    try { b.el.setPointerCapture(ev.pointerId); } catch (e) { /* a synthetic event */ }
   } else S.sel = null;
   renderBoard();
-});
-$("board").addEventListener("pointermove", (ev) => {
+}
+function carry(ev) {
   const d = S.drag;
   if (!d) return;
   if (!d.moved && Math.hypot(ev.clientX - d.x, ev.clientY - d.y) < 5) return;
   if (!d.moved) {
     d.moved = true;
-    const ghost = document.createElement("div");
+    const ghost = document.createElement("div"), side = onBoard().el.clientWidth / 8;
     ghost.id = "ghost"; ghost.innerHTML = pieceSvg(d.piece);
+    ghost.style.width = ghost.style.height = `${side}px`; ghost.style.margin = `${-side / 2}px 0 0 ${-side / 2}px`;
     document.body.appendChild(ghost);
     renderBoard();
   }
   const ghost = $("ghost");
   ghost.style.left = `${ev.clientX}px`; ghost.style.top = `${ev.clientY}px`;
-});
+}
 function endDrag(ev, cancelled) {
   const d = S.drag;
   if (!d) return;
@@ -405,13 +431,17 @@ function endDrag(ev, cancelled) {
   } else if (d.again) S.sel = null;  // a second click on the piece puts it down
   renderBoard();
 }
-$("board").addEventListener("pointerup", (ev) => endDrag(ev, false));
-$("board").addEventListener("pointercancel", (ev) => endDrag(ev, true));
+for (const el of [$("board"), $("card-board")]) {
+  el.addEventListener("pointerdown", pickUp);
+  el.addEventListener("pointermove", carry);
+  el.addEventListener("pointerup", (ev) => endDrag(ev, false));
+  el.addEventListener("pointercancel", (ev) => endDrag(ev, true));
+}
 
 function tryMove(from, to) {
-  const found = Object.keys(S.game.legal).filter((u) => u.startsWith(from + to));
+  const b = onBoard(), found = Object.keys(b.legal).filter((u) => u.startsWith(from + to));
   if (found.length > 1) { S.promo = { from, to }; S.sel = null; return renderBoard(); }  // a pawn reaching the last rank
-  if (found.length === 1) return sendMove(found[0]);
+  if (found.length === 1) return b.send(found[0]);
   S.sel = null; renderBoard();
 }
 async function sendMove(uci) {
@@ -432,6 +462,7 @@ async function act(fn) {
 // ---------- the engine's view ----------
 function evalAt(ply) { const g = S.game; return ply === 0 ? g.start_eval : (g.moves[ply - 1] || {}).eval; }
 function renderEval() {
+  $("evalbar").classList.toggle("flip", flipped());
   const pos = shown(), e = pos.ply <= S.game.moves.length ? evalAt(pos.ply) : null;
   if (!e) { $("evalbar-text").textContent = "…"; return; }  // not analysed yet: the bar stays where it was
   const pct = winPct(e), whiteAhead = e.value >= 0, flip = flipped();
@@ -517,6 +548,82 @@ document.addEventListener("keydown", (ev) => {
   const to = { ArrowLeft: S.view - 1, ArrowRight: S.view + 1, Home: 0, End: S.game.moves.length }[ev.key];
   if (to !== undefined) { ev.preventDefault(); setView(to); }
 });
+
+// ---------- review: the cards of a deck, one at a time ----------
+// S.review: the deck (`deck`, `name`, `active`: how many of its cards are active), its card on screen (`card`:
+// null once none is active), when that was shown (`at`), your move on it while the server answers (`pending`),
+// and what the server said of it (`result`).
+function showReview(deck) {
+  leaveGame(); leaveReview();
+  $("home").hidden = true; $("game").hidden = true; $("review").hidden = false;
+  $("card-pane").hidden = true; $("card-done").hidden = true; $("card-err").textContent = "";
+  $("crumb").textContent = "Review"; document.title = "Review · Chess Tutor";
+  S.review = { deck, name: "", active: 0, card: null, at: 0, pending: null, result: null, fast: false, timer: 0 };
+  loadMeta().catch(() => {});
+  nextCard();
+}
+function leaveReview() { if (S.review) clearTimeout(S.review.timer); S.review = null; }
+async function nextCard() {
+  const r = S.review;
+  if (!r) return;
+  $("card-err").textContent = "";
+  try {
+    const d = await api("GET", `/api/cards/${r.deck}` + (r.card ? `?skip=${r.card.id}` : ""));
+    if (S.review !== r) return;
+    Object.assign(r, { name: d.name, active: d.active, card: d.card, pending: null, result: null, fast: false });
+    S.sel = null; S.promo = null;
+    renderReview();
+    r.at = performance.now();
+  } catch (e) { if (S.review === r) $("card-err").textContent = e.message; }
+}
+// Your move on the card. One made within FAST_MS is sent as an easy one: if it is right, the card is put away
+// and the next one comes without a question.
+async function answerCard(uci) {
+  const r = S.review, c = r.card, m = c.legal[uci];
+  if (!m || r.pending || r.result) return;
+  const fast = performance.now() - r.at < FAST_MS;
+  r.pending = { uci, fen: m.fen, san: m.san }; S.sel = null; S.promo = null;
+  $("card-err").textContent = "";
+  renderReview();
+  try {
+    const res = await api("POST", `/api/cards/${c.id}/answer`, fast ? { move: uci, grade: "easy" } : { move: uci });
+    if (S.review !== r) return;
+    Object.assign(r, { pending: null, result: res, active: res.active, fast: fast && res.right });
+    renderReview();
+    if (r.fast) r.timer = setTimeout(nextCard, 900);
+  } catch (e) { if (S.review === r) { r.pending = null; renderReview(); $("card-err").textContent = e.message; } }
+}
+async function gradeCard(grade) {
+  const r = S.review;
+  $("card-hard").disabled = $("card-easy").disabled = true;
+  try {
+    await api("POST", `/api/cards/${r.card.id}/answer`, { move: r.result.move.uci, grade });
+    if (S.review === r) await nextCard();
+  } catch (e) { if (S.review === r) $("card-err").textContent = e.message; }
+  $("card-hard").disabled = $("card-easy").disabled = false;
+}
+$("card-hard").onclick = () => gradeCard("hard");
+$("card-easy").onclick = () => gradeCard("easy");
+$("card-next").onclick = nextCard;
+function renderReview() {
+  const r = S.review, c = r.card, res = r.result;
+  $("card-pane").hidden = !c; $("card-done").hidden = !!c;
+  if (!c) return;
+  renderBoard();
+  $("card-deck").textContent = r.name; $("card-count").textContent = r.active;
+  $("card-turn").hidden = !!res; $("card-turn").textContent = `${c.turn === "w" ? "White" : "Black"} to move`;
+  $("card-result").hidden = $("card-answer").hidden = !res;
+  $("card-hard").hidden = $("card-easy").hidden = !res || !res.right || r.fast;
+  $("card-next").hidden = !res || res.right;
+  if (!res) return;
+  $("card-result").className = res.right ? "right" : "wrong";
+  $("card-result").textContent = res.right ? `✓ ${res.move.san}` : `✗ Wrong: ${res.move.san}`;
+  const f = c.fen.split(" "), ply = 2 * (+f[5] - 1) + (f[1] === "w" ? 1 : 2), p = res.played;
+  const choice = !res.right ? `Right move: <b>${esc(res.best.san)}</b>` : res.best.uci === res.move.uci ? "Engine's line" : `Engine preferred <b>${esc(res.best.san)}</b>`;
+  $("card-answer").innerHTML = `<div>${choice} (${showEval(res.best)}): ${esc(numbered(ply, res.best.line))}</div>` +
+    `<div>In the game you played <b>${esc(p.san)}${GLYPH[p.deck] || ""}</b> · lost ${p.cpl} cp</div>`;
+  if (!res.right) $("card-next").focus();
+}
 
 // ---------- Claude ----------
 // A Claude Code session in a terminal, shown with xterm.js. Nothing starts one but a message sent from the box

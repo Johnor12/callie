@@ -12,8 +12,9 @@ installed: a model with an environment of its own, beside the server.
 ## What you get
 
 - **Home page**: a form for a new game (your colour, the opponent (Stockfish or Allie) and its strength, which
-  starts at your own rating, the opening it should steer for, and the clock), then your ratings and your recent
-  games (with the final position, result and settings, and what each did to your rating).
+  starts at your own rating, the opening it should steer for, and the clock), then the decks of your errors to
+  review, your ratings and your recent games (with the final position, result and settings, and what each did to
+  your rating).
 - **Game page**:
   - the board (drag a piece, or click it and then its square), with back/forward buttons, arrow keys, and a click
     on any move to walk through the game;
@@ -24,6 +25,8 @@ installed: a model with an environment of its own, beside the server.
   - a Claude pane: a box to type to Claude, and, from your first message, a real Claude Code session in a
     terminal above it.
 - Take-backs, resigning, and the game as PGN.
+- **Review**: flashcards of your own errors, made as you play: the position before a move that lost too much, to
+  find the better move in, shown again after longer and longer as you get it right.
 
 ## Setting it up
 
@@ -184,6 +187,44 @@ about your play in one game is there in the next. The first session asks once wh
 The model is `claude-fable-5-2` unless `[claude] model` says otherwise, and `[claude] config_dir` picks which
 Claude Code login the sessions use.
 
+## Reviewing your errors
+
+Every move of yours that lost 50 centipawns or more becomes a flashcard, as soon as the engine has analysed the
+positions either side of it: the position before the move, for you to find the better move in. Three decks, by
+what the move lost (the [centipawn loss](#the-analysis) of the move list, not its grades, which go by winning
+chances):
+
+| Deck | Centipawns lost |
+| --- | --- |
+| Blunders | 200 or more |
+| Mistakes | 100 to 199 |
+| Inaccuracies | 50 to 99 |
+
+A card is one position with one move played in it. The same move in the same position in another game (an
+opening you keep getting wrong) makes no second card: it marks the first as not learned, so it is active again,
+and moves it to the deck of what the move lost this time. A card outlives a take-back of its move and the
+deletion of its game. The games already on file when the server starts get their cards then.
+
+The home page shows each deck with its number of active cards (those to review now); a deck opens on one of
+them, picked at random. Move a piece to answer:
+
+- **Wrong**: the board is marked, with where you went in red and an arrow for the right move, and the engine's
+  line and what you played in the game are beside it. The card stays active, and comes round again in the same
+  sitting (after the others, while there are others). Next moves on.
+- **Right**: you say whether it was Hard or Easy to remember, and the card is hidden: for 1 day after a first
+  hard answer or 4 after a first easy one, and from then on for 1.2 times as long as the last time after a hard
+  answer (a day longer at least) and 2.5 times after an easy one: 4 days, 10, 25, 62, 155. It is never hidden
+  for more than 180 days, so a card you know well still comes back twice a year. An answer made within 3 seconds
+  counts as easy, and the next card comes without the question.
+
+A deck with no active card left says so. Days start at 4 in the morning, as in Anki: a card answered late in the
+evening and hidden for a day is there the next morning.
+
+What counts as right is the engine's first choice in the position, or another of the three lines it searched
+there that it scored within 10 centipawns of the first; never the move you played in the game. A fourth move as
+good as those is not known to the card and counts as wrong. All of this is fixed in `chesstutor/cards.py`: there
+are no settings.
+
 ## From another device, over Tailscale
 
 The server listens on 127.0.0.1 only. `tailscale serve` takes HTTPS for the machine's tailnet name and hands the
@@ -321,15 +362,16 @@ at.
 | `chesstutor/engine.py` | a UCI engine as a child process; what a score means (winning chances, loss, grades) |
 | `chesstutor/opponent.py`, `levels.json` | Stockfish's move at a rating |
 | `chesstutor/rating.py` | your ratings, from the games on file |
+| `chesstutor/cards.py` | the flashcards of your errors: the decks, what answers a card, how long it is hidden |
 | `chesstutor/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
 | `chesstutor/openings.py` | the opening books |
-| `chesstutor/play.py` | games: moves, replies, the clocks, the analysis queue, what the Claude tools return |
-| `chesstutor/store.py` | the SQLite database: games, moves, the analysis of each position |
+| `chesstutor/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return |
+| `chesstutor/store.py` | the SQLite database: games, moves, the analysis of each position, the cards |
 | `chesstutor/tutor.py` | the Claude Code session of each game: how it is started, resumed and typed into |
 | `chesstutor/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
 | `chesstutor/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
 | `chesstutor/server.py` | the page and the JSON API |
-| `chesstutor/static/` | the page: `app.js` (board, clock, terminal), `pieces.js` (the pieces, drawn here), `style.css` |
+| `chesstutor/static/` | the page: `app.js` (board, clock, review, terminal), `pieces.js` (the pieces, drawn here), `style.css` |
 
 The page holds no chess rules: with each position where it is your move the server sends every legal move and
 the position it leads to. Every action is a plain HTTP call, so the whole thing can be driven with `curl`.
