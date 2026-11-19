@@ -12,13 +12,13 @@ installed and the command that installs it). Explanations belong in the README.
 Restart the web server yourself after changing this project, without being asked, so that the running app is the
 code in the checkout (the page's files are read from disk on each request; the Python is not):
 
-- `systemctl --user restart chess-tutor` when the systemd unit is installed (`./chess-tutor status` says so);
-- `./chess-tutor start` otherwise (it stops a running server first).
+- `systemctl --user restart callie` when the systemd unit is installed (`./callie status` says so);
+- `./callie start` otherwise (it stops a running server first).
 
-Do not run `./chess-tutor start` while the unit is installed: the server it starts holds the port, and the unit
-fails and restarts in a loop behind it. `./chess-tutor stop` ends such a server and the unit takes the port.
+Do not run `./callie start` while the unit is installed: the server it starts holds the port, and the unit
+fails and restarts in a loop behind it. `./callie stop` ends such a server and the unit takes the port.
 
-Then see that it answers: `./chess-tutor status`.
+Then see that it answers: `./callie status`.
 
 ## Tests
 

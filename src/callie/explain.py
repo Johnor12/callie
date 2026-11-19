@@ -25,7 +25,7 @@ from .config import Config
 from .tutor import _clean, environment
 
 SYSTEM = """\
-You write the back of a flashcard for Chess Tutor, a local app in which a student plays games against Stockfish \
+You write the back of a flashcard for Callie, a local app in which a student plays games against Stockfish \
 held to a limited strength, or against Allie, a model that plays the way people of a chosen rating do. Every move \
 of the student's that loses too much becomes a card: the position before the move, in which they will later try \
 to find the better one. What you write is shown to them after they have answered, and beside the move in the \
@@ -97,15 +97,15 @@ class Explainer:
                     return
                 if not isinstance(e, (OSError, RuntimeError, subprocess.TimeoutExpired)):
                     traceback.print_exc(file=sys.stderr)
-                print(f"chess-tutor: no explanation for card {card['id']} ({card['san']}): {e}", file=sys.stderr, flush=True)
+                print(f"callie: no explanation for card {card['id']} ({card['san']}): {e}", file=sys.stderr, flush=True)
                 self.failed[card["id"]] = time.monotonic()
                 failures += 1
                 self.stop.wait(min(3600, 30 * 2**failures))  # Claude Code missing or logged out fails every time
 
     def _files(self, game_id: str) -> tuple[Path, Path]:
-        env = {"CHESSTUTOR_URL": self.cfg.url, "CHESSTUTOR_GAME": game_id, "CHESSTUTOR_QUIET": "1"}
+        env = {"CALLIE_URL": self.cfg.url, "CALLIE_GAME": game_id, "CALLIE_QUIET": "1"}
         if self.svc.allie.available():
-            env["CHESSTUTOR_ALLIE"] = "1"
+            env["CALLIE_ALLIE"] = "1"
         mcp = {"mcpServers": {"chess": {"command": sys.executable, "args": [str(Path(__file__).with_name("mcp.py"))], "env": env}}}
         s, m = self.dir / "explain.settings.json", self.dir / "explain.mcp.json"
         s.write_text(json.dumps({"permissions": {"allow": ["mcp__chess"]}}, indent=2))  # its own tools never ask

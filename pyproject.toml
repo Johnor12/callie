@@ -1,11 +1,11 @@
 [project]
-name = "chess-tutor"
+name = "callie"
 version = "0.1.0"
 description = "Play chess against a calibrated engine while Stockfish and Claude review your moves as you make them."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-dependencies = []  # the standard library only: nothing is installed, `./chess-tutor` runs the checkout as it is
+dependencies = []  # the standard library only: nothing is installed, `./callie` runs the checkout as it is
 
 [tool.uv]
 package = false

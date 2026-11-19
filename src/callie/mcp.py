@@ -1,8 +1,8 @@
 """The tutor's tools: a Model Context Protocol server on stdio that Claude Code starts with each game's session.
 
-It holds no chess of its own. Each tool call is passed to the running Chess Tutor server (CHESSTUTOR_URL) for the
-game this session belongs to (CHESSTUTOR_GAME), which owns the game and the engines. `human_moves` is offered
-only where Allie is installed (CHESSTUTOR_ALLIE). A session that works in the background (CHESSTUTOR_QUIET: one
+It holds no chess of its own. Each tool call is passed to the running Callie server (CALLIE_URL) for the
+game this session belongs to (CALLIE_GAME), which owns the game and the engines. `human_moves` is offered
+only where Allie is installed (CALLIE_ALLIE). A session that works in the background (CALLIE_QUIET: one
 that explains a card) says so with each call, and the server answers it with what the games can spare. Standard library only, and run as a file, so it needs nothing
 from the environment Claude Code starts it in.
 """
@@ -112,12 +112,12 @@ HUMAN_MOVES = {
 
 
 def tools() -> list[dict]:
-    return TOOLS + ([HUMAN_MOVES] if os.environ.get("CHESSTUTOR_ALLIE") == "1" else [])
+    return TOOLS + ([HUMAN_MOVES] if os.environ.get("CALLIE_ALLIE") == "1" else [])
 
 
 def call(name: str, arguments: dict) -> tuple[str, bool]:
-    url = f"{os.environ.get('CHESSTUTOR_URL', 'http://127.0.0.1:8750')}/api/games/{os.environ.get('CHESSTUTOR_GAME', '')}/tool"
-    body = json.dumps({"name": name, "arguments": arguments or {}, "quiet": os.environ.get("CHESSTUTOR_QUIET") == "1"}).encode()
+    url = f"{os.environ.get('CALLIE_URL', 'http://127.0.0.1:8750')}/api/games/{os.environ.get('CALLIE_GAME', '')}/tool"
+    body = json.dumps({"name": name, "arguments": arguments or {}, "quiet": os.environ.get("CALLIE_QUIET") == "1"}).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=180) as r:  # Allie, asked cold, loads for a minute first
@@ -128,7 +128,7 @@ def call(name: str, arguments: dict) -> tuple[str, bool]:
         except ValueError:
             return str(e), True
     except (OSError, ValueError, KeyError) as e:
-        return f"the Chess Tutor server did not answer: {e}", True
+        return f"the Callie server did not answer: {e}", True
 
 
 def handle(msg: dict) -> dict | None:

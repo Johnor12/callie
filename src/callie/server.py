@@ -93,7 +93,7 @@ def _routes(svc: Service, tutor: Tutor):
         ("POST", rf"/api/games/{_ID}/claude/reset", lambda m, b, q: tutor.reset(m[1])),
         ("POST", rf"/api/terminals/{_ID}/input", lambda m, b, q: tutor.terminal(m[1]).write(str(b.get("data", "")).encode()) or ok),
         ("POST", rf"/api/terminals/{_ID}/resize", lambda m, b, q: tutor.terminal(m[1]).resize(*_size(b)) or ok),
-        # what a Claude session's tools call (chesstutor/mcp.py)
+        # what a Claude session's tools call (src/callie/mcp.py)
         ("POST", rf"/api/games/{_ID}/tool", lambda m, b, q: _tool(svc, m[1], b)),
     ]
 
@@ -267,9 +267,9 @@ def serve(cfg: Config, host: str | None = None, port: int | None = None) -> None
     pidfile.write_text(json.dumps({"pid": os.getpid(), "url": cfg.url}))
     signal.signal(signal.SIGTERM, _interrupt)  # leave the way Ctrl+C does
     also = "".join(f", also answers to {h}" for h in cfg.hosts)
-    print(f"chess-tutor: {cfg.url}{also}  (state: {cfg.home})", flush=True)
+    print(f"callie: {cfg.url}{also}  (state: {cfg.home})", flush=True)
     if not cfg.engine.exists():
-        print(f"chess-tutor: no engine at {cfg.engine}: run `chess-tutor engine install`", file=sys.stderr, flush=True)
+        print(f"callie: no engine at {cfg.engine}: run `callie engine install`", file=sys.stderr, flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

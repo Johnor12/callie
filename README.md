@@ -1,4 +1,4 @@
-# Chess Tutor
+# Callie
 
 Play chess in the browser against an opponent held to a chosen Elo (Stockfish weakened, or Allie, a model that
 plays the way people of that rating do), with full-strength Stockfish grading every move as you make it, a
@@ -37,18 +37,18 @@ Needs Linux (it was built and tried on Linux only; macOS may work), Python 3.12 
 
 ```sh
 git clone https://github.com/Johnor12/callie && cd callie
-./chess-tutor engine install     # downloads the latest Stockfish release (about 80 MB) into the state directory
-./chess-tutor allie install      # optional: Allie, the opponent that plays as people do (19 GB; see "Allie" below)
-./chess-tutor start              # serves http://127.0.0.1:8750 in the background
-./chess-tutor status             # what is running and what is missing
+./callie engine install     # downloads the latest Stockfish release (about 80 MB) into the state directory
+./callie allie install      # optional: Allie, the opponent that plays as people do (19 GB; see "Allie" below)
+./callie start              # serves http://127.0.0.1:8750 in the background
+./callie status             # what is running and what is missing
 ```
 
-`./chess-tutor serve` runs it in the terminal instead, `stop` stops it, and `service install` makes it a systemd
+`./callie serve` runs it in the terminal instead, `stop` stops it, and `service install` makes it a systemd
 user service that starts with the machine. The service runs no shell profile: of the shell `service install` is
-run in it keeps the `PATH` (where `claude` is found) and the `CHESSTUTOR_` variables, and nothing else, so run
-`service install` again when one of those changes. Settings live in `~/.config/chess-tutor/config.toml`
+run in it keeps the `PATH` (where `claude` is found) and the `CALLIE_` variables, and nothing else, so run
+`service install` again when one of those changes. Settings live in `~/.config/callie/config.toml`
 ([config.example.toml](config.example.toml) lists every key); games, the engine and logs live in
-`~/.local/share/chess-tutor`.
+`~/.local/share/callie`.
 
 ## The opponent
 
@@ -62,7 +62,7 @@ opponent to beat either way, and [your own rating](#your-rating) can be reckoned
 Stockfish has a scale of its own, and two ways of playing below its best. From 1320 to 3190 on that scale it
 limits itself (`UCI_Elo`, calibrated against the CCRL 40/4 rating list). It has no setting below 1320 (which
 plays as about 1650 here), and a tutor is most useful below it, so weaker opponents are built here
-(`chesstutor/opponent.py`): every legal move
+(`src/callie/opponent.py`): every legal move
 is scored by a 6-ply search and one is drawn with odds that fall off with how much worse than the best it is.
 The fall-off (a "temperature" in centipawns) sets the strength. What plays at which rating was measured, not
 guessed, by `scripts/calibrate.py`: first which temperature plays at which rating of Stockfish's scale (matches
@@ -73,7 +73,7 @@ The number says how the results come out, not how the moves look. A weakened eng
 person does: it can hang a piece in one move and find a deep tactic in the next.
 
 **Opening.** The opponent can be asked for an opening of the colour it plays (the Sicilian or the French if you
-are White; the Italian or the London if you are Black; 23 in all, in `chesstutor/openings.py`). It follows the
+are White; the Italian or the London if you are Black; 23 in all, in `src/callie/openings.py`). It follows the
 book for as long as your moves allow, transpositions included, then plays at its strength. Book moves are marked
 in the move list.
 
@@ -111,7 +111,7 @@ is rare. An offer shows beside its name with Accept and Decline, and playing on 
 it one.
 
 **What it takes.** Linux on x86-64, [uv](https://docs.astral.sh/uv/), 19 GB of disk and 9 GB of free memory;
-no GPU. `./chess-tutor allie install` puts everything under `~/.local/share/chess-tutor/allie`: a Python 3.12
+no GPU. `./callie allie install` puts everything under `~/.local/share/callie/allie`: a Python 3.12
 environment with PyTorch (CPU) and Allie's code, its engine built from Rust (with a toolchain downloaded for the
 build and removed after it, unless Rust 1.89 or newer is already there), and the weights (18 GB, from Hugging
 Face). To remove it, delete that directory. The model runs in a process of its own, which is there for as long
@@ -127,7 +127,7 @@ time and plays somewhat below its rating.
 
 Every finished game against an opponent with a rating moves yours: a win against a stronger opponent by a lot, a
 loss to one by little. It is on the same scale as the opponents' (Lichess's, by way of Allie), and is worked out
-afresh from the games on file each time it is shown (`chesstutor/rating.py`), so:
+afresh from the games on file each time it is shown (`src/callie/rating.py`), so:
 
 - only games that are over count, whatever ended them (mate, resignation, the clock, a draw);
 - a game you delete is forgotten, and a finished game you take a move back in counts again only once it ends again;
@@ -167,7 +167,7 @@ on half the machine's threads, three lines), in the background, as the position 
 **Claude, when you ask.** Nothing is sent to Claude as you play. The pane is a box to type in: your first
 message opens a Claude Code session above it, told what the game is and what is expected of it, and later ones
 are typed into that session (which is resumed if it had been closed for lack of use).
-The session is given these tools (an MCP server, `chesstutor/mcp.py`), the last only where Allie is installed:
+The session is given these tools (an MCP server, `src/callie/mcp.py`), the last only where Allie is installed:
 
 | Tool | What it returns |
 | --- | --- |
@@ -189,7 +189,7 @@ resumes the session in a new one (`claude --resume`, which redraws the conversat
 One you end yourself (`/exit`) stays closed until you send a message or come back to the game.
 
 All of them run in one directory
-(`~/.local/share/chess-tutor/tutor`), so they share one Claude Code project and its memory: what Claude learns
+(`~/.local/share/callie/tutor`), so they share one Claude Code project and its memory: what Claude learns
 about your play in one game is there in the next. The first session asks once whether you trust that directory.
 
 The model is `claude-fable-5-2` unless `[claude] model` says otherwise, and `[claude] config_dir` picks which
@@ -238,7 +238,7 @@ when it is back.
 
 The schedule is Anki's, with Anki's default settings: the rules of its scheduler
 ([`rslib/src/scheduler/states`](https://github.com/ankitects/anki/tree/main/rslib/src/scheduler/states)) written
-again in `chesstutor/cards.py`, not its code, and tested against the values Anki's own tests expect. A wrong
+again in `src/callie/cards.py`, not its code, and tested against the values Anki's own tests expect. A wrong
 answer is Anki's "Again".
 
 - **A new card** is learned in two steps, of 1 and 10 minutes. Good moves it a step on, and after the second to
@@ -263,7 +263,7 @@ daily limits.
 
 What counts as right is the engine's first choice in the position, or another of the three lines it searched
 there that it scored within 10 centipawns of the first; never the move you played in the game. A fourth move as
-good as those is not known to the card and counts as wrong. All of this is fixed in `chesstutor/cards.py`: there
+good as those is not known to the card and counts as wrong. All of this is fixed in `src/callie/cards.py`: there
 are no settings.
 
 ### Why the move was bad
@@ -280,7 +280,7 @@ shown:
 - to the game's own Claude session: `game` and `review` give it with the move, as previous analysis generated
   by Claude with access to Stockfish and Allie.
 
-The games come first (`chesstutor/explain.py`):
+The games come first (`src/callie/explain.py`):
 
 - explanations are written one at a time, by a process at the lowest priority (`nice`), so it runs on what the
   engines of a game leave idle;
@@ -295,13 +295,13 @@ explanation is one run of Claude on the account the app's sessions use.
 
 ## The games, kept in git
 
-The games are in a database on this machine only (`~/.local/share/chess-tutor/games.db`). To keep them in the
+The games are in a database on this machine only (`~/.local/share/callie/games.db`). To keep them in the
 repository as well:
 
 ```sh
-./chess-tutor history export   # the games and cards as text under history/ in the checkout
-./chess-tutor history push     # that, then history/ committed on main and pushed
-./chess-tutor history import   # the games and cards in history/ that the database does not hold
+./callie history export   # the games and cards as text under history/ in the checkout
+./callie history push     # that, then history/ committed on main and pushed
+./callie history import   # the games and cards in history/ that the database does not hold
 ```
 
 `history/games/<id>.jsonl` is one game: its row of the database, its moves and the analysis of each position, a
@@ -315,7 +315,7 @@ rest of `main` is on GitHub already: work that has not been pushed is never sent
 so and leaves the commit for the next push). To run it every night at 2, `crontab -e` and:
 
 ```
-0 2 * * * PATH=/usr/local/bin:/usr/bin:/bin /path/to/callie/chess-tutor history push >> ~/.local/share/chess-tutor/history.log 2>&1
+0 2 * * * PATH=/usr/local/bin:/usr/bin:/bin /path/to/callie/callie history push >> ~/.local/share/callie/history.log 2>&1
 ```
 
 with a `PATH` that has Python 3.12 or newer, `git`, and whatever `git push` signs in with. If the repository is
@@ -338,7 +338,7 @@ hosts = ["my-machine.my-tailnet.ts.net"]
 tailscale_logins = ["me@example.com"]
 ```
 
-and open `https://my-machine.my-tailnet.ts.net:8443`. `./chess-tutor status` says which of these steps is missing.
+and open `https://my-machine.my-tailnet.ts.net:8443`. `./callie status` says which of these steps is missing.
 
 This matters because the Claude pane is a terminal: whoever can reach the server can type into a Claude Code
 session that runs as you. So the server only answers requests with a loopback `Host` or one of the `hosts`, a
@@ -442,7 +442,7 @@ To measure again (a new Stockfish release, another search depth, a new Allie):
 ```sh
 ./scripts/calibrate.py play --games 150   # temperatures on Stockfish's own scale (minutes, every core)
 ./scripts/calibrate.py allie --games 60   # Stockfish against Allie (about three minutes a game, one at a time)
-./scripts/calibrate.py fit                # prints both fits and rewrites chesstutor/levels.json
+./scripts/calibrate.py fit                # prints both fits and rewrites src/callie/levels.json
 ```
 
 The games against Allie add up: `allie` can be stopped and run again, and `fit` uses every game on file. A refit
@@ -454,22 +454,22 @@ at.
 
 | File | What it does |
 | --- | --- |
-| `chesstutor/chess.py` | the rules, from scratch: legal moves, FEN, SAN, how a game ends (checked against published perft counts) |
-| `chesstutor/engine.py` | a UCI engine as a child process; what a score means (winning chances, loss, grades) |
-| `chesstutor/opponent.py`, `levels.json` | Stockfish's move at a rating |
-| `chesstutor/rating.py` | your ratings, from the games on file |
-| `chesstutor/cards.py` | the flashcards of your errors: the decks, what answers a card, how long it is hidden |
-| `chesstutor/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
-| `chesstutor/openings.py` | the opening books |
-| `chesstutor/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return |
-| `chesstutor/store.py` | the SQLite database: games, moves, the analysis of each position, the cards |
-| `chesstutor/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
-| `chesstutor/tutor.py` | the Claude Code session of each game: how it is started, resumed and typed into |
-| `chesstutor/explain.py` | the explanation of each card: Claude run once for it, in the background, behind the games |
-| `chesstutor/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
-| `chesstutor/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
-| `chesstutor/server.py` | the page and the JSON API |
-| `chesstutor/static/` | the page: `app.js` (board, clock, review, terminal), `pieces.js` (the pieces, drawn here), `style.css` |
+| `src/callie/chess.py` | the rules, from scratch: legal moves, FEN, SAN, how a game ends (checked against published perft counts) |
+| `src/callie/engine.py` | a UCI engine as a child process; what a score means (winning chances, loss, grades) |
+| `src/callie/opponent.py`, `levels.json` | Stockfish's move at a rating |
+| `src/callie/rating.py` | your ratings, from the games on file |
+| `src/callie/cards.py` | the flashcards of your errors: the decks, what answers a card, how long it is hidden |
+| `src/callie/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
+| `src/callie/openings.py` | the opening books |
+| `src/callie/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return |
+| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards |
+| `src/callie/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
+| `src/callie/tutor.py` | the Claude Code session of each game: how it is started, resumed and typed into |
+| `src/callie/explain.py` | the explanation of each card: Claude run once for it, in the background, behind the games |
+| `src/callie/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
+| `src/callie/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
+| `src/callie/server.py` | the page and the JSON API |
+| `src/callie/static/` | the page: `app.js` (board, clock, review, terminal), `pieces.js` (the pieces, drawn here), `style.css` |
 
 The page holds no chess rules: with each position where it is your move the server sends every legal move and
 the position it leads to. Every action is a plain HTTP call, so the whole thing can be driven with `curl`.
@@ -486,5 +486,5 @@ and explanations are exercised against `tests/fake_claude.py`) or loads Allie (`
 ## Licences
 
 This project is MIT licensed. Stockfish is GPLv3 and is not included: `engine install` downloads the official
-release. Allie (code and weights) is MIT and is not included either: `allie install` fetches both. `chesstutor/static/vendor` holds xterm.js 6.0.0 with its fit, WebGL and unicode-graphemes addons, as
+release. Allie (code and weights) is MIT and is not included either: `allie install` fetches both. `src/callie/static/vendor` holds xterm.js 6.0.0 with its fit, WebGL and unicode-graphemes addons, as
 published on npm, MIT.

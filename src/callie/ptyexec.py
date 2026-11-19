@@ -17,5 +17,5 @@ if __name__ == "__main__":
     try:
         os.execvp(sys.argv[1], sys.argv[1:])
     except OSError as e:
-        sys.stderr.write(f"chess-tutor: cannot run {sys.argv[1]}: {e}\r\n")
+        sys.stderr.write(f"callie: cannot run {sys.argv[1]}: {e}\r\n")
         sys.exit(127)

@@ -5,9 +5,9 @@ import subprocess
 import time
 import unittest
 
-from chesstutor import history
-from chesstutor.cards import Cards
-from chesstutor.store import Store
+from callie import history
+from callie.cards import Cards
+from callie.store import Store
 from tests import function_tests, scratch_config
 from tests.test_cards import FEN, LINES
 

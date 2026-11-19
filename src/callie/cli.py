@@ -1,4 +1,4 @@
-"""`chess-tutor`: run the server, fetch the engines, install it as a service, keep the games in git."""
+"""`callie`: run the server, fetch the engines, install it as a service, keep the games in git."""
 
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ RELEASE = "https://api.github.com/repos/official-stockfish/Stockfish/releases/la
 RUSTUP = "https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init"
 RUST_MIN = (1, 89)  # what Allie's engine is written for
 TORCH = ("torch==2.10.*", "https://download.pytorch.org/whl/cpu")  # the version Allie was trained with, without CUDA
-UNIT = Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser() / "systemd" / "user" / "chess-tutor.service"
+UNIT = Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser() / "systemd" / "user" / "callie.service"
 # What the service is given of the environment `service install` is run in: where `claude` and the rest are found
 # (Claude Code is started by the server and inherits its environment), and this program's own settings.
-_CARRIED = ("PATH", "CHESSTUTOR_CONFIG", "CHESSTUTOR_HOME", "CHESSTUTOR_CLAUDE_BIN", "CHESSTUTOR_PYTHON")
+_CARRIED = ("PATH", "CALLIE_CONFIG", "CALLIE_HOME", "CALLIE_CLAUDE_BIN", "CALLIE_PYTHON")
 
 
 # ---------- the server ----------
@@ -63,16 +63,16 @@ def cmd_start(cfg: Config, args) -> int:
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent.parent))
     with open(cfg.home / "server.log", "ab") as log:
         subprocess.Popen(
-            [sys.executable, "-m", "chesstutor.cli", "serve"], stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, start_new_session=True
+            [sys.executable, "-m", "callie.cli", "serve"], stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, start_new_session=True
         )  # fmt: skip
     deadline = time.time() + 15
     while time.time() < deadline:
         info = _running(cfg)
         if info and _answers(info["url"]):
-            print(f"chess-tutor: {info['url']}  (pid {info['pid']}, log {cfg.home / 'server.log'})")
+            print(f"callie: {info['url']}  (pid {info['pid']}, log {cfg.home / 'server.log'})")
             return 0
         time.sleep(0.1)
-    print(f"chess-tutor: the server did not start; see {cfg.home / 'server.log'}", file=sys.stderr)
+    print(f"callie: the server did not start; see {cfg.home / 'server.log'}", file=sys.stderr)
     return 1
 
 
@@ -80,7 +80,7 @@ def cmd_stop(cfg: Config, args, quiet: bool = False) -> int:
     info = _running(cfg)
     if not info:
         if not quiet:
-            print("chess-tutor: not running")
+            print("callie: not running")
         return 0
     os.kill(info["pid"], signal.SIGTERM)
     deadline = time.time() + 10
@@ -89,20 +89,20 @@ def cmd_stop(cfg: Config, args, quiet: bool = False) -> int:
     if _running(cfg):
         os.kill(info["pid"], signal.SIGKILL)
     if not quiet:
-        print(f"chess-tutor: stopped (pid {info['pid']})")
+        print(f"callie: stopped (pid {info['pid']})")
     return 0
 
 
 def cmd_status(cfg: Config, args) -> int:
     info = _running(cfg)
-    print(f"server: {info['url']}, pid {info['pid']}" if info else "server: not running (`chess-tutor start`)")
-    print(f"engine: {cfg.engine}" + ("" if cfg.engine.exists() else "  MISSING: run `chess-tutor engine install`"))
+    print(f"server: {info['url']}, pid {info['pid']}" if info else "server: not running (`callie start`)")
+    print(f"engine: {cfg.engine}" + ("" if cfg.engine.exists() else "  MISSING: run `callie engine install`"))
     why = allie.missing(cfg)
-    print(f"allie: {allie.weights(cfg)}, run by {cfg.allie_python}" if why is None else f"allie: not installed (`chess-tutor allie install`): {why}")
+    print(f"allie: {allie.weights(cfg)}, run by {cfg.allie_python}" if why is None else f"allie: not installed (`callie allie install`): {why}")
     claude = shutil.which(cfg.claude_bin)
     print(f"claude: {claude or cfg.claude_bin + '  NOT ON THE PATH'}, model {cfg.claude_model}, "
           f"account {cfg.claude_config_dir or os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'}")  # fmt: skip
-    print(f"service: {'installed (' + str(UNIT) + ')' if UNIT.exists() else 'not installed (`chess-tutor service install`)'}")
+    print(f"service: {'installed (' + str(UNIT) + ')' if UNIT.exists() else 'not installed (`callie service install`)'}")
     print(f"config: {cfg.source or 'defaults (no config file)'}; state: {cfg.home}")
     for line in _tailnet(cfg):
         print(line)
@@ -268,14 +268,14 @@ def cmd_allie(cfg: Config, args) -> int:
             hub = dict(env, HF_HUB_CACHE=str(home / "hub"), HF_HUB_DISABLE_TELEMETRY="1")
             subprocess.run([str(python), "-c", fetch, allie.REPO], env=hub, check=True)
     except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
-        print(f"chess-tutor: installing Allie stopped: {e}", file=sys.stderr)
+        print(f"callie: installing Allie stopped: {e}", file=sys.stderr)
         return 1
     print("loading it once, to see that it runs ...", flush=True)
     engine = allie.Allie(cfg)
     try:
         info = engine.load()
     except allie.AllieError as e:
-        print(f"chess-tutor: {e}", file=sys.stderr)
+        print(f"callie: {e}", file=sys.stderr)
         return 1
     finally:
         engine.close()
@@ -293,21 +293,21 @@ def cmd_history(cfg: Config, args) -> int:
     from . import history
     from .store import Store
 
-    checkout = Path(__file__).resolve().parent.parent
+    checkout = Path(__file__).resolve().parents[2]
     store = Store(cfg.db_path)
     try:
         if args.action == "import":
             added = history.load(store, checkout / "history")
-            print(f"chess-tutor: added {added['games']} games and {added['cards']} cards from {checkout / 'history'}")
+            print(f"callie: added {added['games']} games and {added['cards']} cards from {checkout / 'history'}")
             return 0
         games = history.export(store, checkout / "history")
         said = f"{games} games in {checkout / 'history'}"
         if args.action == "push":
             said += f": {history.push(checkout)}"
-        print(f"chess-tutor: {time.strftime('%Y-%m-%d %H:%M')} {said}")
+        print(f"callie: {time.strftime('%Y-%m-%d %H:%M')} {said}")
         return 0
     except history.HistoryError as e:
-        print(f"chess-tutor: {time.strftime('%Y-%m-%d %H:%M')} {e}", file=sys.stderr)
+        print(f"callie: {time.strftime('%Y-%m-%d %H:%M')} {e}", file=sys.stderr)
         return 1
 
 
@@ -320,9 +320,9 @@ def unit_text(argv: list[str], env: dict[str, str]) -> str:
     word = lambda s: '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'  # noqa: E731
     return "\n".join(
         [
-            "# Written by `chess-tutor service install`; `chess-tutor service uninstall` removes it.",
+            "# Written by `callie service install`; `callie service uninstall` removes it.",
             "[Unit]",
-            "Description=Chess Tutor: play against a calibrated engine with Stockfish and Claude analysis",
+            "Description=Callie: play against a calibrated engine with Stockfish and Claude analysis",
             "StartLimitIntervalSec=0",
             "",
             "[Service]",
@@ -350,7 +350,7 @@ def cmd_service(cfg: Config, args) -> int:
         return 0
     root = Path(__file__).resolve().parent.parent
     UNIT.parent.mkdir(parents=True, exist_ok=True)
-    UNIT.write_text(unit_text([sys.executable, "-m", "chesstutor.cli", "serve"], {"PYTHONPATH": str(root), **{k: os.environ[k] for k in _CARRIED if os.environ.get(k)}}))
+    UNIT.write_text(unit_text([sys.executable, "-m", "callie.cli", "serve"], {"PYTHONPATH": str(root), **{k: os.environ[k] for k in _CARRIED if os.environ.get(k)}}))
     cmd_stop(cfg, args, quiet=True)  # one started by hand holds the port
     for a in (("daemon-reload",), ("enable", UNIT.name), ("restart", UNIT.name)):
         r = systemctl(*a)
@@ -372,7 +372,7 @@ def cmd_service(cfg: Config, args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="chess-tutor", description=__doc__)
+    ap = argparse.ArgumentParser(prog="callie", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("serve", help="run the server in this terminal")
     s.add_argument("--host")
@@ -397,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = load_config()
     except ConfigError as err:
-        print(f"chess-tutor: {err}", file=sys.stderr)
+        print(f"callie: {err}", file=sys.stderr)
         return 2
     return args.fn(cfg, args)
 

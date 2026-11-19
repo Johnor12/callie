@@ -63,7 +63,7 @@ class Engine:
                 ["nice", "-n", "19", self.path] if self.nice else [self.path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1
             )
         except OSError as e:
-            raise EngineError(f"cannot run the chess engine at {self.path}: {e} (run `chess-tutor engine install`)") from None
+            raise EngineError(f"cannot run the chess engine at {self.path}: {e} (run `callie engine install`)") from None
         self._options = {}
         self._send("uci")
         for line in self._until("uciok"):

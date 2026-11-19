@@ -3,9 +3,9 @@
 import time
 from datetime import datetime
 
-from chesstutor import cards, opponent
-from chesstutor.cards import CardError, Cards
-from chesstutor.store import Store
+from callie import cards, opponent
+from callie.cards import CardError, Cards
+from callie.store import Store
 from tests import function_tests, need_engine, scratch_config
 from tests.test_play import done, service, until
 from tests.test_server import Running

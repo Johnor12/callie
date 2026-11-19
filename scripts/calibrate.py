@@ -1,9 +1,9 @@
-"""Measure what rating each setting of the Stockfish opponent plays at, and write chesstutor/levels.json.
+"""Measure what rating each setting of the Stockfish opponent plays at, and write src/callie/levels.json.
 
 Two measurements, one after the other:
 
 1. Stockfish's own scale. Players are `sf:<elo>` (Stockfish limiting itself, `UCI_Elo`: the fixed points) and
-   `t:<temperature>` (the move sampler of chesstutor/opponent.py). Matches are played between players expected to
+   `t:<temperature>` (the move sampler of src/callie/opponent.py). Matches are played between players expected to
    be within a few hundred points of each other, then one rating per temperature is fitted to all the results at
    once (maximum likelihood under the Elo model, with the `sf:` players held at their nominal ratings).
 
@@ -33,15 +33,15 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from chesstutor import allie as allie_mod  # noqa: E402
-from chesstutor import opponent  # noqa: E402
-from chesstutor.allie import Allie, AllieError  # noqa: E402
-from chesstutor.chess import START_FEN, Game  # noqa: E402
-from chesstutor.config import Config, load_config  # noqa: E402
-from chesstutor.engine import Engine  # noqa: E402
-from chesstutor.play import MIN_REPLY_S  # noqa: E402
+from callie import allie as allie_mod  # noqa: E402
+from callie import opponent  # noqa: E402
+from callie.allie import Allie, AllieError  # noqa: E402
+from callie.chess import START_FEN, Game  # noqa: E402
+from callie.config import Config, load_config  # noqa: E402
+from callie.engine import Engine  # noqa: E402
+from callie.play import MIN_REPLY_S  # noqa: E402
 
 RESULTS = Path(__file__).with_name("calibration.jsonl")
 ALLIE_RESULTS = Path(__file__).with_name("calibration-allie.jsonl")

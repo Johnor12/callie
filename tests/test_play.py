@@ -2,9 +2,9 @@
 
 import time
 
-from chesstutor import opponent
-from chesstutor.engine import Engine, loss, show, verdict, win_percent
-from chesstutor.play import GameError, Service
+from callie import opponent
+from callie.engine import Engine, loss, show, verdict, win_percent
+from callie.play import GameError, Service
 from tests import function_tests, need_engine, scratch_config
 
 

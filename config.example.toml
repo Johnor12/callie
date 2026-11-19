@@ -1,7 +1,7 @@
-# Chess Tutor configuration. Copy to ~/.config/chess-tutor/config.toml (or point CHESSTUTOR_CONFIG at it).
+# Callie configuration. Copy to ~/.config/callie/config.toml (or point CALLIE_CONFIG at it).
 # Every key is optional; what is shown is the default unless the comment says otherwise.
 
-# home = "~/.local/share/chess-tutor"   # games.db, the engine, Claude session files, logs
+# home = "~/.local/share/callie"   # games.db, the engine, Claude session files, logs
 
 [server]
 host = "127.0.0.1"
@@ -13,7 +13,7 @@ port = 8750
 # tailscale_logins = ["me@example.com"]
 
 [engine]
-# path = "~/.local/share/chess-tutor/engine/stockfish"   # where `chess-tutor engine install` puts it
+# path = "~/.local/share/callie/engine/stockfish"   # where `callie engine install` puts it
 threads = 0        # for analysis; 0 means half the machine's logical processors
 hash_mb = 512      # for each of the two analysis engines
 review_ms = 1500   # how long every position of a game is analysed
@@ -21,8 +21,8 @@ opponent_ms = 1000 # how long the opponent thinks
 
 [allie]
 # The second opponent, a model of human play (README, "Allie"). Nothing here is needed after
-# `chess-tutor allie install`, which puts all of it under <home>/allie.
-# python = "~/.local/share/chess-tutor/allie/venv/bin/python"   # the Python of the environment it is installed in
+# `callie allie install`, which puts all of it under <home>/allie.
+# python = "~/.local/share/callie/allie/venv/bin/python"   # the Python of the environment it is installed in
 # model = "/somewhere/allie-2.1"     # a directory with config.json and model.safetensors, if not the one it downloads
 threads = 0        # CPU threads; 0 means its own choice (one per core)
 idle_s = 900       # its process holds 10 GB: loaded when a browser has the page on screen, ended after this long with none and nothing asked of it

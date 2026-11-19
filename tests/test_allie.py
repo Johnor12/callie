@@ -8,9 +8,9 @@ import sys
 import time
 from pathlib import Path
 
-from chesstutor import allie, mcp
-from chesstutor.play import GameError, Service
-from chesstutor.store import Store
+from callie import allie, mcp
+from callie.play import GameError, Service
+from callie.store import Store
 from tests import function_tests, need_engine, scratch_config
 
 
@@ -197,11 +197,11 @@ def test_untimed_and_what_claude_is_given():
             except GameError:
                 pass
         # the tool is offered to a session only where Allie is
-        os.environ["CHESSTUTOR_ALLIE"] = "1"
+        os.environ["CALLIE_ALLIE"] = "1"
         names = [t["name"] for t in mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
         assert names == ["game", "review", "position", "analyze", "human_moves"]
     finally:
-        os.environ.pop("CHESSTUTOR_ALLIE", None)
+        os.environ.pop("CALLIE_ALLIE", None)
         done(svc)
 
 

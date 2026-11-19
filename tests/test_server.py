@@ -7,8 +7,8 @@ import time
 import urllib.error
 import urllib.request
 
-from chesstutor import mcp, server
-from chesstutor.terminals import Terminal
+from callie import mcp, server
+from callie.terminals import Terminal
 from tests import function_tests, need_engine, scratch_config
 
 
@@ -55,7 +55,7 @@ def test_who_is_answered():
     try:
         assert s.call("GET", "/api/games") == (200, [])
         assert s.call("POST", "/api/here") == (200, {"ok": True})  # a page on screen, where Allie is not installed
-        assert s.call("GET", "/")[0] == 200 and b"Chess Tutor" in s.call("GET", "/")[1]
+        assert s.call("GET", "/")[0] == 200 and b"Callie" in s.call("GET", "/")[1]
         assert s.call("GET", "/static/../config.py")[0] == 404
         assert s.call("GET", "/api/games", headers={"Host": "evil.example"})[0] == 403  # DNS rebinding
         assert s.call("GET", "/api/games", headers={"Origin": "https://evil.example"})[0] == 403
@@ -168,7 +168,7 @@ def test_the_tools_claude_is_given():
         assert init["result"]["capabilities"] == {"tools": {}} and init["result"]["protocolVersion"] == "2025-06-18"
         names = [t["name"] for t in mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
         assert names == ["game", "review", "position", "analyze"]
-        os.environ["CHESSTUTOR_URL"], os.environ["CHESSTUTOR_GAME"] = s.url, g["id"]
+        os.environ["CALLIE_URL"], os.environ["CALLIE_GAME"] = s.url, g["id"]
 
         def tool(name, **arguments):
             msg = {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": name, "arguments": arguments}}
@@ -183,8 +183,8 @@ def test_the_tools_claude_is_given():
         assert tool("position", fen="nonsense")[1] and tool("nope")[1]
         assert mcp.handle({"jsonrpc": "2.0", "id": 4, "method": "resources/list"})["error"]["code"] == -32601
     finally:
-        os.environ.pop("CHESSTUTOR_URL", None)
-        os.environ.pop("CHESSTUTOR_GAME", None)
+        os.environ.pop("CALLIE_URL", None)
+        os.environ.pop("CALLIE_GAME", None)
         s.close()
 
 

@@ -2,8 +2,8 @@
 
 import random
 
-from chesstutor import openings, opponent
-from chesstutor.chess import START_FEN, Position
+from callie import openings, opponent
+from callie.chess import START_FEN, Position
 from tests import function_tests
 
 

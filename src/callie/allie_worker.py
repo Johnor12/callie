@@ -1,7 +1,7 @@
 """Allie in a process of its own: the model loaded once, asked for moves over JSON lines on stdin and stdout.
 
-Run as a file by the Python of Allie's environment (`chess-tutor allie install`), never imported by the server:
-it needs torch and the `allie` package, which the server does not. `chesstutor/allie.py` is the other end.
+Run as a file by the Python of Allie's environment (`callie allie install`), never imported by the server:
+it needs torch and the `allie` package, which the server does not. `src/callie/allie.py` is the other end.
 
 One request a line, each answered by one line with the same `id`, in whatever order they finish:
   decide   the opponent's move in a game, Allie's calibrated mode: the move and how long to think on it, or

@@ -7,7 +7,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const TOUCH = matchMedia("(pointer: coarse)");
 const PHONE = matchMedia("(max-width: 760px)");  // the one-column layout of style.css
 const FILES = "abcdefgh";
-const FORM = "chess-tutor.form";
+const FORM = "callie.form";  // read from "chess-tutor.form" until saved here (the app's old name)
 const FAST_MS = 3000;  // a card answered right this soon was easy: it is not asked how hard it was
 const GRADES = ["hard", "good", "easy"];  // what a right answer is rated: how it was to remember
 
@@ -32,7 +32,7 @@ const S = {
   // elo: the opponent's strength. It is not kept: null until you set it, and until then it follows your rating
   form: { engine: "stockfish", color: "w", elo: null, full: false, opening: "", time: "untimed" },
 };
-try { Object.assign(S.form, JSON.parse(localStorage.getItem(FORM) || "{}"), { elo: null }); } catch (e) { /* no storage */ }
+try { Object.assign(S.form, JSON.parse(localStorage.getItem(FORM) || localStorage.getItem("chess-tutor.form") || "{}"), { elo: null }); } catch (e) { /* no storage */ }
 
 async function api(method, path, body, signal) {
   const opt = { method, signal };
@@ -98,7 +98,7 @@ async function loadMeta() {
 async function showHome() {
   leaveGame(); leaveReview();
   $("game").hidden = true; $("review").hidden = true; $("home").hidden = false; $("crumb").textContent = "";
-  document.title = "Chess Tutor";
+  document.title = "Callie";
   try {
     const [, rating, games, decks] = await Promise.all([loadMeta(), api("GET", "/api/rating"), api("GET", "/api/games"), api("GET", "/api/cards")]);
     S.rating = rating; S.form.elo = null;
@@ -116,7 +116,7 @@ function renderForm() {
   f.engine = eng.key;
   const off = m.engines.find((e) => !e.available);
   $("f-engine").innerHTML = m.engines.map((e) => `<button data-v="${e.key}" class="${e.key === eng.key ? "on" : ""}"${e.available ? "" : " disabled"} title="${esc(e.available ? "" : e.missing)}">${esc(e.name)}</button>`).join("");
-  $("f-engine-hint").textContent = off ? `${off.name} is not installed: run \`chess-tutor allie install\` to play against it.` : "";
+  $("f-engine-hint").textContent = off ? `${off.name} is not installed: run \`callie allie install\` to play against it.` : "";
   if (!eng.full) f.full = false;
   if (!m.time_controls.includes(f.time)) f.time = "untimed";
   // The strength: as you set it, and until you do, your own rating at the clock chosen.
@@ -272,7 +272,7 @@ function render(scroll) {
   const g = S.game;
   if (!g) return;
   $("crumb").textContent = `You (${g.user_color === "w" ? "White" : "Black"}) vs ${strength(g)} · ${g.opening.name}`;
-  document.title = `${g.status === "active" && g.turn === g.user_color ? "Your move · " : ""}Chess Tutor`;
+  document.title = `${g.status === "active" && g.turn === g.user_color ? "Your move · " : ""}Callie`;
   renderPlayers(); renderBoard(); renderEval(); renderGraph(); renderMoves(scroll); renderInsight();
   const [label] = outcome(g);
   $("result").hidden = g.status !== "finished";
@@ -583,7 +583,7 @@ document.addEventListener("keydown", (ev) => {
 // wrong one any others (`tries`: each with its `cpl`, what it lost, once the server has said; `tried` is the
 // last of them). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
 // the same card, as it was, and the next one comes only with Next or a grade.
-const KEPT = (deck) => `chess-tutor.review.${deck}`;
+const KEPT = (deck) => `callie.review.${deck}`;
 function keepReview() {
   const r = S.review;
   try {
@@ -596,7 +596,7 @@ function showReview(deck) {
   leaveGame(); leaveReview();
   $("home").hidden = true; $("game").hidden = true; $("review").hidden = false;
   $("card-pane").hidden = true; $("card-done").hidden = true; $("card-err").textContent = "";
-  $("crumb").textContent = "Review"; document.title = "Review · Chess Tutor";
+  $("crumb").textContent = "Review"; document.title = "Review · Callie";
   S.review = { deck, name: "", active: 0, card: null, at: 0, pending: null, result: null, tries: [], tried: null, fast: false, timer: 0 };
   loadMeta().catch(() => {});
   let kept = null;

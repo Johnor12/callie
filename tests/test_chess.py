@@ -1,7 +1,7 @@
 """The rules, checked against the published perft counts and a handful of notation and game-end cases."""
 
 from tests import function_tests
-from chesstutor.chess import START_FEN, Game, Position, describe
+from callie.chess import START_FEN, Game, Position, describe
 
 
 def perft(pos: Position, depth: int) -> int:

@@ -100,8 +100,8 @@ class Service:
         self.queued: set[tuple[str, int]] = set()
         self.work = threading.Event()
         self.stop = threading.Event()
-        self.tutor = None  # set by the server: chesstutor.tutor.Tutor
-        self.explainer = None  # set by the server: chesstutor.explain.Explainer
+        self.tutor = None  # set by the server: callie.tutor.Tutor
+        self.explainer = None  # set by the server: callie.explain.Explainer
         self._chess: dict[str, tuple[tuple[str, ...], Game, dict | None]] = {}
         self.rng = random.Random()
 
@@ -340,7 +340,7 @@ class Service:
         you = "You"
         them = self._opponent(row, long=True)
         tags = {
-            "Event": "Chess Tutor game",
+            "Event": "Callie game",
             "Date": time.strftime("%Y.%m.%d", time.localtime(row["created_at"])),
             "White": you if row["user_color"] == "w" else them,
             "Black": them if row["user_color"] == "w" else you,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stands in for `chesstutor/allie_worker.py` in the tests: the same lines in and out, no model.
+"""Stands in for `src/callie/allie_worker.py` in the tests: the same lines in and out, no model.
 
 It plays the first legal move (in UCI order) after the think time its "model" directory asks for (fake.json),
 predicts every legal move equally likely, and writes down what it was asked (requests.jsonl). From the plies
@@ -13,9 +13,9 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from chesstutor.chess import START_FEN, Game  # noqa: E402
+from callie.chess import START_FEN, Game  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--model", required=True)

@@ -1,13 +1,16 @@
 """Tests are plain functions with asserts; `python -m unittest discover -s tests -t .` runs them, nothing installed.
 
-Those that need the Stockfish binary (`chess-tutor engine install`) are skipped without it. None starts the real
+Those that need the Stockfish binary (`callie engine install`) are skipped without it. None starts the real
 Claude Code: sessions are tried against `fake_claude.py`.
 """
 
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))  # the package, as `./callie` runs it
 
 
 def function_tests(namespace: dict):
@@ -25,12 +28,12 @@ def function_tests(namespace: dict):
 
 def scratch_config(**changes):
     """A configuration whose state lives in a new temporary directory, with a fast engine."""
-    from chesstutor.config import load_config
+    from callie.config import load_config
 
     real = load_config()  # where the engine is on this machine
-    home = Path(tempfile.mkdtemp(prefix="chess-tutor-test-"))
-    old = {k: os.environ.get(k) for k in ("CHESSTUTOR_HOME", "CHESSTUTOR_CONFIG")}
-    os.environ["CHESSTUTOR_HOME"], os.environ["CHESSTUTOR_CONFIG"] = str(home), str(home / "none.toml")
+    home = Path(tempfile.mkdtemp(prefix="callie-test-"))
+    old = {k: os.environ.get(k) for k in ("CALLIE_HOME", "CALLIE_CONFIG")}
+    os.environ["CALLIE_HOME"], os.environ["CALLIE_CONFIG"] = str(home), str(home / "none.toml")
     try:
         cfg = load_config()
     finally:
@@ -47,4 +50,4 @@ def scratch_config(**changes):
 
 def need_engine(cfg) -> None:
     if not cfg.engine.exists():
-        raise unittest.SkipTest(f"no engine at {cfg.engine}: run `chess-tutor engine install`")
+        raise unittest.SkipTest(f"no engine at {cfg.engine}: run `callie engine install`")

@@ -447,7 +447,7 @@ class Game:
         return self.positions[0].line_san(self.moves)
 
     def pgn(self, headers: dict[str, str], result: str = "*") -> str:
-        tags = {"Event": "Chess Tutor game", "Site": "?", "Date": "????.??.??", "Round": "-"}
+        tags = {"Event": "Callie game", "Site": "?", "Date": "????.??.??", "Round": "-"}
         tags.update(headers)
         tags["Result"] = result
         if self.positions[0].fen() != START_FEN:

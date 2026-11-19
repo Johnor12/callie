@@ -7,7 +7,7 @@ moves, and the move is drawn from the human distribution tilted by those scores,
 strength of people of its rating at the game's time control. It also resigns and offers draws where they do.
 
 It needs torch, its own package and 10 GB of memory, so it lives in a process of its own
-(`allie_worker.py`, in the environment `chess-tutor allie install` makes), started when a browser has the page
+(`allie_worker.py`, in the environment `callie allie install` makes), started when a browser has the page
 on screen, kept for as long as one does, and ended a while after the last of them has gone (and after anything
 else last asked it something). Asked with no browser there, it is started for that. This module is the server's
 end of that pipe.
@@ -59,9 +59,9 @@ def weights(cfg: Config) -> Path | None:
 def missing(cfg: Config) -> str | None:
     """Why Allie cannot run here, or None when everything it needs is in place."""
     if not cfg.allie_python.is_file():
-        return f"Allie is not installed (no {cfg.allie_python}): run `chess-tutor allie install`"
+        return f"Allie is not installed (no {cfg.allie_python}): run `callie allie install`"
     if weights(cfg) is None:
-        return f"Allie's weights are missing ({cfg.allie_model or cfg.allie_home / 'hub'}): run `chess-tutor allie install`"
+        return f"Allie's weights are missing ({cfg.allie_model or cfg.allie_home / 'hub'}): run `callie allie install`"
     return None
 
 

@@ -2,8 +2,8 @@
 
 import time
 
-from chesstutor import opponent, rating
-from chesstutor.store import Store
+from callie import opponent, rating
+from callie.store import Store
 from tests import function_tests, need_engine, scratch_config
 from tests.test_play import done, service, until
 

@@ -22,7 +22,7 @@ from .config import Config
 from .terminals import Terminal
 
 SYSTEM = """\
-You are the chess tutor inside Chess Tutor, a local app. The person you are talking to (the student) plays games \
+You are the chess tutor inside Callie, a local app. The person you are talking to (the student) plays games \
 on a board next to this terminal, against Stockfish held to a limited strength or against Allie, a model that \
 plays the way people of a chosen rating do. This session belongs to one of those games; `game` says which opponent \
 it has. Nothing is sent to you automatically as the game goes on: you are asked when the student wants you.
@@ -151,9 +151,9 @@ class Tutor:
             "tui": "fullscreen",
             "wheelScrollAccelerationEnabled": False,  # the page sends one wheel event per line (see app.js)
         }
-        env = {"CHESSTUTOR_URL": self.cfg.url, "CHESSTUTOR_GAME": game_id}
+        env = {"CALLIE_URL": self.cfg.url, "CALLIE_GAME": game_id}
         if self.svc.allie.available():
-            env["CHESSTUTOR_ALLIE"] = "1"  # the session is offered `human_moves`
+            env["CALLIE_ALLIE"] = "1"  # the session is offered `human_moves`
         mcp = {"mcpServers": {"chess": {"command": sys.executable, "args": [str(_ROOT / "mcp.py")], "env": env}}}
         s, m = self.dir / f"{game_id}.settings.json", self.dir / f"{game_id}.mcp.json"
         s.write_text(json.dumps(settings, indent=2))

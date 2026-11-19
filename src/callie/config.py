@@ -1,6 +1,6 @@
-"""Settings: a TOML file (~/.config/chess-tutor/config.toml) over defaults, and where state is kept.
+"""Settings: a TOML file (~/.config/callie/config.toml) over defaults, and where state is kept.
 
-CHESSTUTOR_CONFIG and CHESSTUTOR_HOME point somewhere else (tests, a scratch server).
+CALLIE_CONFIG and CALLIE_HOME point somewhere else (tests, a scratch server).
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class Config:
     hash_mb: int = 512
     review_ms: int = 1500  # how long each position of a game is analysed
     opponent_ms: int = 1000  # how long the opponent thinks
-    # Allie (the other opponent; `chess-tutor allie install`)
+    # Allie (the other opponent; `callie allie install`)
     allie_python_path: Path | None = None  # the Python of the environment Allie is installed in
     allie_model: Path | None = None  # a directory with its weights (None: where `allie install` downloads them)
     allie_threads: int = 0  # 0: Allie's own choice, one per core
@@ -55,7 +55,7 @@ class Config:
 
     @property
     def allie_home(self) -> Path:
-        """Everything `chess-tutor allie install` puts on the machine."""
+        """Everything `callie allie install` puts on the machine."""
         return self.home / "allie"
 
     @property
@@ -81,7 +81,7 @@ def _expand(p: str) -> Path:
 
 
 def default_config_path() -> Path:
-    return Path(os.environ.get("CHESSTUTOR_CONFIG", "~/.config/chess-tutor/config.toml")).expanduser()
+    return Path(os.environ.get("CALLIE_CONFIG", "~/.config/callie/config.toml")).expanduser()
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -90,7 +90,7 @@ def load_config(path: Path | None = None) -> Config:
     server, engine, claude = data.get("server", {}), data.get("engine", {}), data.get("claude", {})
     allie = data.get("allie", {})
     cfg = Config(
-        home=_expand(os.environ.get("CHESSTUTOR_HOME", data.get("home", "~/.local/share/chess-tutor"))),
+        home=_expand(os.environ.get("CALLIE_HOME", data.get("home", "~/.local/share/callie"))),
         host=str(server.get("host", "127.0.0.1")),
         port=int(server.get("port", 8750)),
         hosts=[str(h).lower() for h in server.get("hosts", [])],
@@ -104,7 +104,7 @@ def load_config(path: Path | None = None) -> Config:
         allie_model=_expand(allie["model"]) if allie.get("model") else None,
         allie_threads=int(allie.get("threads", 0)),
         allie_idle_s=float(allie.get("idle_s", 900)),
-        claude_bin=os.environ.get("CHESSTUTOR_CLAUDE_BIN", str(claude.get("bin", "claude"))),
+        claude_bin=os.environ.get("CALLIE_CLAUDE_BIN", str(claude.get("bin", "claude"))),
         claude_model=str(claude.get("model", "claude-fable-5-2")),
         claude_effort=str(claude.get("effort", "")),
         claude_config_dir=_expand(claude["config_dir"]) if claude.get("config_dir") else None,
