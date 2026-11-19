@@ -644,7 +644,7 @@ function renderReview() {
   renderBoard();
   $("card-deck").textContent = r.name; $("card-count").textContent = r.active;
   $("card-turn").hidden = !!res; $("card-turn").textContent = `${c.turn === "w" ? "White" : "Black"} to move`;
-  $("card-result").hidden = $("card-answer").hidden = !res;
+  $("card-result").hidden = !res;
   $("card-why").hidden = !res || !res.explanation; $("card-why").textContent = res && res.explanation || "";
   for (const g of GRADES) {  // how it was to remember, each with how long it hides the card for
     $(`card-${g}`).hidden = !res || !res.right || r.fast;
@@ -653,12 +653,11 @@ function renderReview() {
   $("card-next").hidden = !res || res.right;
   $("card-grade").hidden = !res || r.fast;
   if (!res) return;
-  $("card-result").className = res.right ? "right" : "wrong";
-  $("card-result").textContent = res.right ? `✓ ${res.move.san}` : `✗ Wrong: ${res.move.san}` + (res.cpl === undefined ? "" : ` · lost ${res.cpl} cp`);
-  const f = c.fen.split(" "), ply = 2 * (+f[5] - 1) + (f[1] === "w" ? 1 : 2), p = res.played;
-  const choice = !res.right ? `Right move: <b>${esc(res.best.san)}</b>` : res.best.uci === res.move.uci ? "Engine's line" : `Engine preferred <b>${esc(res.best.san)}</b>`;
-  $("card-answer").innerHTML = `<div>${choice} (${showEval(res.best)}): ${esc(numbered(ply, res.best.line))}</div>` +
-    `<div>In the game you played <b>${esc(p.san)}${GLYPH[p.deck] || ""}</b> · lost ${p.cpl} cp</div>`;
+  // One line: your answer (a wrong one with what it lost, once that is known), and the move of the game with what that lost.
+  const p = res.played;
+  $("card-mine").className = res.right ? "right" : "wrong";
+  $("card-mine").textContent = res.right ? `✓ ${res.move.san}` : `✗ ${res.move.san}` + (res.cpl === undefined ? "" : ` −${res.cpl} cp`);
+  $("card-played").innerHTML = `you played <b>${esc(p.san)}${GLYPH[p.deck] || ""}</b> −${p.cpl} cp`;
   if (!res.right && res.cpl === undefined) $("card-next").focus();
 }
 
