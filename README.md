@@ -215,7 +215,9 @@ them, drawn at random from the active ones. Move a piece to answer:
 - **Wrong**: the board is marked, with where you went in red and an arrow for the right move, and beside it, on
   one line, are your move with what it lost in centipawns (against the engine's first choice; a move the card has
   no line for is searched then, for as long as a game's positions are) and the move you played in the game with
-  what that lost. The card is hidden for a few minutes and then comes back. Next moves on.
+  what that lost. The card is hidden for a few minutes and then comes back. The position stays open: any other
+  move you make on it is listed under that line with what it would have lost, and changes nothing of the card.
+  Next moves on.
 - **Right**: you say how it was to remember, Hard, Good or Easy, and each button says how long it hides the card
   for. An answer made within 3 seconds counts as Easy, and the next card comes without the question.
 
