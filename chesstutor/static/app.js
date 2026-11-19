@@ -17,6 +17,7 @@ const S = {
   view: 0,         // the ply shown on the board (0: the start)
   follow: true,    // the board shows the latest position and moves on with the game
   flip: false,
+  why: null,       // the ply of the move whose explanation is shown beside it
   sel: null,       // the square of the piece picked up
   drag: null,
   promo: null,     // a pawn move waiting for its piece to be chosen
@@ -208,7 +209,7 @@ function showGame(id) {
   startPoll();
 }
 function leaveGame() {
-  stopPoll(); closeTerminal();
+  stopPoll(); closeTerminal(); hideWhy();
   S.gid = null; S.game = null;
 }
 function startPoll() {
@@ -246,6 +247,7 @@ function setGame(g) {
   S.game = g; S.clockAt = performance.now();
   if (S.pending && g.moves.length >= S.pending.ply) S.pending = null;
   if (S.follow || S.view > g.moves.length) S.view = g.moves.length;
+  if (S.why !== S.view) hideWhy();
   render();
   syncClaude();
 }
@@ -254,6 +256,7 @@ function setView(v) {
   S.view = Math.max(0, Math.min(n, v));
   S.follow = S.view === n;
   S.sel = null; S.promo = null;
+  hideWhy();
   render(true);
 }
 
@@ -500,7 +503,7 @@ function renderMoves(scroll) {
     if (i % 2 === 0) html += `<div class="num">${i / 2 + 1}.</div>`;
     const book = m.source === "book", graded = m.verdict !== undefined;
     const loss = book ? "book" : graded ? (m.verdict === "best" ? "0" : m.cpl) : "…";
-    html += `<div class="mv${m.source === "user" ? " mine" : ""}${m.ply === S.view ? " on" : ""} v-${book ? "book" : m.verdict || "wait"}" data-ply="${m.ply}" data-testid="move"
+    html += `<div class="mv${m.source === "user" ? " mine" : ""}${m.ply === S.view ? " on" : ""}${m.explanation ? " explained" : ""} v-${book ? "book" : m.verdict || "wait"}" data-ply="${m.ply}" data-testid="move"
       title="${graded ? `${m.verdict}: lost ${m.cpl} centipawns` + (m.best && m.best.uci !== m.uci ? `; the engine preferred ${esc(m.best.san)}` : "") : "being analysed"}">
       <span class="san">${esc(m.san)}${book ? "" : GLYPH[m.verdict] || ""}</span><span class="loss">${loss}</span></div>`;
   });
@@ -512,7 +515,21 @@ function renderMoves(scroll) {
   const a = g.acpl;
   $("acpl").textContent = a.user === null ? "" : `avg loss ${a.user}` + (a.opponent === null ? "" : ` · opp. ${a.opponent}`);
 }
-$("moves").onclick = (ev) => { const m = ev.target.closest(".mv"); if (m) setView(+m.dataset.ply); };
+$("moves").onclick = (ev) => { const m = ev.target.closest(".mv"); if (m) { setView(+m.dataset.ply); showWhy(+m.dataset.ply); } };
+// Why a move of yours was bad, where that has been written (its box in the list is yellow): beside the move,
+// from a click on it until the board shows another move or something else is clicked.
+function showWhy(ply) {
+  const m = S.game.moves[ply - 1], el = $("moves").querySelector(`.mv[data-ply="${ply}"]`), tip = $("why");
+  if (!m || !m.explanation || !el) return;
+  S.why = ply;
+  tip.textContent = m.explanation; tip.hidden = false;
+  const box = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, beside = box.right + 8 + w <= innerWidth;
+  const top = beside ? box.top : box.bottom + 6 + h <= innerHeight ? box.bottom + 6 : box.top - 6 - h;
+  tip.style.left = `${beside ? box.right + 8 : Math.max(8, Math.min(box.left, innerWidth - w - 8))}px`;
+  tip.style.top = `${Math.max(8, Math.min(top, innerHeight - h - 8))}px`;
+}
+function hideWhy() { S.why = null; $("why").hidden = true; }
+document.addEventListener("pointerdown", (ev) => { if (S.why !== null && !ev.target.closest("#why, #moves .mv")) hideWhy(); });
 function renderInsight() {
   const g = S.game, m = S.view > 0 ? g.moves[S.view - 1] : null;
   if (!m) { $("insight").innerHTML = g.moves.length ? "The starting position." : (g.turn === g.user_color ? "Your move." : ""); return; }
@@ -544,6 +561,7 @@ $("act-pgn").onclick = async () => {
 };
 document.addEventListener("keydown", (ev) => {
   if (!S.game || $("game").hidden || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.key === "Escape") hideWhy();
   if (ev.target.closest("input, textarea, select, #terminal")) return;
   const to = { ArrowLeft: S.view - 1, ArrowRight: S.view + 1, Home: 0, End: S.game.moves.length }[ev.key];
   if (to !== undefined) { ev.preventDefault(); setView(to); }
@@ -613,6 +631,7 @@ function renderReview() {
   $("card-deck").textContent = r.name; $("card-count").textContent = r.active;
   $("card-turn").hidden = !!res; $("card-turn").textContent = `${c.turn === "w" ? "White" : "Black"} to move`;
   $("card-result").hidden = $("card-answer").hidden = !res;
+  $("card-why").hidden = !res || !res.explanation; $("card-why").textContent = res && res.explanation || "";
   $("card-hard").hidden = $("card-easy").hidden = !res || !res.right || r.fast;
   $("card-next").hidden = !res || res.right;
   if (!res) return;

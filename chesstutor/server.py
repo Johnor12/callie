@@ -27,6 +27,7 @@ from urllib.parse import parse_qsl
 from .cards import CardError
 from .config import Config
 from .engine import EngineError
+from .explain import Explainer
 from .play import GameError, Service
 from .tutor import Tutor, TutorError
 
@@ -44,6 +45,7 @@ def _tool(svc: Service, game_id: str, b: dict) -> dict:
     args = b.get("arguments") or {}
     name = b.get("name")
     where = {k: args.get(k) for k in ("ply", "fen", "moves")}
+    quiet = bool(b.get("quiet"))  # asked from the background (an explanation being written): it gives way to the games
     if name == "game":
         return {"text": svc.tool_game(game_id)}
     if name == "review":
@@ -52,12 +54,12 @@ def _tool(svc: Service, game_id: str, b: dict) -> dict:
         return {"text": svc.tool_position(game_id, **where)}
     if name == "analyze":
         extra = {k: args[k] for k in ("seconds", "lines", "candidates") if args.get(k) is not None}
-        return {"text": svc.tool_analyze(game_id, **where, **extra)}
+        return {"text": svc.tool_analyze(game_id, **where, **extra, quiet=quiet)}
     if name == "human_moves":
         if args.get("fen"):
             raise GameError("human_moves reads a game from its first move: give a ply of this game and moves to play on from it, not a FEN")
         extra = {k: args[k] for k in ("elo", "top", "line") if args.get(k) is not None}
-        return {"text": svc.tool_humans(game_id, args.get("ply"), args.get("moves"), **extra)}
+        return {"text": svc.tool_humans(game_id, args.get("ply"), args.get("moves"), **extra, quiet=quiet)}
     raise GameError(f"no tool {name!r}")
 
 
@@ -242,11 +244,13 @@ def make_server(cfg: Config, host: str | None = None, port: int | None = None) -
     svc = Service(cfg)
     tutor = Tutor(cfg, svc)
     svc.tutor = tutor
+    svc.explainer = Explainer(cfg, svc)
     httpd = ThreadingHTTPServer((host, port), make_handler(svc, tutor, host))
     httpd.daemon_threads = True
     cfg.host, cfg.port = host, httpd.server_address[1]  # what Claude's tools are told to call
     svc.start()
     tutor.start()
+    svc.explainer.start()
     return httpd, svc, tutor
 
 

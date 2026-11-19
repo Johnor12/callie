@@ -137,6 +137,9 @@ textarea { resize: none; width: 100%; }
 #moves .mv .san { font-weight: 600; }
 #moves .mv.mine .san { color: #fff; }
 #moves .mv .loss { font-size: 11.5px; color: var(--dim); }
+#moves .mv.explained { background: rgba(224, 179, 79, .2); box-shadow: inset 0 0 0 1px rgba(224, 179, 79, .55); }  /* why it was bad has been written: a click shows it */
+#moves .mv.explained.on { background: #33415a; }
+#why { position: fixed; z-index: 40; width: min(340px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; background: var(--panel2); border: 1px solid rgba(224, 179, 79, .6); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; box-shadow: 0 8px 28px rgba(0, 0, 0, .55); }
 .v-best .loss, .v-good .loss { color: var(--good) !important; }
 .v-inaccuracy .loss { color: var(--warn) !important; }
 .v-mistake .loss { color: var(--bad) !important; }
@@ -169,6 +172,7 @@ textarea { resize: none; width: 100%; }
 #card-result.wrong { background: var(--worst); color: #fff; padding: 8px 12px; border-radius: 6px; }
 #card-answer { display: grid; gap: 8px; font-size: 13px; color: var(--dim); }
 #card-answer b { color: var(--text); }
+#card-why { font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; padding-left: 10px; border-left: 2px solid var(--warn); }
 #card-side button { flex: 1; }
 #card-done { max-width: 860px; margin: 60px auto 0; text-align: center; font-size: 16px; }
 #card-done a { color: var(--accent); margin-left: 8px; }

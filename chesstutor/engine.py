@@ -47,8 +47,9 @@ class Result:
 
 
 class Engine:
-    def __init__(self, path: str, threads: int = 1, hash_mb: int = 64):
+    def __init__(self, path: str, threads: int = 1, hash_mb: int = 64, nice: bool = False):
         self.path, self.threads, self.hash_mb = path, threads, hash_mb
+        self.nice = nice  # run at the lowest priority: it works only on what the other processes leave idle
         self.lock = threading.Lock()
         self.proc: subprocess.Popen | None = None
         self.name = ""
@@ -59,7 +60,7 @@ class Engine:
     def _start(self) -> None:
         try:
             self.proc = subprocess.Popen(
-                [self.path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1
+                ["nice", "-n", "19", self.path] if self.nice else [self.path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1
             )
         except OSError as e:
             raise EngineError(f"cannot run the chess engine at {self.path}: {e} (run `chess-tutor engine install`)") from None
@@ -122,19 +123,22 @@ class Engine:
         *,
         ms: int | None = None,
         depth: int | None = None,
+        nodes: int | None = None,
         multipv: int = 1,
         only: list[str] | None = None,
         elo: int | None = None,
     ) -> Result:
-        """Search the position reached from ``fen`` by ``moves``. ``only`` restricts it to those first moves;
-        ``elo`` has the engine play at its own reduced strength (its best move is then deliberately not the best).
+        """Search the position reached from ``fen`` by ``moves``, for ``ms`` milliseconds, to ``depth``, or over
+        ``nodes`` positions (as much work however long it takes: for an engine that may be kept waiting).
+        ``only`` restricts it to those first moves; ``elo`` has the engine play at its own reduced strength
+        (its best move is then deliberately not the best).
         """
         with self.lock:
             for attempt in (1, 2):
                 try:
                     if self.proc is None or self.proc.poll() is not None:
                         self._start()
-                    return self._search(fen, moves, ms, depth, multipv, only, elo)
+                    return self._search(fen, moves, ms, depth, nodes, multipv, only, elo)
                 except EngineError:
                     if self.proc:
                         self.proc.kill()
@@ -143,7 +147,7 @@ class Engine:
                         raise
         raise EngineError("unreachable")
 
-    def _search(self, fen, moves, ms, depth, multipv, only, elo) -> Result:
+    def _search(self, fen, moves, ms, depth, nodes, multipv, only, elo) -> Result:
         self._set("MultiPV", max(1, min(int(multipv), 256)))
         self._set("UCI_LimitStrength", elo is not None)
         if elo is not None:
@@ -152,7 +156,9 @@ class Engine:
         go = "go"
         if depth is not None:
             go += f" depth {int(depth)}"
-        if ms is not None or depth is None:
+        if nodes is not None:
+            go += f" nodes {int(nodes)}"
+        if ms is not None or (depth is None and nodes is None):
             go += f" movetime {int(ms or 1000)}"
         if only:
             go += " searchmoves " + " ".join(only)

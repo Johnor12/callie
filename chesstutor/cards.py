@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import random
+import threading
 import time
 from datetime import datetime, timedelta
 from datetime import time as clock
@@ -62,6 +63,7 @@ class Cards:
     def __init__(self, store: Store):
         self.store = store
         self.rng = random.Random()
+        self.made = threading.Event()  # set when a card is made: what writes their explanations waits on it
 
     def note(self, fen: str, uci: str, san: str, cpl: int, lines: list[dict], at: float) -> None:
         """A move of yours, played at ``at`` in the position ``fen``, with what it lost and the engine's lines
@@ -78,6 +80,7 @@ class Cards:
                     "INSERT INTO cards (position, uci, san, fen, cpl, lines, erred_at, due) VALUES (?,?,?,?,?,?,?,?)",
                     (position, uci, san, fen, cpl, json.dumps(lines), at, at),
                 )
+                self.made.set()
             elif have["erred_at"] < at:
                 self.store.run(
                     "UPDATE cards SET san=?, fen=?, cpl=?, lines=?, erred_at=?, interval=0, due=? WHERE id=?",
@@ -88,6 +91,19 @@ class Cards:
         if deck not in [key for key, _, _ in DECKS]:
             raise CardError(f"no deck {deck!r}")
         return [r for r in self.store.all("SELECT * FROM cards WHERE due <= ?", (now,)) if deck_of(r["cpl"]) == deck]
+
+    def explained(self) -> dict[tuple[str, str], str]:
+        """The explanation of each move that has one, by its position (a `Position.key`) and the move."""
+        rows = self.store.all("SELECT position, uci, explanation FROM cards WHERE explanation IS NOT NULL")
+        return {(r["position"], r["uci"]): r["explanation"] for r in rows}
+
+    def unexplained(self, skip: tuple[int, ...] = ()) -> dict | None:
+        """The card whose explanation is to be written next: of those without one, the latest played."""
+        rows = self.store.all("SELECT * FROM cards WHERE explanation IS NULL ORDER BY erred_at DESC")
+        return next((r for r in rows if r["id"] not in skip), None)
+
+    def explain(self, card_id: int, text: str) -> None:
+        self.store.run("UPDATE cards SET explanation=? WHERE id=?", (text, card_id))
 
     def decks(self, now: float | None = None) -> list[dict]:
         """Each deck with how many cards it holds and how many of them are active."""
@@ -119,7 +135,8 @@ class Cards:
     def answer(self, card_id: int, move: str, grade: str | None = None, now: float | None = None) -> dict:
         """Your move on a card. Wrong: the card is not learned, and stays active. Right, and with a ``grade``
         ("hard" or "easy", how it was to remember): it is hidden, for longer than the last time. Either way
-        the answer is given: the engine's choice and its line, and the move the card is about."""
+        the answer is given: the engine's choice and its line, the move the card is about, and why that was
+        bad, if it has been written."""
         now = time.time() if now is None else now
         with self.store.lock:
             row = self.store.one("SELECT * FROM cards WHERE id=?", (card_id,))
@@ -143,5 +160,6 @@ class Cards:
                 "move": {"uci": uci, "san": pos.san(uci), "fen": pos.push(uci).fen()},
                 "best": {"uci": best["moves"][0], "san": best["san"][0], "line": best["san"], "cp": best["cp"], "mate": best["mate"]},
                 "played": {"uci": row["uci"], "san": row["san"], "cpl": row["cpl"], "deck": deck},
+                "explanation": row["explanation"],
                 "active": next(d["active"] for d in self.decks(now) if d["key"] == deck),
             }

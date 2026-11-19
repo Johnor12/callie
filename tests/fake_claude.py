@@ -9,6 +9,11 @@ from pathlib import Path
 
 args = sys.argv[1:]
 prompt = args[args.index("--") + 1] if "--" in args else ""
+if "-p" in args:  # one question, answered and done: how a card's explanation is asked for
+    asked = json.loads(Path(args[args.index("--mcp-config") + 1]).read_text())["mcpServers"]["chess"]["env"]
+    told = {"result": f"why: {prompt.splitlines()[0]} (game {asked['CHESSTUTOR_GAME']}, quiet {asked.get('CHESSTUTOR_QUIET')})", "is_error": False}
+    print(json.dumps({"type": "result", **told}), flush=True)
+    sys.exit(0)
 session = args[args.index("--session-id") + 1] if "--session-id" in args else args[args.index("--resume") + 1]
 transcript = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "-fake" / f"{session}.jsonl"
 if "--resume" in args and not transcript.exists():

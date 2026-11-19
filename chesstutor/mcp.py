@@ -2,7 +2,8 @@
 
 It holds no chess of its own. Each tool call is passed to the running Chess Tutor server (CHESSTUTOR_URL) for the
 game this session belongs to (CHESSTUTOR_GAME), which owns the game and the engines. `human_moves` is offered
-only where Allie is installed (CHESSTUTOR_ALLIE). Standard library only, and run as a file, so it needs nothing
+only where Allie is installed (CHESSTUTOR_ALLIE). A session that works in the background (CHESSTUTOR_QUIET: one
+that explains a card) says so with each call, and the server answers it with what the games can spare. Standard library only, and run as a file, so it needs nothing
 from the environment Claude Code starts it in.
 """
 
@@ -32,7 +33,7 @@ TOOLS = [
         "name": "game",
         "description": "The game this session is about, as it stands now: who plays what, every move so far (one "
         "line each) with the engine's evaluation after it, the centipawns it lost, its grade and what the engine "
-        "preferred, then the current position spelled out.",
+        "preferred, the explanations already written for the student's errors, then the current position spelled out.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
@@ -116,7 +117,7 @@ def tools() -> list[dict]:
 
 def call(name: str, arguments: dict) -> tuple[str, bool]:
     url = f"{os.environ.get('CHESSTUTOR_URL', 'http://127.0.0.1:8750')}/api/games/{os.environ.get('CHESSTUTOR_GAME', '')}/tool"
-    body = json.dumps({"name": name, "arguments": arguments or {}}).encode()
+    body = json.dumps({"name": name, "arguments": arguments or {}, "quiet": os.environ.get("CHESSTUTOR_QUIET") == "1"}).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=180) as r:  # Allie, asked cold, loads for a minute first

@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   interval INTEGER NOT NULL DEFAULT 0,  -- days it was last hidden for; 0: not learned (new, answered wrong, played again)
   due REAL NOT NULL,                    -- from when it is to be reviewed
   reviewed_at REAL,                     -- when it was last answered
+  explanation TEXT,                     -- why the move was bad, as Claude wrote it; NULL: not written yet
   UNIQUE (position, uci)
 );
 """
@@ -75,6 +76,7 @@ ADDED = {
     "games": {"engine": "TEXT NOT NULL DEFAULT 'stockfish'", "opp_clock_ms": "INTEGER", "draw_offer": "INTEGER",
               "finished_at": "REAL"},
     "moves": {"clock_ms": "INTEGER"},
+    "cards": {"explanation": "TEXT"},
 }
 
 

@@ -20,13 +20,15 @@ installed: a model with an environment of its own, beside the server.
     on any move to walk through the game;
   - the advantage bar beside the board and a graph of the game's swings above the move list;
   - the move list, with the centipawns each move lost and its grade (`?!` inaccuracy, `?` mistake, `??` blunder);
+    a move of yours in a yellow box has an explanation of what was wrong with it, shown by a click on it;
     once the game is over, what the engine preferred to the move on screen and the line it expected;
   - your clock, with a pause button, and Allie's when it is the opponent;
   - a Claude pane: a box to type to Claude, and, from your first message, a real Claude Code session in a
     terminal above it.
 - Take-backs, resigning, and the game as PGN.
 - **Review**: flashcards of your own errors, made as you play: the position before a move that lost too much, to
-  find the better move in, shown again after longer and longer as you get it right.
+  find the better move in, shown again after longer and longer as you get it right, with Claude's explanation
+  of why the move was bad on its back.
 
 ## Setting it up
 
@@ -163,8 +165,8 @@ The session is given these tools (an MCP server, `chesstutor/mcp.py`), the last 
 
 | Tool | What it returns |
 | --- | --- |
-| `game` | the game as it stands: every move with its evaluation, loss, grade and the engine's preference, then the current position |
-| `review` | the analysis on file for moves already played: evaluations either side of each move, the engine's choices there with the lines it expected, and its main line afterwards |
+| `game` | the game as it stands: every move with its evaluation, loss, grade and the engine's preference, the [explanations](#why-the-move-was-bad) written for your errors, then the current position |
+| `review` | the analysis on file for moves already played: evaluations either side of each move, the engine's choices there with the lines it expected, its main line afterwards, and the explanation written for the move if it made a card |
 | `position` | any position spelled out: diagram, piece lists, legal moves |
 | `analyze` | Stockfish at full strength, run now, on any position: a point in the game or a FEN, after any "what if" moves, optionally comparing chosen candidate moves |
 | `human_moves` | Allie's prediction of what people play at a point in the game, after any "what if" moves: the most played moves of players of a chosen rating with how often each is played, how such games end from there, and the likeliest continuation |
@@ -224,6 +226,33 @@ What counts as right is the engine's first choice in the position, or another of
 there that it scored within 10 centipawns of the first; never the move you played in the game. A fourth move as
 good as those is not known to the card and counts as wrong. All of this is fixed in `chesstutor/cards.py`: there
 are no settings.
+
+### Why the move was bad
+
+Each card gets an explanation, written by Claude in the background when the card is made (for the cards already
+there, when the server starts): Claude Code is run once for the card, with no terminal, with the tools a game's
+session has, and asked "Explain why this move was a blunder" (or a mistake, or inaccurate), with the position, the
+move, what it lost and what the engine preferred. What it answers, some hundred words, is kept with the card and
+shown:
+
+- on the back of the card, once you have answered it;
+- in the game: the move's box in the move list is yellow, and a click on it shows the explanation beside it. That
+  is so while the game is still being played too, and an explanation names the better move;
+- to the game's own Claude session: `game` and `review` give it with the move, as previous analysis generated
+  by Claude with access to Stockfish and Allie.
+
+The games come first (`chesstutor/explain.py`):
+
+- explanations are written one at a time, by a process at the lowest priority (`nice`), so it runs on what the
+  engines of a game leave idle;
+- what its tools ask is answered by a Stockfish of its own, on one thread at that same priority, searching a set
+  number of positions (at most some two million) instead of a set time: kept waiting by a game, it answers
+  later, not worse;
+- Allie is asked only between the opponent's moves, and is not read into memory for it while a game is being
+  played (one that is not over and had a move in the last ten minutes).
+
+A card that could not be explained (Claude Code not logged in, say) is tried again after an hour. Each
+explanation is one run of Claude on the account the app's sessions use.
 
 ## The games, kept in git
 
@@ -397,6 +426,7 @@ at.
 | `chesstutor/store.py` | the SQLite database: games, moves, the analysis of each position, the cards |
 | `chesstutor/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
 | `chesstutor/tutor.py` | the Claude Code session of each game: how it is started, resumed and typed into |
+| `chesstutor/explain.py` | the explanation of each card: Claude run once for it, in the background, behind the games |
 | `chesstutor/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
 | `chesstutor/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
 | `chesstutor/server.py` | the page and the JSON API |
@@ -412,7 +442,7 @@ python3 -m unittest discover -s tests -t .
 ```
 
 Nothing to install. Tests that need the engine are skipped without it; none starts the real Claude Code (sessions
-are exercised against `tests/fake_claude.py`) or loads Allie (`tests/fake_allie.py` answers in its place).
+and explanations are exercised against `tests/fake_claude.py`) or loads Allie (`tests/fake_allie.py` answers in its place).
 
 ## Licences
 

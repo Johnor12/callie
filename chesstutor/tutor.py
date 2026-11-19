@@ -36,7 +36,10 @@ the student's own message is what opened the session.
 
 Your tools (MCP server "chess"). The game moves on while you talk: read it again instead of assuming.
 - game: the whole game so far, one line a move, with the engine's evaluation after it, the centipawns it lost, \
-its grade and what the engine preferred, then the current position.
+its grade and what the engine preferred, then the current position. Each move of the student's that lost 50 \
+centipawns or more is also a flashcard they review later, with an explanation written for it when it was made: \
+`game` and `review` give those as "previous analysis". The student has them too (on the card, and beside the \
+move in the move list), so build on them, and say so where your own reading of a move differs.
 - review: the engine's analysis already on file for moves that were played (the app analyses every position at \
 full strength as the game goes): the evaluation either side of the move, the engine's choices in that position \
 with the lines it expected, and its main line after the move. This is the analysis history and its future lines.
@@ -110,6 +113,15 @@ class TutorError(Exception):
 def _clean(text: str) -> str:
     """Text that is safe to paste into a terminal: no control characters but new lines and tabs."""
     return "".join(c for c in text.replace("\r\n", "\n").replace("\r", "\n") if c in "\n\t" or ord(c) >= 32).strip()
+
+
+def environment(cfg: Config) -> dict:
+    """The environment a `claude` of the app's is started in: the server's own, less what would tie it to the
+    session the server was started from, with the account the app's sessions run in."""
+    env = {k: v for k, v in os.environ.items() if k not in _STRIP_ENV}
+    if cfg.claude_config_dir:
+        env["CLAUDE_CONFIG_DIR"] = str(cfg.claude_config_dir)
+    return env
 
 
 class Tutor:
@@ -188,9 +200,7 @@ class Tutor:
         argv += ["--append-system-prompt", system, *self.cfg.claude_args]
         if parts:
             argv += ["--", _clean("\n\n".join(parts))]
-        env = {k: v for k, v in os.environ.items() if k not in _STRIP_ENV}
-        if self.cfg.claude_config_dir:
-            env["CLAUDE_CONFIG_DIR"] = str(self.cfg.claude_config_dir)
+        env = environment(self.cfg)
         env.update(CLAUDE_CODE_SCROLL_SPEED="1", TERM="xterm-256color", COLORTERM="truecolor")
         try:
             t = Terminal(argv, env, str(self.cfg.workspace), cols, rows, self.cfg.home / "claude.log")

@@ -1,8 +1,9 @@
 """Games: making moves, the opponent's replies, the clocks, and the engine's analysis of every position (from
 which the cards of your errors are made: `cards.py`).
 
-Three Stockfish processes: `review` analyses each position of a game once, at full strength; `explore` answers
-the tutor's own questions; `opp` plays the opponent at its chosen strength. The opponent can instead be Allie
+Four Stockfish processes: `review` analyses each position of a game once, at full strength; `explore` answers
+the tutor's own questions; `opp` plays the opponent at its chosen strength; `quiet` answers what is asked in the
+background (an explanation being written for a card), on one thread at the lowest priority. The opponent can instead be Allie
 (`allie.py`), a model of human play in a process of its own, which then has a clock like yours, and which
 resigns and offers draws as people do. Whoever plays,
 the analysis is Stockfish's. Every change to a game bumps its version, which is what a page waiting on
@@ -11,6 +12,7 @@ the analysis is Stockfish's. Every change to a game bumps its version, which is 
 
 from __future__ import annotations
 
+import json
 import random
 import secrets
 import sys
@@ -22,7 +24,7 @@ from collections import deque
 
 from . import allie, openings, opponent, rating
 from .allie import Allie, AllieError
-from .cards import Cards
+from .cards import Cards, deck_of
 from .chess import START_FEN, Game, Position, describe
 from .config import Config
 from .engine import MATE_CP, Engine, EngineError, loss, show, verdict, win_percent
@@ -35,6 +37,9 @@ FRESH_S = 1.5  # the opponent's own clock is charged between a page's looks only
 MIN_REPLY_S = 0.5  # a reply the instant you let go of the piece is jarring
 RETRY_S = 20.0  # after the opponent failed to produce a move, how long before it is asked again
 PV_PLIES = 10  # how much of an engine line is kept and shown
+QUIET_S = 3.0  # the longest search a background question gets, in seconds of one thread's work
+QUIET_NPS = 700_000  # what a second of that is, in positions searched: it is given the work, however long it waits for the processor
+IN_PLAY_S = 600.0  # a game that is not over and had a move this recently is being played
 _RULE_DRAWS = ("insufficient material", "fifty-move rule", "threefold repetition")
 
 
@@ -80,6 +85,7 @@ class Service:
         self.review = Engine(path, threads=cfg.analysis_threads, hash_mb=cfg.hash_mb)
         self.explore = Engine(path, threads=cfg.analysis_threads, hash_mb=cfg.hash_mb)
         self.opp = Engine(path, threads=2, hash_mb=64)
+        self.quiet = Engine(path, threads=1, hash_mb=64, nice=True)
         self.allie = Allie(cfg)
         self.lock = threading.RLock()  # one change to a game at a time
         self.changed = threading.Condition()
@@ -95,6 +101,7 @@ class Service:
         self.work = threading.Event()
         self.stop = threading.Event()
         self.tutor = None  # set by the server: chesstutor.tutor.Tutor
+        self.explainer = None  # set by the server: chesstutor.explain.Explainer
         self._chess: dict[str, tuple[tuple[str, ...], Game, dict | None]] = {}
         self.rng = random.Random()
 
@@ -104,7 +111,9 @@ class Service:
     def close(self) -> None:
         self.stop.set()
         self.work.set()
-        for e in (self.review, self.explore, self.opp, self.allie):
+        if self.explainer:
+            self.explainer.close()
+        for e in (self.review, self.explore, self.opp, self.quiet, self.allie):
             e.close()
 
     # ---------- reading ----------
@@ -195,10 +204,12 @@ class Service:
         return out
 
     def _annotated(self, row: dict, moves: list[dict], evals: dict[int, dict], game: Game) -> list[dict]:
-        out = []
+        out, why = [], self.cards.explained()
         for m in moves:
             ply = m["ply"]
             e = {"ply": ply, "uci": m["uci"], "san": m["san"], "fen": m["fen"], "source": m["source"]}
+            if m["source"] == "user" and (game.positions[ply - 1].key(), m["uci"]) in why:
+                e["explanation"] = why[game.positions[ply - 1].key(), m["uci"]]  # written for the card made of it
             after, before = evals.get(ply), evals.get(ply - 1)
             if after:
                 e["eval"] = {"cp": after["cp"], "mate": after["mate"], "value": after["value"], "depth": after["depth"]}
@@ -825,6 +836,42 @@ class Service:
 
     # ---------- what Claude is given ----------
 
+    def in_play(self) -> bool:
+        """A game is being played: what works in the background takes nothing it would miss."""
+        return self.store.one("SELECT id FROM games WHERE status='active' AND updated_at > ?", (time.time() - IN_PLAY_S,)) is not None
+
+    def explained(self, game_id: str | None = None) -> None:
+        """An explanation was written: the pages on games (or on one) show it."""
+        for gid in [game_id] if game_id else list(self.versions):
+            self._bump(gid)
+
+    def _written_by(self) -> str:
+        return "generated by Claude with access to Stockfish" + (" and Allie" if self.allie.available() else "")
+
+    def card_request(self, card: dict) -> tuple[str, str]:
+        """What Claude is asked, to explain the move a card is about, and the game its tools read for it: the
+        one the move was last played in ("0", which is no game, when that is no longer on file)."""
+        pos = Position.from_fen(card["fen"])
+        best = json.loads(card["lines"])[0]
+        kind = {"blunder": "a blunder", "mistake": "a mistake", "inaccuracy": "inaccurate"}[deck_of(card["cpl"]) or "inaccuracy"]
+        out = [
+            f"Explain why this move was {kind}.",
+            "",
+            f"The student, playing {'White' if pos.turn == 'w' else 'Black'}, played "
+            f"{_numbered(pos.fullmove, pos.turn, [card['san']])} in this position: {card['fen']}",
+            f"It lost {card['cpl']} centipawns. The engine preferred {best['san'][0]} ({show(best['cp'], best['mate'])}, "
+            f"for White): {_numbered(pos.fullmove, pos.turn, best['san'])}",
+        ]
+        at = self.store.one("SELECT game_id, ply FROM moves WHERE played_at=? AND uci=? AND source='user'", (card["erred_at"], card["uci"]))
+        if at is None:
+            out.append("The game it was played in is no longer on file, so `game`, `review` and `human_moves` have nothing "
+                       "to read: work from the FEN, with `position` and `analyze`.")  # fmt: skip
+            return "0", "\n".join(out)
+        out.append(f"It is ply {at['ply']} of the game your tools read (`review` with from_ply and to_ply {at['ply']} is "
+                   f"the analysis on file for it; the position before it is the one after ply {at['ply'] - 1}).")  # fmt: skip
+        out.append(self.brief(at["game_id"]))
+        return at["game_id"], "\n".join(out)
+
     def brief(self, game_id: str) -> str:
         """The game in a paragraph: what a Claude session is told when it is opened on it."""
         row = self._row(game_id)
@@ -929,7 +976,7 @@ class Service:
         _, _, pos, label = self._resolve(game_id, ply, fen, moves)
         return f"{label[0].upper()}{label[1:]}:\n{describe(pos)}"
 
-    def tool_analyze(self, game_id: str, ply=None, fen=None, moves=None, seconds=2.0, lines=3, candidates=None) -> str:
+    def tool_analyze(self, game_id: str, ply=None, fen=None, moves=None, seconds=2.0, lines=3, candidates=None, quiet=False) -> str:
         base, played, pos, label = self._resolve(game_id, ply, fen, moves)
         if not pos.legal_moves():
             return f"{label[0].upper()}{label[1:]} ({pos.fen()}): no legal moves, it is {'checkmate' if pos.in_check() else 'stalemate'}."
@@ -939,22 +986,32 @@ class Service:
                 only = [pos.parse(str(c)) for c in candidates]
             except ValueError as e:
                 raise GameError(str(e)) from None
-        ms = int(max(0.1, min(float(seconds or 2.0), 20.0)) * 1000)
         n = len(only) if only else max(1, min(int(lines or 3), 8))
-        res = self.explore.search(base, played, ms=ms, multipv=n, only=only)
+        if quiet:  # from the background: a search of a set size on the engine that gives way to all the others
+            engine = self.quiet
+            res = engine.search(base, played, nodes=int(max(0.1, min(float(seconds or 2.0), QUIET_S)) * QUIET_NPS), multipv=n, only=only)
+        else:
+            engine = self.explore
+            res = engine.search(base, played, ms=int(max(0.1, min(float(seconds or 2.0), 20.0)) * 1000), multipv=n, only=only)
         side = "White" if pos.turn == "w" else "Black"
-        out = [f"{label[0].upper()}{label[1:]}: {pos.fen()}", f"{side} to move. {self.explore.name}, depth {res.depth}, {res.ms / 1000:.1f} s."]
+        out = [f"{label[0].upper()}{label[1:]}: {pos.fen()}", f"{side} to move. {engine.name}, depth {res.depth}, {res.ms / 1000:.1f} s."]
         for i, ln in enumerate(res.lines, 1):
             sans = _line_sans(pos, ln.moves[:14])
             out.append(f"{i}. {show(ln.cp, ln.mate):>6}  {_numbered(pos.fullmove, pos.turn, sans)}")
         out.append("Scores are for White (positive: White is better); #n is a forced mate in n, #-n a mate for Black.")
         return "\n".join(out)
 
-    def tool_humans(self, game_id: str, ply=None, moves=None, elo=None, top=5, line=0) -> str:
+    def tool_humans(self, game_id: str, ply=None, moves=None, elo=None, top=5, line=0, quiet=False) -> str:
         """What people play in a position, by Allie: the likeliest moves of players of a rating. Not an evaluation."""
         why = allie.missing(self.cfg)
         if why:
             raise GameError(why)
+        if quiet:  # from the background: Allie is not read into memory during a game, nor asked while it is on a move
+            if not self.allie.ready and self.in_play():
+                raise GameError("Allie is not in memory and a game is being played, so it is not loaded for this: do without human_moves")
+            waited = time.monotonic()
+            while self.thinking and time.monotonic() - waited < 120:
+                time.sleep(0.25)
         row = self._row(game_id)
         if elo is None:
             elo = row["elo"] if row["engine"] == "allie" else 1500
@@ -1007,7 +1064,7 @@ class Service:
             evals = self._evals(row, moves)
         lo = 1 if from_ply is None else int(from_ply)
         hi = len(moves) if to_ply is None else int(to_ply)
-        out, waiting = [], 0
+        out, waiting, why = [], 0, self.cards.explained()
         for m in moves:
             ply = m["ply"]
             if not lo <= ply <= hi or (who != "all" and m["source"] != "user"):
@@ -1016,7 +1073,9 @@ class Service:
                 waiting += 1
                 continue
             grade = self._grade(m, evals[ply - 1], evals[ply], game.positions[ply - 1].turn == "w")
-            out.append(self._review_text(row, game, moves, evals, m, grade))
+            text = self._review_text(row, game, moves, evals, m, grade)
+            said = why.get((game.positions[ply - 1].key(), m["uci"])) if m["source"] == "user" else None
+            out.append(text + (f"\nPrevious analysis of the move, {self._written_by()}: {said}" if said else ""))
         if waiting:
             out.append(f"({waiting} move(s) in that range are still being analysed by the engine: ask again in a few seconds.)")
         if not out:
@@ -1061,5 +1120,11 @@ class Service:
             )
         if any(m["source"] == "book" for m in annotated):
             out.append("(* a move from the opponent's opening book)")
+        if any("explanation" in m for m in annotated):
+            out += ["", f"Previous analysis of the student's moves below, {self._written_by()}:"]
+        for m in annotated:
+            if "explanation" in m:
+                p = game.positions[m["ply"] - 1]
+                out.append(f"{_numbered(p.fullmove, p.turn, [m['san']])}: {m['explanation']}")
         out += ["", "Current position:", describe(pos)]
         return "\n".join(out)
