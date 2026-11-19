@@ -205,6 +205,21 @@ def test_untimed_and_what_claude_is_given():
         done(svc)
 
 
+def test_allie_is_loaded_when_the_server_starts():
+    svc = service(load=0.3)
+    try:
+        deadline = time.time() + 10
+        while not svc.allie.ready and time.time() < deadline:  # no game, and nobody has asked it anything
+            time.sleep(0.02)
+        assert svc.allie.ready
+        first = svc.allie.proc
+        gid = svc.create("b", 1200, None, None, "allie")["id"]
+        seen = watch(svc, gid, lambda s: s["plies"] == 1)
+        assert not seen["loading"] and svc.allie.proc is first  # the one that was loaded plays
+    finally:
+        done(svc)
+
+
 def test_one_allie_for_every_game_and_none_left_loading():
     svc = service(load=1.0)
     try:

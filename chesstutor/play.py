@@ -107,6 +107,8 @@ class Service:
 
     def start(self) -> None:
         threading.Thread(target=self._analyse_loop, name="analysis", daemon=True).start()
+        if self.allie.available():
+            self.allie.warm()  # read into memory now, in the background, so that a game against it does not wait for that
 
     def close(self) -> None:
         self.stop.set()
