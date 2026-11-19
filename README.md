@@ -1,8 +1,9 @@
 # Chess Tutor
 
 Play chess in the browser against an opponent held to a chosen Elo (Stockfish weakened, or Allie, a model that
-plays the way people of that rating do), with full-strength Stockfish grading every move as you make it, and
-Claude on call to explain the game with that analysis and the engine in hand.
+plays the way people of that rating do), with full-strength Stockfish grading every move as you make it, a
+rating of your own kept from the results, and Claude on call to explain the game with that analysis and the
+engine in hand.
 
 It is a small local web server (Python standard library only, nothing to install) meant for one person on their
 own machine, reachable from their other devices over Tailscale. Allie is optional and is the one thing that is
@@ -10,8 +11,9 @@ installed: a model with an environment of its own, beside the server.
 
 ## What you get
 
-- **Home page**: your recent games (with the final position, result and settings) and a form for a new one: your
-  colour, the opponent (Stockfish or Allie) and its strength, the opening it should steer for, and the clock.
+- **Home page**: a form for a new game (your colour, the opponent (Stockfish or Allie) and its strength, which
+  starts at your own rating, the opening it should steer for, and the clock), then your ratings and your recent
+  games (with the final position, result and settings, and what each did to your rating).
 - **Game page**:
   - the board (drag a piece, or click it and then its square), with back/forward buttons, arrow keys, and a click
     on any move to walk through the game;
@@ -45,19 +47,23 @@ user service that starts with the machine. Settings live in `~/.config/chess-tut
 
 There are two, picked with each new game: Stockfish held back, described first, and [Allie](#allie).
 
-**Strength.** From 1320 to 3190 the opponent is Stockfish limiting itself (`UCI_Elo`), on the scale Stockfish
-calibrated against the CCRL 40/4 rating list. "Full strength" removes the limit.
+**Strength.** A rating, and whoever the opponent is it is a rating on one scale: Allie's, which is Lichess's.
+Stockfish at 1200 is set to score against Allie at 1200 as an equal would, so the number means the same
+opponent to beat either way, and [your own rating](#your-rating) can be reckoned from games against both.
+"Full strength" removes the limit.
 
-Stockfish has no setting below 1320, and a tutor is most useful below it, so weaker opponents are built here
-(`chesstutor/opponent.py`): every legal move is scored by a 6-ply search and one is drawn with odds that fall off
-with how much worse than the best it is. The fall-off (a "temperature" in centipawns) sets the strength. Which
-temperature plays at which rating was measured, not guessed: `scripts/calibrate.py` plays matches between
-temperatures and Stockfish at 1320, 1500 and 1700 and fits one rating per temperature to all the results. See
-[Calibration](#calibration) for the numbers and their limits.
+Stockfish has a scale of its own, and two ways of playing below its best. From 1320 to 3190 on that scale it
+limits itself (`UCI_Elo`, calibrated against the CCRL 40/4 rating list). It has no setting below 1320 (which
+plays as about 1650 here), and a tutor is most useful below it, so weaker opponents are built here
+(`chesstutor/opponent.py`): every legal move
+is scored by a 6-ply search and one is drawn with odds that fall off with how much worse than the best it is.
+The fall-off (a "temperature" in centipawns) sets the strength. What plays at which rating was measured, not
+guessed, by `scripts/calibrate.py`: first which temperature plays at which rating of Stockfish's scale (matches
+between temperatures and Stockfish at 1320, 1500 and 1700), then what each point of Stockfish's scale is worth
+on Allie's (games between Stockfish and Allie). See [Calibration](#calibration) for the numbers and their limits.
 
-These are ratings on Stockfish's engine scale, not chess.com or Lichess ratings, which come from other pools of
-players. And a weakened engine does not err the way a person does: it can hang a piece in one move and find a
-deep tactic in the next.
+The number says how the results come out, not how the moves look. A weakened engine does not err the way a
+person does: it can hang a piece in one move and find a deep tactic in the next.
 
 **Opening.** The opponent can be asked for an opening of the colour it plays (the Sicilian or the French if you
 are White; the Italian or the London if you are Black; 23 in all, in `chesstutor/openings.py`). It follows the
@@ -78,8 +84,8 @@ think on it. It is the opponent to pick for one that errs the way people do.
 commit): for each move a think time is drawn from the model, a search as large as that time allows scores the
 moves, and the move is drawn from the human distribution tilted by those scores. That is fitted so that at rating
 R it plays moves of the quality people rated R play at the game's time control. It is offered from 800 to 2600,
-the ratings that fit covers, and has no "full strength". The ratings are Lichess's, so the same number does not
-mean the same thing as for Stockfish. Allie is told the ratings of both players, and is given its own for yours.
+the ratings that fit covers, and has no "full strength". The ratings are Lichess's, and they are the scale
+Stockfish's strengths are given on too. Allie is told the ratings of both players, and is given its own for yours.
 
 **Clock.** Allie plays to the same clock as you: "10+3" gives each side ten minutes and three seconds a move, and
 its clock is on the page above the board. It is stopped by exactly what stops yours. It runs while it is Allie's
@@ -105,6 +111,32 @@ Face). To remove it, delete that directory. The model runs in a process of its o
 question first needs it (about a minute to load) and ended after half an hour without either (`[allie] idle_s`).
 Its searches are priced for a 16-core server; on a slower or busy machine it searches less in the same think
 time and plays somewhat below its rating.
+
+## Your rating
+
+Every finished game against an opponent with a rating moves yours: a win against a stronger opponent by a lot, a
+loss to one by little. It is on the same scale as the opponents' (Lichess's, by way of Allie), and is worked out
+afresh from the games on file each time it is shown (`chesstutor/rating.py`), so:
+
+- only games that are over count, whatever ended them (mate, resignation, the clock, a draw);
+- a game you delete is forgotten, and a finished game you take a move back in counts again only once it ends again;
+- games against Stockfish at full strength do not count: it has no rating to compare yours with.
+
+There is a rating for each time format, as on Lichess: one for untimed games, and one for each kind of clock
+(bullet, blitz, rapid, classical, by the length of a 40-move game: "10+3" is rapid). A game moves the rating of
+its own format only.
+
+The arithmetic is Glicko's, a game at a time, in the order the games ended. A rating starts at 1500 and very
+unsure (a deviation of 350), so the first results move it by a hundred points or more; as games accumulate it
+settles, to about 13 points for a win or loss against an equal, and no further, so that it keeps following you
+as you improve. While it is still unsure (a deviation above 110, about the first ten games) it is shown with a
+question mark. The home page shows each format's rating, each game's gain or loss beside its result, and starts
+the opponent's strength at your rating for the clock chosen (or, with no games at that clock yet, at the rating
+from the format you have played most).
+
+Stockfish's ratings are measured against Allie at 10+3, and Allie itself plays an untimed game as people play
+classical ones, so across formats the numbers are neighbours rather than the same thing; within a format they
+are comparable from game to game, which is what a rating is for.
 
 ## The analysis
 
@@ -180,13 +212,17 @@ other authentication: do not put it on a port the internet can reach.
 ## Calibration
 
 <!-- calibration -->
-The sub-1320 opponent was measured on 2026-11-18 with Stockfish 19: 9,090 games
-(`scripts/calibration.jsonl`), each temperature against its neighbours and against Stockfish at 1320, 1500 and
-1700 where they were within reach of each other. One rating per temperature was then fitted to all the results
-(maximum likelihood under the Elo model, Stockfish's levels held at their nominal ratings), and where two
-neighbouring temperatures came out in the wrong order they were pooled. The opponent interpolates between these:
+Two measurements, both made by `scripts/calibrate.py`, both on 2026-11-18 with Stockfish 19.
 
-| Rating | Temperature (centipawns) |
+### The sub-1320 opponent, on Stockfish's own scale
+
+9,090 games (`scripts/calibration.jsonl`), each temperature against its neighbours and against Stockfish at
+1320, 1500 and 1700 where they were within reach of each other. One rating per temperature was then fitted to
+all the results (maximum likelihood under the Elo model, Stockfish's levels held at their nominal ratings), and
+where two neighbouring temperatures came out in the wrong order they were pooled. The opponent interpolates
+between these. The ratings in this table are on Stockfish's own scale (`UCI_Elo`), not the one the app shows:
+
+| Rating (Stockfish's own scale) | Temperature (centipawns) |
 | --- | --- |
 | 1414 | 80 |
 | 1380 | 90 |
@@ -202,17 +238,79 @@ neighbouring temperatures came out in the wrong order they were pooled. The oppo
 | 450 | 245 |
 | 344 | 270 |
 
-Opponents are offered from 400 up. What to make of the numbers:
+What to make of the numbers:
 
 - A pairing of 60 to 270 games pins a rating difference to within roughly 40 to 80 points, and the lowest
   levels are reached through a chain of such pairings, so they are the least certain.
 - Strength falls steeply with temperature in this range: the whole span from 1300 down to 400 is less than a
   tripling of the temperature.
-- The scale is Stockfish's (`UCI_Elo`), measured at fast time controls, where its weakened levels pick their
-  move at a fixed shallow depth and so do not get weaker.
+- These games were played at fast time controls, where Stockfish's weakened levels pick their move at a fixed
+  shallow depth and so do not get weaker.
 
-To measure again (a new Stockfish release, another search depth): `./scripts/calibrate.py play --games 150`,
-then `./scripts/calibrate.py fit`, which rewrites `chesstutor/levels.json`.
+### Stockfish's own scale on Allie's
+
+61 games against Allie 2.1 (`scripts/calibration-allie.jsonl`, one line a game), with Allie playing as the app
+has it play at 10+3: told the same things, charged its think time, resigning where it would. Eight settings of
+Stockfish took part (the temperatures 245, 180, 135 and 100, and `UCI_Elo` 1320, 1550, 1800 and 2100), each
+matched against Allie at about the rating the games so far made it level with, or a hundred points either side
+of it. The model is two straight lines that meet at 1320 on Stockfish's own scale, where the sampler hands
+over to `UCI_Elo`; their three ends were fitted to the results (maximum likelihood under the Elo model, Allie
+held at its ratings):
+
+| Stockfish's own scale | Level with Allie at | Standard error |
+| --- | --- | --- |
+| 450 | 588 | 126 |
+| 1320 | 1648 | 78 |
+| 2100 | 2125 | 109 |
+
+So a point of Stockfish's scale below 1320 is worth about 1.2 points of Allie's and one above it about 0.6:
+Stockfish's own numbers undersell it by some 140 points at the bottom and 330 at 1320, and by nothing much at
+2100. Each setting's score, with what the fitted lines predict for the same games:
+
+| Setting | Own scale | Against Allie at | Score | Predicted |
+| --- | --- | --- | --- | --- |
+| temperature 245 | 450 | 800 | 0 of 4 | 0.9 |
+| temperature 180 | 719 | 800 to 1050 | 5 of 9 | 4.6 |
+| temperature 135 | 992 | 1150 to 1350 | 5.5 of 8 | 3.8 |
+| temperature 100 | 1265 | 1450 to 1750 | 5 of 8 | 3.9 |
+| `UCI_Elo` 1320 | 1320 | 1600 to 1900 | 2 of 8 | 3.3 |
+| `UCI_Elo` 1550 | 1550 | 1650 to 1950 | 3 of 8 | 4.4 |
+| `UCI_Elo` 1800 | 1800 | 1650 to 2200 | 5 of 8 | 4.4 |
+| `UCI_Elo` 2100 | 2100 | 1900 to 2300 | 4 of 8 | 3.9 |
+
+Stockfish is offered from 530 to 2790: its settings from 400 to 3190 on its own scale, read on Allie's. What to
+make of that:
+
+- The standard errors are large: 61 games place the scale to within about 80 to 130 points at its three ends,
+  and to about 60 at best between them. A Stockfish rating is good to about a hundred points either way.
+- The two settings just under the join scored more than the lines predict and the two just over it less (10.5 of
+  16 against a predicted 7.7, and 5 of 16 against 7.7). Eight games a setting cannot tell that from chance, but
+  if it is real, the sampler near the top of its range (ratings of about 1250 to 1600) is stronger than its
+  number and `UCI_Elo` near the bottom of its own (about 1650 to 1800) weaker.
+- Only the stretch from 450 to 2100 on Stockfish's scale was played. Above 2100 (ratings over about 2125) the
+  upper line is carried on, for more than a thousand points of Stockfish's scale; the top rating, 2790, is where
+  that line puts `UCI_Elo` 3190, not something a game has shown. Allie has no rating below 800, so below that
+  the lower line is carried on too, held up at its far end only by four lost games against Allie at 800.
+- It is measured at 10+3 only. Allie plays differently at other clocks, and an untimed game as people play
+  classical ones; Stockfish is given the same number at all of them.
+- Allie's own ratings are not exact. Live on Lichess its predecessor, Allie 2.0, played some 50 to 90 points
+  above the rating it was set to (about 60 in rapid) by its authors' count, and 2.1 has not been measured that
+  way. Whatever that error is, Stockfish's ratings inherit it.
+- A slower or busy machine makes Allie search less and play below its rating, which would make Stockfish look
+  stronger than it is. These games were played one at a time, and waited whenever the app's own Allie was
+  running.
+
+To measure again (a new Stockfish release, another search depth, a new Allie):
+
+```sh
+./scripts/calibrate.py play --games 150   # temperatures on Stockfish's own scale (minutes, every core)
+./scripts/calibrate.py allie --games 60   # Stockfish against Allie (about three minutes a game, one at a time)
+./scripts/calibrate.py fit                # prints both fits and rewrites chesstutor/levels.json
+```
+
+The games against Allie add up: `allie` can be stopped and run again, and `fit` uses every game on file. A refit
+changes what a rating means for games started after it; games already on file keep the rating they were played
+at.
 <!-- /calibration -->
 
 ## How it is put together
@@ -222,6 +320,7 @@ then `./scripts/calibrate.py fit`, which rewrites `chesstutor/levels.json`.
 | `chesstutor/chess.py` | the rules, from scratch: legal moves, FEN, SAN, how a game ends (checked against published perft counts) |
 | `chesstutor/engine.py` | a UCI engine as a child process; what a score means (winning chances, loss, grades) |
 | `chesstutor/opponent.py`, `levels.json` | Stockfish's move at a rating |
+| `chesstutor/rating.py` | your ratings, from the games on file |
 | `chesstutor/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
 | `chesstutor/openings.py` | the opening books |
 | `chesstutor/play.py` | games: moves, replies, the clocks, the analysis queue, what the Claude tools return |

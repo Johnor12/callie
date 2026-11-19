@@ -52,8 +52,28 @@ def test_choices_are_grouped_by_the_opponents_side():
 
 
 def test_temperature_falls_as_the_rating_rises():
-    temps = [opponent.temperature(e) for e in range(opponent.ELO_MIN, opponent.SF_MIN, 50)]
+    # ratings are on Allie's scale; the sampler plays below the one that is Stockfish's own floor
+    join = round(opponent.rated(opponent.SF_MIN))
+    assert opponent.ELO_MIN < join < opponent.ELO_MAX
+    temps = [opponent.temperature(opponent.own(e)) for e in range(opponent.ELO_MIN, join, 50)]
     assert temps == sorted(temps, reverse=True) and temps[0] > temps[-1] > 0
+
+
+def test_the_two_scales_read_each_other():
+    for elo in range(opponent.ELO_MIN, opponent.ELO_MAX + 1, 100):
+        assert abs(opponent.rated(opponent.own(elo)) - elo) < 1e-6
+    owns = [opponent.own(e) for e in range(opponent.ELO_MIN, opponent.ELO_MAX + 1, 100)]
+    assert owns == sorted(owns) and owns[-1] <= opponent.SF_MAX + 10  # a stronger rating is a stronger setting
+    old = opponent.SCALE
+    try:
+        opponent.SCALE = [(500.0, 800.0), (1320.0, 1700.0), (2500.0, 2700.0)]
+        assert opponent.rated(1320) == 1700 and opponent.own(1700) == 1320
+        assert round(opponent.rated(910)) == 1250 and round(opponent.own(2200)) == 1910
+        assert round(opponent.rated(300)) == 580 and round(opponent.rated(3190)) == 3285  # past the ends, the lines go on
+        opponent.SCALE = []  # not measured: one scale
+        assert opponent.rated(1234) == 1234 and opponent.own(1234) == 1234
+    finally:
+        opponent.SCALE = old
 
 
 load_tests = function_tests(globals())

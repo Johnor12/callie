@@ -52,6 +52,13 @@ textarea { resize: none; width: 100%; }
 .g-sub { color: var(--dim); font-size: 13px; }
 .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--panel2); border: 1px solid var(--line); }
 .tag.won { color: var(--good); } .tag.lost { color: var(--bad); } .tag.live { color: var(--accent); }
+.g-end { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right; }
+.delta { font-size: 13px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+.delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+.recent-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 12px; }
+.recent-head h2 { white-space: nowrap; }
+#rating { color: var(--dim); margin-bottom: 12px; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; gap: 4px 16px; }
+#rating b { color: var(--text); font-size: 17px; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .empty { color: var(--dim); padding: 12px 2px; }
 
 /* ---------- a game ---------- */

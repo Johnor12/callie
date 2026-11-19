@@ -24,9 +24,11 @@ const S = {
   clockAt: 0,      // when the clock in S.game was read
   term: null,
   reopen: false,   // the game's session is to be shown again if its terminal has ended (once each time you come back)
-  form: { engine: "stockfish", color: "w", elo: 1200, full: false, opening: "", time: "untimed" },
+  rating: {},      // yours in each time format, as the server last reckoned them
+  // elo: the opponent's strength. It is not kept: null until you set it, and until then it follows your rating
+  form: { engine: "stockfish", color: "w", elo: null, full: false, opening: "", time: "untimed" },
 };
-try { Object.assign(S.form, JSON.parse(localStorage.getItem(FORM) || "{}")); } catch (e) { /* no storage */ }
+try { Object.assign(S.form, JSON.parse(localStorage.getItem(FORM) || "{}"), { elo: null }); } catch (e) { /* no storage */ }
 
 async function api(method, path, body, signal) {
   const opt = { method, signal };
@@ -87,12 +89,14 @@ async function showHome() {
   $("game").hidden = true; $("home").hidden = false; $("crumb").textContent = "";
   document.title = "Chess Tutor";
   try {
-    await loadMeta();
+    const [, rating, games] = await Promise.all([loadMeta(), api("GET", "/api/rating"), api("GET", "/api/games")]);
+    S.rating = rating; S.form.elo = null;
     renderForm();
-    renderGames(await api("GET", "/api/games"));
+    renderRating();
+    renderGames(games);
   } catch (e) { $("f-err").textContent = e.message; }
 }
-function saveForm() { try { localStorage.setItem(FORM, JSON.stringify(S.form)); } catch (e) { /* no storage */ } }
+function saveForm() { try { localStorage.setItem(FORM, JSON.stringify({ ...S.form, elo: undefined })); } catch (e) { /* no storage */ } }
 function renderForm() {
   const f = S.form, m = S.meta;
   // Who plays: an engine that is not installed can be seen but not picked.
@@ -102,9 +106,11 @@ function renderForm() {
   $("f-engine").innerHTML = m.engines.map((e) => `<button data-v="${e.key}" class="${e.key === eng.key ? "on" : ""}"${e.available ? "" : " disabled"} title="${esc(e.available ? "" : e.missing)}">${esc(e.name)}</button>`).join("");
   $("f-engine-hint").textContent = off ? `${off.name} is not installed: run \`chess-tutor allie install\` to play against it.` : "";
   if (!eng.full) f.full = false;
-  f.elo = Math.max(eng.elo.min, Math.min(eng.elo.max, +f.elo || eng.elo.default));
+  if (!m.time_controls.includes(f.time)) f.time = "untimed";
+  // The strength: as you set it, and until you do, your own rating at the clock chosen.
+  const elo = Math.max(eng.elo.min, Math.min(eng.elo.max, f.elo || Math.round((yourElo(m.formats[f.time]) || eng.elo.default) / 10) * 10));
   for (const b of $("f-color").children) b.classList.toggle("on", b.dataset.v === f.color);
-  for (const el of [$("f-elo"), $("f-elo-n")]) { el.min = eng.elo.min; el.max = eng.elo.max; el.value = f.elo; el.disabled = f.full; }
+  for (const el of [$("f-elo"), $("f-elo-n")]) { el.min = eng.elo.min; el.max = eng.elo.max; el.value = elo; el.disabled = f.full; }
   $("f-full").checked = f.full; $("f-full-label").hidden = !eng.full;
   // The opponent can only steer for an opening of the colour it plays.
   const side = f.color === "w" ? "b" : f.color === "b" ? "w" : null;
@@ -112,7 +118,6 @@ function renderForm() {
   if (!list.some((o) => o.key === f.opening)) f.opening = "";
   $("f-opening").innerHTML = `<option value="">Engine's choice</option>` + list.map((o) => `<option value="${o.key}"${o.key === f.opening ? " selected" : ""}>${esc(o.name)}</option>`).join("");
   $("f-opening").disabled = !side;
-  if (!m.time_controls.includes(f.time)) f.time = "untimed";
   $("f-time-label").textContent = eng.key === "allie" ? "Clocks" : "Your clock";
   $("f-time").innerHTML = m.time_controls.map((t) => `<button data-v="${t}" class="${t === f.time ? "on" : ""}">${t === "untimed" ? "Untimed" : esc(t.replace("+", " + "))}</button>`).join("");
 }
@@ -127,7 +132,7 @@ $("f-start").onclick = async () => {
   const f = S.form;
   $("f-err").textContent = ""; $("f-start").disabled = true;
   try {
-    const g = await api("POST", "/api/games", { engine: f.engine, color: f.color, elo: f.full ? null : f.elo, opening: f.opening || null, time_control: f.time });
+    const g = await api("POST", "/api/games", { engine: f.engine, color: f.color, elo: f.full ? null : +$("f-elo").value, opening: f.opening || null, time_control: f.time });
     location.hash = `#/game/${g.id}`;
   } catch (e) { $("f-err").textContent = e.message; }
   $("f-start").disabled = false;
@@ -149,6 +154,18 @@ function outcome(g) {  // [label, class] of a game for you
   return [`${won ? "Won" : "Lost"} · ${g.reason === "time" ? "on time" : g.reason}`, won ? "won" : "lost"];
 }
 const strength = (g) => g.opponent;
+const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n);
+// Your rating in a time format; where you have none yet, the one from the format you have played most.
+function yourElo(format) {
+  const most = Object.values(S.rating).sort((a, b) => b.games - a.games)[0];
+  return (S.rating[format] || most || {}).elo;
+}
+function renderRating() {
+  const all = Object.entries(S.rating);
+  $("rating").hidden = !all.length;
+  $("rating").innerHTML = "Your Elo" + all.map(([format, r]) =>
+    `<span data-testid="rating-${format}">${format[0].toUpperCase() + format.slice(1)} <b>${r.elo}${r.provisional ? "?" : ""}</b></span>`).join("");
+}
 function renderGames(games) {
   $("game-empty").hidden = games.length > 0;
   $("game-list").innerHTML = games.map((g) => {
@@ -157,7 +174,7 @@ function renderGames(games) {
       <div class="g-main"><div class="g-title">You (${g.user_color === "w" ? "White" : "Black"}) vs ${esc(strength(g))}</div>
       <div class="g-sub">${esc(g.opening.name)} · ${Math.ceil(g.plies / 2)} moves · ${g.time_control === "untimed" ? "untimed" : esc(g.time_control)}</div>
       <div class="g-sub">${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</div></div>
-      <span class="tag ${cls}">${esc(label)}</span>
+      <div class="g-end"><span class="tag ${cls}">${esc(label)}</span>${g.rating ? `<span class="delta ${g.rating.change > 0 ? "up" : g.rating.change < 0 ? "down" : ""}" data-testid="game-elo">${signed(g.rating.change)}</span>` : ""}</div>
       <button class="quiet" data-del="${g.id}" title="Delete this game" data-testid="game-delete">✕</button></li>`;
   }).join("");
 }

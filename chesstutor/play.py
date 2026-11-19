@@ -19,7 +19,7 @@ import traceback
 import uuid
 from collections import deque
 
-from . import allie, openings, opponent
+from . import allie, openings, opponent, rating
 from .allie import Allie, AllieError
 from .chess import START_FEN, Game, Position, describe
 from .config import Config
@@ -71,6 +71,8 @@ class Service:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.store = Store(cfg.db_path)
+        if opponent.SCALE:  # Stockfish's ratings are given on Allie's scale: games from before are told so
+            self.store.rescale(opponent.rated)
         path = str(cfg.engine)
         self.review = Engine(path, threads=cfg.analysis_threads, hash_mb=cfg.hash_mb)
         self.explore = Engine(path, threads=cfg.analysis_threads, hash_mb=cfg.hash_mb)
@@ -116,7 +118,7 @@ class Service:
                 {
                     "key": "stockfish",
                     "name": "Stockfish",
-                    "elo": {"min": opponent.ELO_MIN, "max": opponent.SF_MAX, "native": opponent.SF_MIN, "default": 1200},
+                    "elo": {"min": opponent.ELO_MIN, "max": opponent.ELO_MAX, "default": 1200},
                     "full": True,  # it can also play with nothing held back
                     "available": True,
                 },
@@ -131,6 +133,7 @@ class Service:
             ],
             "openings": openings.choices(),
             "time_controls": list(TIME_CONTROLS),
+            "formats": {tc: rating.format_of(tc) for tc in TIME_CONTROLS},  # which of your ratings each counts towards
             "model": self.cfg.claude_model,
         }
 
@@ -221,6 +224,7 @@ class Service:
             "elo": row["elo"],
             "opening": {"key": row["opening"], "name": openings.name_of(row["opening"])},
             "time_control": row["time_control"] or "untimed",
+            "format": rating.format_of(row["time_control"]),
             "status": row["status"],
             "result": row["result"],
             "reason": row["reason"],
@@ -235,7 +239,14 @@ class Service:
                 "SELECT game_id, fen FROM moves m WHERE ply = (SELECT max(ply) FROM moves WHERE game_id = m.game_id)"
             )
         }
-        return [self.summary(r, r["plies"], last.get(r["id"])) for r in self.store.games()]
+        changes = rating.history(self.store.rated_games())[1]
+        # "rating": what the game did to yours in its format ({"before", "after", "change"}); None: it does not count
+        return [{**self.summary(r, r["plies"], last.get(r["id"])), "rating": changes.get(r["id"])} for r in self.store.games()]
+
+    def rating(self) -> dict:
+        """Your rating in each time format that has one, from the finished games of that format against an
+        opponent with a rating: {"rapid": {"elo": 1432, "deviation": 96, "provisional": False, "games": 14}, ...}."""
+        return rating.history(self.store.rated_games())[0]
 
     def state(self, game_id: str, since: int | None = None, wait: float = 25.0) -> dict:
         """Everything the page shows of a game. With ``since``, waits until it has changed from that version."""
@@ -359,8 +370,8 @@ class Service:
                 raise GameError("against Allie the clock starts at a whole number of minutes (up to 180), or 15, 30, 45 or 90 seconds")
             if clock_ms and (increment_ms % 1000 or increment_ms > 180000):
                 raise GameError("against Allie the increment is a whole number of seconds, up to 180")
-        elif elo is not None and not opponent.ELO_MIN <= elo <= opponent.SF_MAX:
-            raise GameError(f"elo must be between {opponent.ELO_MIN} and {opponent.SF_MAX}, or null for full strength")
+        elif elo is not None and not opponent.ELO_MIN <= elo <= opponent.ELO_MAX:
+            raise GameError(f"elo must be between {opponent.ELO_MIN} and {opponent.ELO_MAX}, or null for full strength")
         if opening:
             if opening not in openings.OPENINGS:
                 raise GameError(f"no opening {opening!r}")
@@ -817,7 +828,9 @@ class Service:
                 f"{allie.NAME}, a model of human play (not a weakened engine), playing as a player rated "
                 f"{row['elo']} (Lichess scale) would"
             )
-        return "Stockfish " + (f"limited to about {row['elo']} Elo" if row["elo"] else "at full strength")
+        if not row["elo"]:
+            return "Stockfish at full strength"
+        return f"Stockfish weakened to play about level with a player rated {row['elo']} (Lichess scale)"
 
     def _review_text(self, row: dict, game: Game, moves: list[dict], evals: dict, m: dict, grade: dict) -> str:
         ply = m["ply"]

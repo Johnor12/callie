@@ -67,6 +67,7 @@ def _routes(svc: Service, tutor: Tutor):
         ("GET", r"/api/health", lambda m, b, q: {"ok": True, "games": len(svc.store.all("SELECT id FROM games LIMIT 1"))}),
         ("GET", r"/api/meta", lambda m, b, q: svc.meta()),
         ("GET", r"/api/games", lambda m, b, q: svc.games()),
+        ("GET", r"/api/rating", lambda m, b, q: svc.rating()),
         ("POST", r"/api/games", lambda m, b, q: svc.create(b.get("color", "w"), b.get("elo"), b.get("opening"), b.get("time_control"), b.get("engine"))),
         ("GET", rf"/api/games/{_ID}", lambda m, b, q: svc.state(m[1], since(q))),
         ("POST", rf"/api/games/{_ID}/move", lambda m, b, q: svc.move(m[1], b.get("move", ""))),

@@ -15,10 +15,11 @@ CREATE TABLE IF NOT EXISTS games (
   updated_at REAL NOT NULL,
   user_color TEXT NOT NULL,            -- 'w' or 'b'
   engine TEXT NOT NULL DEFAULT 'stockfish',  -- who the opponent is: 'stockfish' or 'allie'
-  elo INTEGER,                          -- the opponent's strength; NULL: full strength
+  elo INTEGER,                          -- the opponent's rating (Allie's scale, whoever plays); NULL: full strength
   opening TEXT,                         -- key of the opening the opponent steers for; NULL: its own choice
   start_fen TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',  -- 'active' or 'finished'
+  finished_at REAL,                     -- when it ended; NULL while it is being played
   result TEXT,                          -- '1-0', '0-1', '1/2-1/2'
   reason TEXT,                          -- checkmate, resignation, stalemate, ...
   time_control TEXT,                    -- '10+3' (minutes + seconds a move); NULL: untimed
@@ -56,7 +57,8 @@ CREATE TABLE IF NOT EXISTS evals (      -- the position after `ply` moves (0: th
 """
 # Columns added since the first release: a database made before them gets them here.
 ADDED = {
-    "games": {"engine": "TEXT NOT NULL DEFAULT 'stockfish'", "opp_clock_ms": "INTEGER", "draw_offer": "INTEGER"},
+    "games": {"engine": "TEXT NOT NULL DEFAULT 'stockfish'", "opp_clock_ms": "INTEGER", "draw_offer": "INTEGER",
+              "finished_at": "REAL"},
     "moves": {"clock_ms": "INTEGER"},
 }
 
@@ -76,6 +78,21 @@ class Store:
                 for name, kind in columns.items():
                     if name not in have:
                         self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+            # Games that ended before that was recorded: at their last move, near enough.
+            self.conn.execute(
+                "UPDATE games SET finished_at = coalesce((SELECT max(played_at) FROM moves WHERE game_id = games.id), "
+                "updated_at) WHERE status = 'finished' AND finished_at IS NULL"
+            )
+
+    def rescale(self, rated) -> None:
+        """Once, in a database from before Stockfish's ratings were given on Allie's scale: say the strength of
+        its games there (``rated``: a rating of Stockfish's own scale on Allie's), as every later game does."""
+        with self.lock:
+            if self.conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+                return
+            for r in self.conn.execute("SELECT id, elo FROM games WHERE engine = 'stockfish' AND elo IS NOT NULL").fetchall():
+                self.conn.execute("UPDATE games SET elo = ? WHERE id = ?", (round(rated(r["elo"])), r["id"]))
+            self.conn.execute("PRAGMA user_version = 1")
 
     def run(self, sql: str, args: tuple = ()) -> None:
         with self.lock:
@@ -105,8 +122,17 @@ class Store:
             (limit,),
         )
 
+    def rated_games(self) -> list[dict]:
+        """Every finished game: what a rating is reckoned from."""
+        return self.all(
+            "SELECT id, created_at, updated_at, finished_at, user_color, elo, status, result, time_control FROM games "
+            "WHERE status = 'finished'"
+        )
+
     def update_game(self, game_id: str, **fields) -> None:
         fields["updated_at"] = time.time()
+        if "status" in fields:  # ending a game says when; a take-back that reopens it unsays it
+            fields["finished_at"] = fields["updated_at"] if fields["status"] == "finished" else None
         sets = ", ".join(f"{k}=?" for k in fields)
         self.run(f"UPDATE games SET {sets} WHERE id=?", (*fields.values(), game_id))
 
