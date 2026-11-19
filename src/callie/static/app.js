@@ -582,7 +582,8 @@ document.addEventListener("keydown", (ev) => {
 // what the server said of it (`result`), and the moves made on the position: the answer first, and after a
 // wrong one any others (`tries`: each with its `cpl`, what it lost, once the server has said; `tried` is the
 // last of them). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
-// the same card, as it was, and the next one comes only with Next or a grade.
+// the same card, as it was, and the next one comes only with Next or a grade. Unless the card is no longer
+// there (its game was deleted) or no longer that position: then the page is on the next one.
 const KEPT = (deck) => `callie.review.${deck}`;
 function keepReview() {
   const r = S.review;
@@ -592,7 +593,7 @@ function keepReview() {
     sessionStorage.setItem(KEPT(r.deck), JSON.stringify({ name: r.name, active: r.active, card: r.card, result: r.result, tries, tried: r.tried, fast: r.fast }));
   } catch (e) { /* no storage */ }
 }
-function showReview(deck) {
+async function showReview(deck) {
   leaveGame(); leaveReview();
   $("home").hidden = true; $("game").hidden = true; $("review").hidden = false;
   $("card-pane").hidden = true; $("card-done").hidden = true; $("card-err").textContent = "";
@@ -601,8 +602,11 @@ function showReview(deck) {
   loadMeta().catch(() => {});
   let kept = null;
   try { kept = JSON.parse(sessionStorage.getItem(KEPT(deck)) || "null"); } catch (e) { /* no storage */ }
-  if (!kept) return nextCard();
-  const r = Object.assign(S.review, kept, { at: performance.now() - FAST_MS });  // seen before: an answer now is not a fast one
+  if (!kept || !kept.card) return nextCard();
+  const r = S.review, now = await api("GET", `/api/cards/${kept.card.id}`).catch(() => null);
+  if (S.review !== r) return;
+  if (now && now.fen !== kept.card.fen) return nextCard();
+  Object.assign(r, kept, { at: performance.now() - FAST_MS });  // seen before: an answer now is not a fast one
   renderReview();
   for (const t of r.tries) if (t.cpl === undefined) cardLoss(r, t);  // asked when the page went: asked again
 }

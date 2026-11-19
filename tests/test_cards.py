@@ -325,6 +325,10 @@ def test_the_cards_over_http():
         _, drawn = s.call("GET", "/api/cards/blunder")
         cid = drawn["card"]["id"]
         assert drawn["name"] == "Blunders" and s.call("GET", f"/api/cards/blunder?skip={cid}")[1]["card"]["id"] == cid
+        # what a page asks of a card it kept from before: there, and that position still
+        assert s.call("GET", f"/api/cards/{cid}")[1] == {"fen": FEN} and s.call("GET", "/api/cards/999")[1] == {
+            "fen": None
+        }
         assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "zz"})[0] == 400
         assert s.call("POST", "/api/cards/999/answer", {"move": "g6"})[0] == 400
         assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6", "grade": "soso"})[0] == 400

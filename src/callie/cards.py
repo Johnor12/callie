@@ -250,6 +250,12 @@ class Cards:
             raise CardError(f"no deck {deck!r}")
         return [r for r in self.store.all("SELECT * FROM cards WHERE due <= ?", (now,)) if deck_of(r["cpl"]) == deck]
 
+    def fen(self, card_id: int) -> str | None:
+        """The position of a card as it is now (None: there is no such card): what a page that kept one from
+        earlier tells by whether it is still there, and still as it was."""
+        row = self.store.one("SELECT fen FROM cards WHERE id=?", (card_id,))
+        return row and row["fen"]
+
     def explained(self) -> dict[tuple[str, str], str]:
         """The explanation of each move that has one, by its position (a `Position.key`) and the move."""
         rows = self.store.all("SELECT position, uci, explanation FROM cards WHERE explanation IS NOT NULL")
