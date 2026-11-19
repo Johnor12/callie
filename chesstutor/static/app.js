@@ -600,7 +600,7 @@ async function nextCard() {
   } catch (e) { if (S.review === r) $("card-err").textContent = e.message; }
 }
 // Your move on the card. One made within FAST_MS is sent as an easy one: if it is right, the card is put away
-// and the next one comes without a question.
+// without the question of how hard it was, and stays on screen, like any other, until Next.
 async function answerCard(uci) {
   const r = S.review, c = r.card, m = c.legal[uci];
   if (!m || r.pending) return;
@@ -613,8 +613,8 @@ async function answerCard(uci) {
     const res = await api("POST", `/api/cards/${c.id}/answer`, fast ? { move: uci, grade: "easy" } : { move: uci });
     if (S.review !== r) return;
     Object.assign(r, { pending: null, result: res, active: res.active, fast: fast && res.right });
-    if (res.right) renderReview(); else { tryCard(uci); $("card-next").focus(); }  // a wrong answer is the first of the moves tried
-    if (r.fast) r.timer = setTimeout(nextCard, 900);
+    if (res.right) renderReview(); else tryCard(uci);  // a wrong answer is the first of the moves tried
+    if (!res.right || r.fast) $("card-next").focus();
   } catch (e) { if (S.review === r) { r.pending = null; renderReview(); $("card-err").textContent = e.message; } }
 }
 // A move on a card that was answered wrong: the wrong answer itself, and any made on the position after it, to
@@ -667,8 +667,8 @@ function renderReview() {
     $(`card-${g}`).hidden = !res || !res.right || r.fast;
     $(`card-${g}`).querySelector("small").textContent = res && res.next ? res.next[g] : "";
   }
-  $("card-next").hidden = !res || res.right;
-  $("card-grade").hidden = !res || r.fast;
+  $("card-next").hidden = !res || (res.right && !r.fast);
+  $("card-grade").hidden = !res;
   if (!res) return;
   // One line: your answer (a wrong one with what it lost, once that is known), and the move of the game with what
   // that lost. Under it, the other moves tried after a wrong answer, each with what it would have lost.

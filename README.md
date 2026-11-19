@@ -219,7 +219,7 @@ them, drawn at random from the active ones. Move a piece to answer:
   move you make on it is listed under that line with what it would have lost, and changes nothing of the card.
   Next moves on.
 - **Right**: you say how it was to remember, Hard, Good or Easy, and each button says how long it hides the card
-  for. An answer made within 3 seconds counts as Easy, and the next card comes without the question.
+  for. An answer made within 3 seconds counts as Easy without the question: the card stays up until Next.
 
 A deck with no active card left says so, and, when a card is only minutes away, in how many: the page shows it
 when it is back.
