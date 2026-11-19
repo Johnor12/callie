@@ -219,8 +219,10 @@ them, drawn at random from the active ones, with the opponent's last move marked
   what that lost. The card is hidden for a few minutes and then comes back. The position stays open: any other
   move you make on it is listed under that line with what it would have lost, and changes nothing of the card.
   Next moves on.
-- **Right**: you say how it was to remember, Hard, Good or Easy, and each button says how long it hides the card
-  for. An answer made within 3 seconds counts as Easy without the question: the card stays up until Next.
+- **Right**: your move is shown with what it lost (a move as good as the engine's first choice to within 10
+  centipawns is right too; the first choice is then named, at 0). You say how it was to remember, Hard, Good or
+  Easy, and each button says how long it hides the card for. An answer made within 3 seconds counts as Easy
+  without the question: the card stays up until Next.
 
 The card you are on stays until you move on: load the page again, or leave the deck and come back in the same
 tab, and it is there as you left it, answered or not, with the moves you tried.

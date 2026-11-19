@@ -572,9 +572,9 @@ document.addEventListener("keydown", (ev) => {
 // ---------- review: the cards of a deck, one at a time ----------
 // S.review: the deck (`deck`, `name`, `active`: how many of its cards are active), its card on screen (`card`:
 // null once none is active), when that was shown (`at`), your move on it while the server answers (`pending`),
-// what the server said of it (`result`), and, once that was wrong, the moves made on the position since, the
-// wrong answer first (`tries`: each with its `cpl`, what it lost, once the server has said), and the last of
-// them (`tried`). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
+// what the server said of it (`result`), and the moves made on the position: the answer first, and after a
+// wrong one any others (`tries`: each with its `cpl`, what it lost, once the server has said; `tried` is the
+// last of them). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
 // the same card, as it was, and the next one comes only with Next or a grade.
 const KEPT = (deck) => `chess-tutor.review.${deck}`;
 function keepReview() {
@@ -629,15 +629,15 @@ async function answerCard(uci) {
     const res = await api("POST", `/api/cards/${c.id}/answer`, fast ? { move: uci, grade: "easy" } : { move: uci });
     if (S.review !== r) return;
     Object.assign(r, { pending: null, result: res, active: res.active, fast: fast && res.right });
-    if (res.right) renderReview(); else tryCard(uci);  // a wrong answer is the first of the moves tried
+    tryCard(uci);  // the answer is the first of the moves told what they lost
     if (!res.right || r.fast) $("card-next").focus();
   } catch (e) { if (S.review === r) { r.pending = null; renderReview(); $("card-err").textContent = e.message; } }
 }
-// A move on a card that was answered wrong: the wrong answer itself, and any made on the position after it, to
-// see what each would have lost. The card was put away by the answer: these change nothing of it.
+// A move on a card that was answered, to see what it lost: the answer itself, right or wrong, and after a wrong
+// one any move made on the position since. The card was put away by the answer: these change nothing of it.
 function tryCard(uci) {
   const r = S.review;
-  if (!r.result || r.result.right) return;
+  if (!r.result) return;
   let t = r.tries.find((t) => t.uci === uci);
   if (!t) r.tries.push(t = { uci, san: r.card.legal[uci].san });
   r.tried = uci; S.sel = null; S.promo = null;
@@ -678,7 +678,7 @@ function renderReview() {
   if (!c) return;
   renderBoard();
   $("card-result").hidden = !res;
-  $("card-tries").hidden = r.tries.length < 2;
+  $("card-tries").hidden = true;
   $("card-why").hidden = !res || !res.explanation; $("card-why").textContent = res && res.explanation || "";
   for (const g of GRADES) {  // how it was to remember, each with how long it hides the card for
     $(`card-${g}`).hidden = !res || !res.right || r.fast;
@@ -687,13 +687,16 @@ function renderReview() {
   $("card-next").hidden = !res || (res.right && !r.fast);
   $("card-grade").hidden = !res;
   if (!res) return;
-  // One line: your answer (a wrong one with what it lost, once that is known), and the move of the game with what
-  // that lost. Under it, the other moves tried after a wrong answer, each with what it would have lost.
-  const p = res.played, lost = (cpl) => cpl === undefined ? "…" : cpl ? `−${cpl}` : "0";
+  // One line: your answer with what it lost, once that is known (and that it is the engine's first choice, when
+  // it is), and the move of the game with what that lost. Under it: the engine's first choice, after a right
+  // answer that was another move; the other moves tried after a wrong answer, each with what it would have lost.
+  const p = res.played, mine = r.tries[0] || {}, best = res.best.uci === res.move.uci, lost = (cpl) => cpl === undefined ? "…" : cpl ? `−${cpl}` : "0";
   $("card-mine").className = res.right ? "right" : "wrong";
-  $("card-mine").textContent = res.right ? `✓ ${res.move.san}` : `✗ ${res.move.san}` + (r.tries[0].cpl === undefined ? "" : ` ${lost(r.tries[0].cpl)} cp`);
+  $("card-mine").textContent = `${res.right ? "✓" : "✗"} ${res.move.san}` + (mine.cpl === undefined ? "" : ` ${lost(mine.cpl)} cp`) + (best ? " · best" : "");
   $("card-played").innerHTML = `you played <b>${esc(p.san)}${GLYPH[p.deck] || ""}</b> −${p.cpl} cp`;
-  $("card-tries").innerHTML = r.tries.slice(1).map((t) => `<span${t.uci === r.tried ? ' class="on"' : ""}><b>${esc(t.san)}</b> ${lost(t.cpl)}</span>`).join("");
+  const under = r.tries.slice(1).map((t) => `<span${t.uci === r.tried ? ' class="on"' : ""}><b>${esc(t.san)}</b> ${lost(t.cpl)}</span>`);
+  if (res.right && !best) under.unshift(`<span>best <b>${esc(res.best.san)}</b> 0</span>`);
+  $("card-tries").innerHTML = under.join(""); $("card-tries").hidden = !under.length;
 }
 
 // ---------- Claude ----------
