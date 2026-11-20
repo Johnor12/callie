@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   cpl INTEGER NOT NULL,                 -- what it lost there, in centipawns: which deck the card is in
   lines TEXT NOT NULL,                  -- JSON: the engine's lines in the position, as in evals
   erred_at REAL NOT NULL,               -- when you last played it
-  state TEXT NOT NULL DEFAULT 'new',    -- where it is in its schedule (cards.py): 'new', 'learning', 'review', 'relearning'
+  state TEXT NOT NULL DEFAULT 'new',    -- where it is in its schedule (cards.py): 'new', 'learning', 'review', 'relearning';
+                                        -- or 'removed': taken out of its deck by you, and kept so that it is not made again
   steps INTEGER NOT NULL DEFAULT 0,     -- while it is being learned: the steps it has yet to pass
   interval INTEGER NOT NULL DEFAULT 0,  -- once learned: the days between two reviews of it
   ease REAL NOT NULL DEFAULT 2.5,       -- what a good answer multiplies the interval by

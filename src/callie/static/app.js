@@ -583,7 +583,7 @@ document.addEventListener("keydown", (ev) => {
 // wrong one any others (`tries`: each with its `cpl`, what it lost, once the server has said; `tried` is the
 // last of them). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
 // the same card, as it was, and the next one comes only with Next or a grade. Unless the card is no longer
-// there (its game was deleted) or no longer that position: then the page is on the next one.
+// there (its game was deleted, or the card was) or no longer that position: then the page is on the next one.
 const KEPT = (deck) => `callie.review.${deck}`;
 function keepReview() {
   const r = S.review;
@@ -678,6 +678,17 @@ async function gradeCard(grade) {
 }
 for (const g of GRADES) $(`card-${g}`).onclick = () => gradeCard(g);
 $("card-next").onclick = nextCard;
+// A card that is not one to study (a move made for want of time, say) is taken out of its deck, and the next one comes.
+$("card-delete").onclick = async () => {
+  const r = S.review;
+  if (!r || !r.card || !confirm("Delete this card?")) return;
+  $("card-delete").disabled = true;
+  try {
+    await api("POST", `/api/cards/${r.card.id}/delete`);
+    if (S.review === r) await nextCard();
+  } catch (e) { if (S.review === r) $("card-err").textContent = e.message; }
+  $("card-delete").disabled = false;
+};
 function renderReview() {
   const r = S.review, c = r.card, res = r.result;
   $("card-pane").hidden = !c; $("card-done").hidden = !!c;
@@ -697,6 +708,7 @@ function renderReview() {
   }
   $("card-next").hidden = !res || (res.right && !r.fast);
   $("card-grade").hidden = !res;
+  $("card-delete").hidden = !res;  // once the answer has said which move of yours the card is about
   if (!res) return;
   // One line: your answer with what it lost, once that is known (and that it is the engine's first choice, when
   // it is), and the move of the game with what that lost. Under it: the engine's first choice, after a right

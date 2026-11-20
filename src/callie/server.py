@@ -95,7 +95,7 @@ def _routes(svc: Service, tutor: Tutor):
         ("POST", rf"/api/games/{_ID}/pause", lambda m, b, q: svc.pause(m[1], bool(b.get("paused", True)))),
         ("POST", rf"/api/games/{_ID}/delete", lambda m, b, q: svc.delete(m[1])),
         # the cards of your errors: an active one of a deck, whether one a page kept is still there, your move
-        # on one, and what a move on it loses
+        # on one, what a move on it loses, and one taken out of its deck
         ("GET", r"/api/cards", lambda m, b, q: svc.cards.decks()),
         (
             "GET",
@@ -109,6 +109,7 @@ def _routes(svc: Service, tutor: Tutor):
             lambda m, b, q: svc.cards.answer(int(m[1]), b.get("move", ""), b.get("grade")),
         ),
         ("GET", r"/api/cards/(\d+)/loss", lambda m, b, q: svc.card_loss(int(m[1]), q.get("move", ""))),
+        ("POST", r"/api/cards/(\d+)/delete", lambda m, b, q: svc.cards.remove(int(m[1])) or ok),
         # Claude: nothing starts unless one of these is called
         ("POST", rf"/api/games/{_ID}/claude/analyse", lambda m, b, q: tutor.analyse(m[1], *_size(b))),
         ("POST", rf"/api/games/{_ID}/claude/say", lambda m, b, q: tutor.say(m[1], str(b.get("text", "")), *_size(b))),

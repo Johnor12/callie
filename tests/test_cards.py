@@ -251,6 +251,55 @@ def test_a_card_is_dropped_with_its_game():
     assert c.explained() == {(again["position"], "g8f6"): "why not"}
 
 
+def test_a_card_that_is_removed_stays_out_of_its_deck():
+    c = scratch()
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, game="aa11")
+    c.note(FEN, "a7a6", "a6", 120, LINES, NOON - 60, game="aa11")
+    cid = c.draw("blunder", now=NOON)["card"]["id"]
+    c.answer(cid, "Nh6", now=NOON)  # wrong: in a step, a minute away
+    c.remove(cid)
+    assert [(d["cards"], d["active"]) for d in c.decks(NOON + DAY)] == [(0, 0), (1, 1), (0, 0)]
+    assert c.draw("blunder", now=NOON + 30) == {
+        "deck": "blunder",
+        "name": "Blunders",
+        "active": 0,
+        "card": None,
+        "wait": None,
+    }
+    assert c.draw("blunder", now=NOON + DAY)["card"] is None and c.fen(cid) is None
+    assert c.unexplained()["uci"] == "a7a6"  # the latest played is the one removed: nothing is written for it
+    for gone in (
+        lambda: c.answer(cid, "g6"),
+        lambda: c.lost(cid, "g6", lambda fen, uci: 0),
+        lambda: c.remove(cid),
+        lambda: c.remove(999),
+    ):
+        try:
+            gone()
+            raise AssertionError("a card that is not there was found")
+        except CardError:
+            pass
+    c.explain(c.store.one("SELECT * FROM cards WHERE id=?", (cid,)), "why")  # one being written as it went: kept
+    assert list(c.explained().values()) == ["why"]
+    # its game tells of it again (a restart does), and so does an older one: it stays out
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, game="aa11")
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON - DAY, game="bb22")
+    assert c.fen(cid) is None
+    # its game is deleted and the older one has the move too: that game's now, and out still
+    gone = c.drop("aa11")
+    assert sorted(r["uci"] for r in gone) == ["a7a6", "g8f6"]
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON - DAY, game="bb22")
+    c.resume(next(r for r in gone if r["uci"] == "g8f6"))
+    assert c.store.one("SELECT game_id, state FROM cards") == {"game_id": "bb22", "state": "removed"}
+    assert [d["cards"] for d in c.decks(NOON)] == [0, 0, 0]
+    # played again in a later game: a new card
+    c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON + DAY, game="cc33")
+    assert [(d["cards"], d["active"]) for d in c.decks(NOON + DAY)] == [(1, 1), (0, 0), (0, 0)]
+    again = c.store.one("SELECT game_id, state, steps, explanation FROM cards")
+    assert again == {"game_id": "cc33", "state": "new", "steps": 0, "explanation": "why"}
+    assert c.answer(c.draw("blunder", now=NOON + DAY)["card"]["id"], "g6", now=NOON + DAY)["next"]["good"] == "10m"
+
+
 def test_cards_from_before_they_had_a_state():
     home = scratch_config().home
     store = Store(home / "old.db")
@@ -287,18 +336,21 @@ def test_a_game_makes_cards_and_the_page_reviews_them():
         svc._cards_on_file()  # what a restart does: the same games make no more cards and none new again
         assert svc.store.all("SELECT * FROM cards") == before
         assert before and {c["game_id"] for c in before} == {g["id"]}
-        # the same game on file once more, played the day before: the cards stay the later game's
-        svc.store.add_game({**svc.store.game(g["id"]), "id": "older"})
-        svc.store.run(
-            "INSERT INTO moves (game_id, ply, uci, san, fen, source, played_at, clock_ms) "
-            "SELECT 'older', ply, uci, san, fen, source, played_at - 86400, clock_ms FROM moves WHERE game_id=?",
-            (g["id"],),
-        )
-        svc.store.run(
-            "INSERT INTO evals (game_id, ply, fen, depth, value, cp, mate, lines) "
-            "SELECT 'older', ply, fen, depth, value, cp, mate, lines FROM evals WHERE game_id=?",
-            (g["id"],),
-        )
+
+        def the_day_before(game_id, as_id):  # the same game on file once more
+            svc.store.add_game({**svc.store.game(game_id), "id": as_id})
+            svc.store.run(
+                "INSERT INTO moves (game_id, ply, uci, san, fen, source, played_at, clock_ms) "
+                "SELECT ?, ply, uci, san, fen, source, played_at - 86400, clock_ms FROM moves WHERE game_id=?",
+                (as_id, game_id),
+            )
+            svc.store.run(
+                "INSERT INTO evals (game_id, ply, fen, depth, value, cp, mate, lines) "
+                "SELECT ?, ply, fen, depth, value, cp, mate, lines FROM evals WHERE game_id=?",
+                (as_id, game_id),
+            )
+
+        the_day_before(g["id"], "older")  # the cards stay the later game's
         svc._cards_on_file()
         assert svc.store.all("SELECT * FROM cards") == before
         # a game's cards are deleted with it; those the older game has too are its cards now, where they stood
@@ -310,7 +362,15 @@ def test_a_game_makes_cards_and_the_page_reviews_them():
         was = next(c for c in before if c["uci"] == "g8f6")
         assert (nf6["state"], nf6["interval"], nf6["explanation"]) == ("review", 4, "why")
         assert nf6["erred_at"] == was["erred_at"] - 86400 and nf6["due"] == was["due"]
+        # a card that was removed is not made again by the games it is of, and goes on to an older game as that
+        the_day_before("older", "oldest")
+        svc.cards.remove(nf6["id"])
+        svc._cards_on_file()
+        assert svc.store.all("SELECT * FROM cards") == [nf6 | {"state": "removed"}]
+        assert svc.cards.draw("blunder")["card"] is None
         svc.delete("older")
+        assert [(c["game_id"], c["state"]) for c in svc.store.all("SELECT * FROM cards")] == [("oldest", "removed")]
+        svc.delete("oldest")
         assert svc.store.all("SELECT * FROM cards") == []
     finally:
         done(svc)
@@ -357,7 +417,14 @@ def test_the_cards_over_http():
             "card": None,
             "wait": None,
         }
-        assert b'id="card-board"' in s.call("GET", "/")[1]
+        # taken out of its deck: gone for the page, and not to be taken out twice
+        assert s.call("POST", f"/api/cards/{cid}/delete") == (200, {"ok": True})
+        assert s.call("GET", f"/api/cards/{cid}")[1] == {"fen": None}
+        assert [d["cards"] for d in s.call("GET", "/api/cards")[1]] == [0, 0, 0]
+        assert s.call("POST", f"/api/cards/{cid}/delete")[0] == 400
+        assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6"})[0] == 400
+        page = s.call("GET", "/")[1]
+        assert b'id="card-board"' in page and b'id="card-delete"' in page
     finally:
         s.close()
 

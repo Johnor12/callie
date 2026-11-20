@@ -4,6 +4,10 @@ Three decks, by what the move lost. A card is one position with one move played 
 position in another game makes no second card, it makes the first a new card again, and a card of that game: a
 card is deleted with the game its move was last played in.
 
+A card can be removed by hand (the error is not one to study: a move made for want of time, say). It is out of
+its deck for good, but its row stays, in the state "removed": that is what keeps the game it is of from making
+it again. The same move played in that position in a later game does make it a card again.
+
 When a card is shown is Anki's scheduling, with Anki's default settings: the rules of its scheduler
 (https://github.com/ankitects/anki, rslib/src/scheduler/states, read at commit 0302650) written again here, not
 its code. A wrong answer is Anki's "Again"; a right one is rated Hard, Good or Easy.
@@ -205,7 +209,7 @@ class Cards:
         with self.store.lock:
             have = self.store.one(
                 "SELECT id, erred_at, prev, game_id FROM cards WHERE position=? AND uci=?", (position, uci)
-            )
+            )  # one that was removed too: of the game it was removed in, it stays so
             if have is None:
                 self.store.run(
                     "INSERT INTO cards (position, uci, san, fen, prev, cpl, lines, erred_at, due, game_id) "
@@ -237,7 +241,7 @@ class Cards:
 
     def resume(self, card: dict) -> None:
         """A card that was dropped and has been made again, of another game with the same move in the same
-        position: it stands where it stood in its schedule, and keeps its explanation."""
+        position: it stands where it stood in its schedule (removed, if it was), and keeps its explanation."""
         self.store.run(
             "UPDATE cards SET state=?, steps=?, interval=?, ease=?, due=?, reviewed_at=?, explanation=? "
             "WHERE position=? AND uci=?",
@@ -245,15 +249,24 @@ class Cards:
              card["position"], card["uci"]),
         )  # fmt: skip
 
+    def remove(self, card_id: int) -> None:
+        """Take a card out of its deck for good: it is not one to study. Its game does not make it again; the
+        same move in that position in a later game does."""
+        with self.store.lock:
+            if self.fen(card_id) is None:
+                raise CardError(f"no card {card_id}")
+            self.store.run("UPDATE cards SET state='removed' WHERE id=?", (card_id,))
+
     def _active(self, deck: str, now: float) -> list[dict]:
         if deck not in [key for key, _, _ in DECKS]:
             raise CardError(f"no deck {deck!r}")
-        return [r for r in self.store.all("SELECT * FROM cards WHERE due <= ?", (now,)) if deck_of(r["cpl"]) == deck]
+        rows = self.store.all("SELECT * FROM cards WHERE due <= ? AND state != 'removed'", (now,))
+        return [r for r in rows if deck_of(r["cpl"]) == deck]
 
     def fen(self, card_id: int) -> str | None:
-        """The position of a card as it is now (None: there is no such card): what a page that kept one from
-        earlier tells by whether it is still there, and still as it was."""
-        row = self.store.one("SELECT fen FROM cards WHERE id=?", (card_id,))
+        """The position of a card as it is now (None: there is no such card, or it was removed): what a page
+        that kept one from earlier tells by whether it is still there, and still as it was."""
+        row = self.store.one("SELECT fen FROM cards WHERE id=? AND state != 'removed'", (card_id,))
         return row and row["fen"]
 
     def explained(self) -> dict[tuple[str, str], str]:
@@ -262,8 +275,11 @@ class Cards:
         return {(r["position"], r["uci"]): r["explanation"] for r in rows}
 
     def unexplained(self, skip: tuple[int, ...] = ()) -> dict | None:
-        """The card whose explanation is to be written next: of those without one, the latest played."""
-        rows = self.store.all("SELECT * FROM cards WHERE explanation IS NULL ORDER BY erred_at DESC")
+        """The card whose explanation is to be written next: of those without one, the latest played. None
+        is written for a card that was removed."""
+        rows = self.store.all(
+            "SELECT * FROM cards WHERE explanation IS NULL AND state != 'removed' ORDER BY erred_at DESC"
+        )
         return next((r for r in rows if r["id"] not in skip), None)
 
     def explain(self, card: dict, text: str) -> None:
@@ -277,7 +293,7 @@ class Cards:
     def decks(self, now: float | None = None) -> list[dict]:
         """Each deck with how many cards it holds and how many of them are active."""
         now = time.time() if now is None else now
-        rows = self.store.all("SELECT cpl, due FROM cards")
+        rows = self.store.all("SELECT cpl, due FROM cards WHERE state != 'removed'")
         return [
             {
                 "key": key,
@@ -316,7 +332,7 @@ class Cards:
 
     def _move(self, card_id: int, move: str) -> tuple[dict, Position, str]:
         """A card, its position, and a move in it (as UCI, given as that or as SAN)."""
-        row = self.store.one("SELECT * FROM cards WHERE id=?", (card_id,))
+        row = self.store.one("SELECT * FROM cards WHERE id=? AND state != 'removed'", (card_id,))
         if row is None:
             raise CardError(f"no card {card_id}")
         pos = Position.from_fen(row["fen"])
