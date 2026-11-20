@@ -610,7 +610,7 @@ async function showReview(deck) {
   renderReview();
   for (const t of r.tries) if (t.cpl === undefined) cardLoss(r, t);  // asked when the page went: asked again
 }
-function leaveReview() { if (S.review) clearTimeout(S.review.timer); S.review = null; }
+function leaveReview() { if (S.review) clearTimeout(S.review.timer); S.review = null; $("card-delete").hidden = true; }
 async function nextCard() {
   const r = S.review;
   if (!r) return;
@@ -697,6 +697,7 @@ function renderReview() {
   // The deck and how many of its cards are active go in the bar at the top: beside the board is only what came of your answer.
   $("crumb").innerHTML = "Review" + (r.name ? ` · <span id="card-deck" data-testid="card-deck">${esc(r.name)}</span> <b id="card-count" data-testid="card-count" title="Active cards in this deck">${r.active}</b>` : "");
   keepReview();
+  $("card-delete").hidden = !c;  // in the bar at the top, answered or not
   if (!c) return;
   renderBoard();
   $("card-result").hidden = !res;
@@ -708,7 +709,6 @@ function renderReview() {
   }
   $("card-next").hidden = !res || (res.right && !r.fast);
   $("card-grade").hidden = !res;
-  $("card-delete").hidden = !res;  // once the answer has said which move of yours the card is about
   if (!res) return;
   // One line: your answer with what it lost, once that is known (and that it is the engine's first choice, when
   // it is), and the move of the game with what that lost. Under it: the engine's first choice, after a right

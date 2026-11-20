@@ -233,10 +233,10 @@ them, drawn at random from the active ones, with the opponent's last move marked
 The card you are on stays until you move on: load the page again, or leave the deck and come back in the same
 tab, and it is there as you left it, answered or not, with the moves you tried.
 
-Delete card, under the answer, takes the card out of its deck for good: for an error that is not one to study, a
-move made for want of time, say. The game it is of does not make it a card again (not at a restart, and not on
-another machine the history is imported on); the same move played in that position in a later game does. What
-was written to explain the move stays in the game's move list.
+Delete card, at the right of the bar at the top, takes the card on screen out of its deck for good, answered or
+not: for an error that is not one to study, a move made for want of time, say. The game it is of does not make it
+a card again (not at a restart, and not on another machine the history is imported on); the same move played in
+that position in a later game does. What was written to explain the move stays in the game's move list.
 
 A deck with no active card left says so, and, when a card is only minutes away, in how many: the page shows it
 when it is back.
