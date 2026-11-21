@@ -118,6 +118,7 @@ def test_the_service_keeps_score():
             and row["rating"]["before"] == 1500
             and row["rating"]["change"] == first["untimed"]["elo"] - 1500
         )
+        assert svc.state(lost)["rating"] == row["rating"]  # the game's own page is told too, as soon as it is over
         # a game on the clock is rated apart; one against full strength and one that is not over are not rated
         timed = svc.create("w", 1320, None, "10+3")["id"]
         for mine in ("f3", "g4"):
@@ -140,6 +141,7 @@ def test_the_service_keeps_score():
             and by_id[timed]["format"] == "rapid"
             and by_id[timed]["before"] == 1500
         )
+        assert svc.state(full)["rating"] is None and svc.state(live)["rating"] is None
         # resigning the live one counts it; taking the move back reopens it, and it no longer does
         svc.resign(live)
         assert svc.rating()["untimed"]["games"] == 2 and svc.rating()["untimed"]["elo"] < first["untimed"]["elo"]

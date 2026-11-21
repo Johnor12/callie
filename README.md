@@ -21,7 +21,8 @@ installed: a model with an environment of its own, beside the server.
   - the advantage bar beside the board and a graph of the game's swings above the move list;
   - the move list, with the centipawns each move lost and its grade (`?!` inaccuracy, `?` mistake, `??` blunder);
     a move of yours in a yellow box has an explanation of what was wrong with it, shown by a click on it;
-    once the game is over, what the engine preferred to the move on screen and the line it expected;
+    once the game is over, what the engine preferred to the move on screen and the line it expected, and
+    with the result what the game did to your rating and where that leaves it;
   - your clock, with a pause button, and Allie's when it is the opponent;
   - a Claude pane: a box to type to Claude, and, from your first message, a real Claude Code session in a
     terminal above it.
@@ -143,7 +144,8 @@ settles, to about 13 points for a win or loss against an equal, and no further, 
 as you improve. While it is still unsure (a deviation above 110, about the first ten games) it is shown with a
 question mark. The home page shows each format's rating, each game's gain or loss beside its result, and starts
 the opponent's strength at your rating for the clock chosen (or, with no games at that clock yet, at the rating
-from the format you have played most).
+from the format you have played most). A game's own page shows its gain or loss too, with the rating it leaves
+you at, as soon as the game is over.
 
 Stockfish's ratings are measured against Allie at 10+3, and Allie itself plays an untimed game as people play
 classical ones, so across formats the numbers are neighbours rather than the same thing; within a format they

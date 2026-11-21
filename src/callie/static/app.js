@@ -167,6 +167,7 @@ function outcome(g) {  // [label, class] of a game for you
 }
 const strength = (g) => g.opponent;
 const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n);
+const eloChange = (r) => `<span class="delta ${r.change > 0 ? "up" : r.change < 0 ? "down" : ""}" data-testid="game-elo">${signed(r.change)}</span>`;
 // Your rating in a time format; where you have none yet, the one from the format you have played most.
 function yourElo(format) {
   const most = Object.values(S.rating).sort((a, b) => b.games - a.games)[0];
@@ -191,7 +192,7 @@ function renderGames(games) {
       <div class="g-main"><div class="g-title">You (${g.user_color === "w" ? "White" : "Black"}) vs ${esc(strength(g))}</div>
       <div class="g-sub">${esc(g.opening.name)} · ${Math.ceil(g.plies / 2)} moves · ${g.time_control === "untimed" ? "untimed" : esc(g.time_control)}</div>
       <div class="g-sub">${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</div></div>
-      <div class="g-end"><span class="tag ${cls}">${esc(label)}</span>${g.rating ? `<span class="delta ${g.rating.change > 0 ? "up" : g.rating.change < 0 ? "down" : ""}" data-testid="game-elo">${signed(g.rating.change)}</span>` : ""}</div>
+      <div class="g-end"><span class="tag ${cls}">${esc(label)}</span>${g.rating ? eloChange(g.rating) : ""}</div>
       <button class="quiet" data-del="${g.id}" title="Delete this game" data-testid="game-delete">✕</button></li>`;
   }).join("");
 }
@@ -276,7 +277,9 @@ function render(scroll) {
   renderPlayers(); renderBoard(); renderEval(); renderGraph(); renderMoves(scroll); renderInsight();
   const [label] = outcome(g);
   $("result").hidden = g.status !== "finished";
-  if (g.status === "finished") $("result").innerHTML = `${esc(label)} <a href="#/">New game</a>`;
+  // With the result, what it did to your rating in the game's format, and where that leaves it.
+  const elo = g.rating ? `<span class="rated" title="Your ${g.rating.format} Elo">${eloChange(g.rating)}<span class="now" data-testid="result-elo-after">${g.rating.after}</span></span>` : "";
+  if (g.status === "finished") $("result").innerHTML = `<span>${esc(label)}</span>${elo}<a href="#/">New game</a>`;
   $("act-resign").disabled = g.status !== "active";
   $("act-takeback").disabled = !g.moves.some((m) => m.source === "user") || g.reason === "time";
   const n = g.moves.length;

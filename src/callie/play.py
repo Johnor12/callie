@@ -320,6 +320,10 @@ class Service:
                 loading=self.replies.get(game_id, {}).get("loading", False),
                 trouble=trouble[1] if trouble and row["status"] == "active" and not users_turn else None,
                 acpl=acpl,
+                # what the game did to your rating, as in `games`: there once it is over, if it counts
+                rating=rating.history(self.store.rated_games())[1].get(game_id)
+                if row["status"] == "finished"
+                else None,
                 pgn=self._pgn(row, moves),
                 clock=None
                 if row["clock_ms"] is None
