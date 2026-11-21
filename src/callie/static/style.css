@@ -51,7 +51,7 @@ textarea { resize: none; width: 100%; }
 .g-main { flex: 1; min-width: 0; }
 .g-title { font-weight: 600; }
 .g-sub { color: var(--dim); font-size: 13px; }
-.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--panel2); border: 1px solid var(--line); }
+.tag { display: inline-block; white-space: nowrap; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--panel2); border: 1px solid var(--line); }
 .tag.won { color: var(--good); } .tag.lost { color: var(--bad); } .tag.live { color: var(--accent); }
 .g-end { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right; }
 .delta { font-size: 13px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }

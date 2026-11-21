@@ -159,11 +159,11 @@ function thumb(fen, flipped) {
   }
   return `<div class="thumb">${html}</div>`;
 }
-function outcome(g) {  // [label, class] of a game for you
-  if (g.status !== "finished") return ["In progress", "live"];
-  if (g.result === "1/2-1/2") return [`Draw · ${g.reason}`, ""];
-  const won = (g.result === "1-0") === (g.user_color === "w");
-  return [`${won ? "Won" : "Lost"} · ${g.reason === "time" ? "on time" : g.reason}`, won ? "won" : "lost"];
+function outcome(g) {  // [label, class, the label without how it ended] of a game for you
+  if (g.status !== "finished") return ["In progress", "live", "Live"];
+  if (g.result === "1/2-1/2") return [`Draw · ${g.reason}`, "", "Draw"];
+  const won = (g.result === "1-0") === (g.user_color === "w"), word = won ? "Won" : "Lost";
+  return [`${word} · ${g.reason === "time" ? "on time" : g.reason}`, won ? "won" : "lost", word];
 }
 const strength = (g) => g.opponent;
 const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n);
@@ -187,12 +187,12 @@ $("decks").onclick = (ev) => { const b = ev.target.closest("button"); if (b && !
 function renderGames(games) {
   $("game-empty").hidden = games.length > 0;
   $("game-list").innerHTML = games.map((g) => {
-    const [label, cls] = outcome(g), when = new Date(g.updated_at * 1000);
+    const [label, cls, short] = outcome(g), when = new Date(g.updated_at * 1000);
     return `<li data-id="${g.id}" data-testid="game-row">${thumb(g.fen, g.user_color === "b")}
       <div class="g-main"><div class="g-title">You (${g.user_color === "w" ? "White" : "Black"}) vs ${esc(strength(g))}</div>
       <div class="g-sub">${esc(g.opening.name)} · ${Math.ceil(g.plies / 2)} moves · ${g.time_control === "untimed" ? "untimed" : esc(g.time_control)}</div>
       <div class="g-sub">${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</div></div>
-      <div class="g-end"><span class="tag ${cls}">${esc(label)}</span>${g.rating ? eloChange(g.rating) : ""}</div>
+      <div class="g-end"><span class="tag ${cls}" title="${esc(label)}" data-testid="game-outcome">${short}</span>${g.rating ? eloChange(g.rating) : ""}</div>
       <button class="quiet" data-del="${g.id}" title="Delete this game" data-testid="game-delete">✕</button></li>`;
   }).join("");
 }
