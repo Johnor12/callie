@@ -6,7 +6,8 @@ the tutor's own questions; `opp` plays the opponent at its chosen strength; `qui
 background (an explanation being written for a card), on one thread at the lowest priority. The opponent can instead be Allie
 (`allie.py`), a model of human play in a process of its own, which then has a clock like yours, and which
 resigns and offers draws as people do. Whoever plays,
-the analysis is Stockfish's. Every change to a game bumps its version, which is what a page waiting on
+the analysis is Stockfish's. A move can be made ahead, while the opponent is on its own (`premove`): it is played
+the moment the opponent has moved. Every change to a game bumps its version, which is what a page waiting on
 `state(since=...)` wakes up on.
 """
 
@@ -98,6 +99,9 @@ class Service:
         self.looked: dict[str, float] = {}  # when a page last looked at a game that has a clock
         self.replies: dict[str, dict] = {}  # the opponent's move in the making: what its clock was charged for it
         self.trouble: dict[str, tuple[float, str]] = {}  # the opponent could not move: when, and why
+        self.premoves: dict[
+            str, str
+        ] = {}  # the move you made ahead in a game, to be played when the opponent has moved
         self.queue: deque[tuple[str, int]] = deque()
         self.queued: set[tuple[str, int]] = set()
         self.work = threading.Event()
@@ -294,6 +298,7 @@ class Service:
             self._keep_going(row, moves, evals, game)
             pos = game.position
             users_turn = row["status"] == "active" and pos.turn == row["user_color"]
+            theirs = row["status"] == "active" and not users_turn
             annotated = self._annotated(row, moves, evals, game)
             if row["status"] == "active":
                 for m in annotated:  # what the engine would have played is for after the game (and for Claude)
@@ -314,6 +319,9 @@ class Service:
                 turn=pos.turn,
                 check=pos.in_check(),
                 legal=self._legal(row, game) if users_turn else {},
+                # while the opponent is to move: the moves that can be made ahead, and the one that was
+                premoves=pos.premoves() if theirs else [],
+                premove=self.premoves.get(game_id) if theirs else None,
                 thinking=game_id in self.thinking,
                 draw_offer=users_turn and row["draw_offer"] == len(moves),  # the opponent's, yours to answer
                 # Allie's model is being read into memory before it can think (about a minute, when it was not loaded)
@@ -457,15 +465,63 @@ class Service:
                 uci = game.position.parse(str(text))
             except ValueError:
                 raise GameError(f"{text!r} is not a legal move here") from None
-            left = None
-            if row["clock_ms"] is not None:
-                self.clocks.pop(game_id, None)
-                left = row["clock_ms"] + row["increment_ms"]
-                self.store.run("UPDATE games SET clock_ms=?, paused=0 WHERE id=?", (left, game_id))
-            if row["draw_offer"] is not None:
-                self.store.run("UPDATE games SET draw_offer=NULL WHERE id=?", (game_id,))  # playing on declines it
-            self._apply(row, moves, game, uci, "user", left)
+            if row["paused"]:
+                self.store.run("UPDATE games SET paused=0 WHERE id=?", (game_id,))  # a move starts the clocks again
+            self._mine(row, moves, game, uci)
         return self.state(game_id)
+
+    def _mine(self, row: dict, moves: list[dict], game: Game, uci: str) -> None:
+        """Play a move of yours that is known to be legal: your clock, charged already for the time it took,
+        gets its increment. Called with the lock held."""
+        left = None
+        if row["clock_ms"] is not None:
+            self.clocks.pop(row["id"], None)
+            left = row["clock_ms"] + row["increment_ms"]
+            self.store.run("UPDATE games SET clock_ms=? WHERE id=?", (left, row["id"]))
+        if row["draw_offer"] is not None:
+            self.store.run("UPDATE games SET draw_offer=NULL WHERE id=?", (row["id"],))  # playing on declines it
+        self._apply(row, moves, game, uci, "user", left)
+
+    def premove(self, game_id: str, text: str | None) -> dict:
+        """Make your next move ahead, while the opponent is on its own (UCI: "e2e4", "e7e8q"): it is played the
+        moment the opponent has moved, at no cost to your clock, if it is legal then, and dropped if it is not.
+        It is dropped too when the opponent offers a draw with its move, which is yours to answer. One at a
+        time: another takes its place, and None takes it back."""
+        with self.lock:
+            row = self._row(game_id)
+            moves = self.store.moves(game_id)
+            game = self._game(row, moves)
+            pos = game.position
+            uci = str(text).strip().lower() if text else None
+            if uci is None:
+                self.premoves.pop(game_id, None)
+            elif row["status"] != "active":
+                raise GameError("the game is over")
+            elif pos.turn == row["user_color"]:
+                # The opponent moved while this was on its way: played now, or dropped, as it would have been.
+                if uci in pos.legal_moves() and row["draw_offer"] != len(moves):
+                    return self.move(game_id, uci)
+            elif uci not in pos.premoves():
+                raise GameError(f"{text!r} is not a move a piece of yours could make from here")
+            else:
+                self.premoves[game_id] = uci
+            self._bump(game_id)
+        return self.state(game_id)
+
+    def _premoved(self, game_id: str) -> None:
+        """The opponent has just moved: play the move you made ahead, if there is one and it can be played (see
+        `premove`). The pause, if the game is paused, stays on. Called with the lock held."""
+        uci = self.premoves.pop(game_id, None)
+        row = self._row(game_id)
+        moves = self.store.moves(game_id)
+        game = self._game(row, moves)
+        if uci is None or row["status"] != "active" or row["draw_offer"] == len(moves):
+            return
+        if uci not in game.position.legal_moves():
+            return
+        self._mine(row, moves, game, uci)
+        if self._row(game_id)["status"] == "active":
+            self._summon(game_id)  # the opponent again, without waiting for a page to ask
 
     # ---------- the clocks ----------
 
@@ -610,6 +666,7 @@ class Service:
             self.clocks.pop(game_id, None)
             self.replies.pop(game_id, None)
             self.trouble.pop(game_id, None)
+            self.premoves.pop(game_id, None)
             self._chess.pop(game_id, None)
             self._bump(game_id)
         return self.state(game_id)
@@ -622,7 +679,7 @@ class Service:
             self.store.delete_game(game_id)
             self._drop_cards(game_id)
             self.epochs[game_id] = self.epochs.get(game_id, 0) + 1
-            for kept in (self._chess, self.clocks, self.looked, self.replies, self.trouble):
+            for kept in (self._chess, self.clocks, self.looked, self.replies, self.trouble, self.premoves):
                 kept.pop(game_id, None)
             self._bump(game_id)
         self.allie.forget(game_id)
@@ -641,12 +698,16 @@ class Service:
             and gid not in self.thinking
             and not waiting
         ):
-            self.thinking.add(gid)
-            epoch = self.epochs.setdefault(gid, 0)
-            threading.Thread(target=self._reply, args=(gid, epoch), name=f"opponent-{gid}", daemon=True).start()
+            self._summon(gid)
         for ply in range(len(moves) + 1):
             if ply not in evals:
                 self._enqueue(gid, ply)
+
+    def _summon(self, game_id: str) -> None:
+        """Set the opponent to work on its move. Called with the lock held."""
+        self.thinking.add(game_id)
+        epoch = self.epochs.setdefault(game_id, 0)
+        threading.Thread(target=self._reply, args=(game_id, epoch), name=f"opponent-{game_id}", daemon=True).start()
 
     def _allie_game(self, row: dict, moves: list[dict]) -> dict:
         """A game as Allie is told it: both ratings, the time control, and each mover's clock after each move.
@@ -789,6 +850,7 @@ class Service:
                     self.thinking.discard(game_id)  # it is your move from here, whatever this thread still does
                     if offer and self._row(game_id)["status"] == "active":
                         self.store.run("UPDATE games SET draw_offer=? WHERE id=?", (len(moves) + 1, game_id))
+                    self._premoved(game_id)
                     return True
             time.sleep(max(0.005, min(left, 0.25)) if running else 0.25)
         return False

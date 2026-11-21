@@ -1,6 +1,7 @@
 "use strict";
 // The page. It knows no chess: the server sends, with every position where it is your move, each legal move and
-// the position it leads to. The page draws boards from FENs and asks the server for everything else.
+// the position it leads to, and while it is the opponent's the moves that can be made ahead. The page draws boards
+// from FENs and asks the server for everything else.
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -23,6 +24,8 @@ const S = {
   drag: null,
   promo: null,     // a pawn move waiting for its piece to be chosen
   pending: null,   // your move, shown before the server has answered
+  ahead: {},       // the moves that can be made ahead of the opponent's (the game's `premoves`), keyed as its `legal` is
+  aheadSent: Promise.resolve(),  // the last of them sent: one request at a time, so they arrive in order
   poll: null,      // AbortController of the wait on the game
   clockAt: 0,      // when the clock in S.game was read
   term: null,
@@ -254,6 +257,7 @@ function setGame(g) {
   if (g.id !== S.gid) return;
   if ($("game-err").textContent.startsWith("Lost touch")) $("game-err").textContent = "";
   S.game = g; S.clockAt = performance.now();
+  S.ahead = Object.fromEntries(g.premoves.map((u) => [u, true]));
   if (S.pending && g.moves.length >= S.pending.ply) S.pending = null;
   if (S.follow || S.view > g.moves.length) S.view = g.moves.length;
   if (S.why !== S.view) hideWhy();
@@ -339,8 +343,11 @@ function shown() {
 }
 const flipped = () => (S.game.user_color === "b") !== S.flip;
 const canMove = () => { const g = S.game; return g && S.view === g.moves.length && !S.pending && g.status === "active" && g.turn === g.user_color; };
+// While the opponent is on its move, yours can be made ahead: the server plays it the moment the opponent has moved.
+const canPremove = () => { const g = S.game; return g && S.view === g.moves.length && !S.pending && g.status === "active" && g.turn !== g.user_color; };
 // The board in use, a game's or the card's under review: what is on it, whose pieces move and where to (`legal`:
-// none when nothing can be moved), the arrow drawn on it, how it is marked, and what a move made on it does.
+// none when nothing can be moved), the arrow drawn on it, how it is marked, the move made ahead on it (`pre`), and
+// what a move made on it does.
 function onBoard() {
   const r = S.review;
   if (r) {
@@ -352,10 +359,10 @@ function onBoard() {
       color: c.turn, flip: c.turn === "b", legal: made ? {} : c.legal, arrow: res && !res.right ? res.best.uci : null,
       mark: res ? (res.right ? "right" : "wrong") : "", send: answerCard };
   }
-  const g = S.game, pos = shown(), m = pos.move;
+  const g = S.game, pos = shown(), m = pos.move, pre = canPremove();
   // The arrow: where the engine would have gone instead of the move shown (the server says only once the game is over).
-  return { el: $("board"), fen: pos.fen, last: pos.last, san: pos.san, color: g.user_color, flip: flipped(), legal: canMove() ? g.legal : {},
-    arrow: m && m.best && m.best.uci !== m.uci ? m.best.uci : null, mark: pos.live ? "" : "review", send: sendMove };
+  return { el: $("board"), fen: pos.fen, last: pos.last, san: pos.san, color: g.user_color, flip: flipped(), legal: canMove() ? g.legal : pre ? S.ahead : {},
+    arrow: m && m.best && m.best.uci !== m.uci ? m.best.uci : null, mark: pos.live ? "" : "review", pre: pre ? g.premove : null, send: pre ? sendPremove : sendMove };
 }
 const targets = (from) => Object.keys(onBoard().legal).filter((u) => u.startsWith(from)).map((u) => u.slice(2, 4));
 
@@ -370,6 +377,7 @@ function renderBoard() {
     const cls = ["sq"];
     if ((file + rank) % 2 === 0) cls.push("dk");
     if (b.last && (b.last.slice(0, 2) === name || b.last.slice(2, 4) === name)) cls.push("last");
+    if (b.pre && (b.pre.slice(0, 2) === name || b.pre.slice(2, 4) === name)) cls.push("pre");
     if (S.sel === name) cls.push("sel");
     if (inCheck === name) cls.push("check");
     if (marks.includes(name)) cls.push("target", p ? "occupied" : "");
@@ -406,6 +414,7 @@ function pickUp(ev) {
   const promo = ev.target.closest("[data-promo]");
   if (promo) return b.send(S.promo.from + S.promo.to + promo.dataset.promo);
   if (S.promo) { S.promo = null; return renderBoard(); }
+  if (b.pre) sendPremove(null);  // a touch of the board takes back the move made ahead (and may start another)
   const sq = squareAt(ev.clientX, ev.clientY);
   if (!sq || ev.button || !Object.keys(b.legal).length) return;
   ev.preventDefault();
@@ -468,6 +477,16 @@ async function sendMove(uci) {
   render();
   try { await api("POST", `/api/games/${g.id}/move`, { move: uci }); }  // the wait on the game brings the new state
   catch (e) { S.pending = null; $("game-err").textContent = e.message; render(); }
+}
+// Your next move, made while the opponent is on its own (null: the one made is taken back). It is marked on the
+// board, where the pieces stay: the server plays it once the opponent has moved, or drops it if it cannot be played.
+function sendPremove(uci) {
+  const id = S.gid;
+  S.game.premove = uci; S.sel = null; S.promo = null;
+  $("game-err").textContent = "";
+  renderBoard();
+  S.aheadSent = S.aheadSent.then(() => api("POST", `/api/games/${id}/premove`, { move: uci }))
+    .catch((e) => { if (S.gid === id && S.game) { S.game.premove = null; $("game-err").textContent = e.message; renderBoard(); } });
 }
 async function act(fn) {
   $("game-err").textContent = "";

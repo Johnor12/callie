@@ -89,6 +89,8 @@ def _routes(svc: Service, tutor: Tutor):
         ),
         ("GET", rf"/api/games/{_ID}", lambda m, b, q: svc.state(m[1], since(q))),
         ("POST", rf"/api/games/{_ID}/move", lambda m, b, q: svc.move(m[1], b.get("move", ""))),
+        # a move made ahead, played when the opponent has moved ({"move": null} takes it back)
+        ("POST", rf"/api/games/{_ID}/premove", lambda m, b, q: svc.premove(m[1], b.get("move"))),
         ("POST", rf"/api/games/{_ID}/resign", lambda m, b, q: svc.resign(m[1])),
         ("POST", rf"/api/games/{_ID}/takeback", lambda m, b, q: svc.takeback(m[1])),
         ("POST", rf"/api/games/{_ID}/draw", lambda m, b, q: svc.draw(m[1], bool(b.get("accept")))),

@@ -319,6 +319,34 @@ class Position:
             self._legal = out
         return self._legal
 
+    def premoves(self) -> list[str]:
+        """Every move the side that is not to move might have once the other has moved: how each of its pieces
+        moves on an empty board, since what stands in the way of one, or on its square, may be gone by then.
+        Castling only with the right to it, which a move cannot give back."""
+        white = self.turn == "b"
+        out = []
+        for frm, p in enumerate(self.board):
+            if p is None or p.isupper() != white:
+                continue
+            kind, f, r = p.upper(), frm & 7, frm >> 3
+            promos: tuple[str, ...] = ("",)
+            if kind == "P":
+                step = 8 if white else -8
+                tos = [frm + step] + [frm + step + df for df in (-1, 1) if 0 <= f + df < 8]
+                if r == (1 if white else 6):
+                    tos.append(frm + 2 * step)
+                elif r == (6 if white else 1):
+                    promos = tuple("qrbn")
+            elif kind == "N":
+                tos = _KNIGHT[frm]
+            elif kind == "K":
+                home, ks, qs = (4, "K", "Q") if white else (60, "k", "q")
+                tos = _KING[frm] + [home + side for right, side in ((ks, 2), (qs, -2)) if right in self.castling]
+            else:
+                tos = [to for d in _SLIDES[kind] for to in _RAYS[frm][d]]
+            out += [square_name(frm) + square_name(to) + promo for to in tos for promo in promos]
+        return out
+
     def push(self, move: str) -> Position:
         """The position after a legal move."""
         if move not in self.legal_moves():

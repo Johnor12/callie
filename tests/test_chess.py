@@ -79,6 +79,15 @@ def test_pinned_piece_and_check_evasion():
     assert Position.from_fen("4k3/8/8/8/8/8/3q4/4K3 w - - 0 1").legal_moves() == ["e1f1", "e1d2"]
 
 
+def test_moves_made_ahead():
+    # The side that is not to move: how its pieces move on an empty board, whatever stands there now.
+    pre = Position.from_fen(START_FEN).premoves()  # Black's, with White to move
+    assert {"e7e5", "e7e6", "e7d6", "g8f6", "g8e7", "f8a3", "d8d1", "e8e7", "e8g8", "e8c8"} <= set(pre)
+    assert not {"e7e4", "e7e8", "e2e4", "g8g6", "a7h6"} & set(pre) and len(pre) == len(set(pre))
+    pre = Position.from_fen("4k3/P7/8/8/8/8/8/4K2R b K - 0 1").premoves()  # White's: a pawn to promote, one castling
+    assert {"a7a8q", "a7a8n", "a7b8r", "e1g1", "h1h8"} <= set(pre) and "e1c1" not in pre and "a7a8" not in pre
+
+
 def test_draws():
     assert Game("8/8/8/8/8/5k2/5p2/5K2 w - - 0 1").outcome() == ("1/2-1/2", "stalemate")
     assert Game("8/8/8/8/8/5k2/8/5KB1 w - - 0 1").outcome() == ("1/2-1/2", "insufficient material")

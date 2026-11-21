@@ -315,7 +315,9 @@ def test_allie_offers_draws():
         assert not s["draw_offer"] and s["status"] == "active" and s["legal"]
         s = svc.move(gid, "Nf3")
         assert not s["draw_offer"]
-        assert watch(svc, gid, lambda s: s["plies"] == 6)["draw_offer"]
+        svc.premove(gid, "b1c3")  # a move made ahead is not played over an offer, which is yours to answer
+        s = watch(svc, gid, lambda s: s["plies"] >= 6)
+        assert s["plies"] == 6 and s["draw_offer"] and s["premove"] is None
         svc.move(gid, "Nc3")  # playing on declines it too
         assert svc.store.game(gid)["draw_offer"] is None
         assert watch(svc, gid, lambda s: s["plies"] == 8)["draw_offer"]

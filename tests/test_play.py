@@ -1,5 +1,6 @@
 """Games through the service, with the real engine (fast settings) and a scripted opponent where the test needs one."""
 
+import threading
 import time
 
 from callie import opponent
@@ -181,6 +182,51 @@ def test_the_clock():
         s = svc.state(gid)
         assert s["status"] == "finished" and s["result"] == "0-1" and s["reason"] == "time" and s["clock"]["ms"] == 0
     finally:
+        done(svc)
+
+
+def test_a_move_made_ahead():
+    go = threading.Event()
+
+    def held(moves):  # the opponent moves when it is told to
+        for m in moves:
+            go.wait(30)
+            go.clear()
+            yield m
+
+    svc = service(script=held(["e7e5", "d7d6", "f8e7"]))
+    try:
+        g = svc.create("w", 1320, None, "10+3")
+        gid = g["id"]
+        assert g["premoves"] == [] and g["premove"] is None  # your move: there is nothing to make ahead
+        s = svc.premove(gid, "e2e4")  # sent as one all the same (the opponent moved on its way): it is played
+        assert s["plies"] == 1 and s["premove"] is None
+        assert {"g1f3", "f1a6", "e1g1"} <= set(s["premoves"]) and s["legal"] == {}
+        try:
+            svc.premove(gid, "g1g5")
+            raise AssertionError("a move no knight makes was taken")
+        except GameError:
+            pass
+        assert svc.premove(gid, "d2d4")["premove"] == "d2d4"
+        assert svc.premove(gid, None)["premove"] is None  # taken back
+        assert svc.premove(gid, "g1f3")["premove"] == "g1f3"
+        go.set()
+        # played with the opponent's move, at no cost to your clock, and the opponent is thinking again
+        s = until(svc, gid, lambda s: s["plies"] >= 2)
+        assert [m["san"] for m in s["moves"]] == ["e4", "e5", "Nf3"] and s["moves"][2]["source"] == "user"
+        assert s["premove"] is None and s["clock"]["ms"] == 606000 and s["turn"] == "b"
+        # one that is not legal when the time comes is dropped: it is your move
+        assert svc.premove(gid, "e1g1")["premove"] == "e1g1"
+        go.set()
+        s = until(svc, gid, lambda s: s["plies"] >= 4)
+        assert s["plies"] == 4 and s["turn"] == "w" and s["premove"] is None and "f1c4" in s["legal"]
+        # a take-back drops it
+        svc.move(gid, "Bc4")
+        assert svc.premove(gid, "e1g1")["premove"] == "e1g1"
+        s = svc.takeback(gid)
+        assert s["plies"] == 4 and gid not in svc.premoves
+    finally:
+        go.set()
         done(svc)
 
 

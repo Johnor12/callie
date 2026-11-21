@@ -18,6 +18,10 @@ installed: a model with an environment of its own, beside the server.
 - **Game page**:
   - the board (drag a piece, or click it and then its square), with back/forward buttons, arrow keys, and a click
     on any move to walk through the game;
+  - premoves: while the opponent is on its move, make yours the same way. It is marked in blue on the board and
+    played the moment the opponent has moved, at no cost to your clock, if it is legal then; if it is not, or the
+    opponent offers a draw with its move, it is dropped and the move is yours to make. Another premove takes its
+    place, and a click anywhere on the board takes it back;
   - the advantage bar beside the board and a graph of the game's swings above the move list;
   - the move list, with the centipawns each move lost and its grade (`?!` inaccuracy, `?` mistake, `??` blunder);
     a move of yours in a yellow box has an explanation of what was wrong with it, shown by a click on it;
@@ -482,7 +486,8 @@ at.
 | `src/callie/static/` | the page: `app.js` (board, clock, review, terminal), `pieces.js` (the pieces, drawn here), `style.css` |
 
 The page holds no chess rules: with each position where it is your move the server sends every legal move and
-the position it leads to. Every action is a plain HTTP call, so the whole thing can be driven with `curl`.
+the position it leads to, and with each where it is the opponent's the moves that can be made ahead (how your
+pieces move on an empty board: the server holds the one you make and plays it itself). Every action is a plain HTTP call, so the whole thing can be driven with `curl`.
 
 ## Tests
 
