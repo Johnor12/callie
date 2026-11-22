@@ -546,21 +546,43 @@ function renderMoves(scroll) {
   const a = g.acpl;
   $("acpl").textContent = a.user === null ? "" : `avg loss ${a.user}` + (a.opponent === null ? "" : ` · opp. ${a.opponent}`);
 }
-$("moves").onclick = (ev) => { const m = ev.target.closest(".mv"); if (m) { setView(+m.dataset.ply); showWhy(+m.dataset.ply); } };
+$("moves").onclick = (ev) => {
+  const m = ev.target.closest(".mv");
+  if (!m) return;
+  setView(+m.dataset.ply);
+  $("board").scrollIntoView({ block: "nearest" });  // on a phone the list is below the board, and the move is to be seen on it
+  showWhy(+m.dataset.ply);
+};
 // Why a move of yours was bad, where that has been written (its box in the list is yellow): beside the move,
-// from a click on it until the board shows another move or something else is clicked.
+// from a click on it until the board shows another move or something else is clicked. Where there is no room
+// beside the move (a phone) it is kept below the board, to be read with the board in sight.
 function showWhy(ply) {
   const m = S.game.moves[ply - 1], el = $("moves").querySelector(`.mv[data-ply="${ply}"]`), tip = $("why");
   if (!m || !m.explanation || !el) return;
   S.why = ply;
   tip.textContent = m.explanation; tip.hidden = false;
-  const box = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, beside = box.right + 8 + w <= innerWidth;
-  const top = beside ? box.top : box.bottom + 6 + h <= innerHeight ? box.bottom + 6 : box.top - 6 - h;
+  const box = el.getBoundingClientRect(), w = tip.offsetWidth, beside = box.right + 8 + w <= innerWidth;
+  const under = $("board").getBoundingClientRect().bottom + 6;
+  const ceil = beside || under < 8 || under > innerHeight - 128 ? 8 : under;  // the highest it may start
+  tip.style.maxHeight = `${innerHeight - 8 - ceil}px`;  // what does not fit is scrolled to
+  const h = tip.offsetHeight;
+  // Under the move if it fits there; else at the foot of the screen, off the board and the lines below it, or above the move.
+  const top = beside ? box.top : box.bottom + 6 + h <= innerHeight ? box.bottom + 6 : ceil > 8 ? innerHeight : box.top - 6 - h;
   tip.style.left = `${beside ? box.right + 8 : Math.max(8, Math.min(box.left, innerWidth - w - 8))}px`;
-  tip.style.top = `${Math.max(8, Math.min(top, innerHeight - h - 8))}px`;
+  tip.style.top = `${Math.max(ceil, Math.min(top, innerHeight - h - 8))}px`;
 }
 function hideWhy() { S.why = null; $("why").hidden = true; }
-document.addEventListener("pointerdown", (ev) => { if (S.why !== null && !ev.target.closest("#why, #moves .mv")) hideWhy(); });
+// A tap elsewhere puts it away. A drag does not, so the page can be scrolled with it open: the browser cancels
+// the pointer when it takes a touch for scrolling, and a pointer that is let go far from where it went down is no tap.
+let tapAt = null;
+document.addEventListener("pointerdown", (ev) => { tapAt = ev.isPrimary ? ev : null; });
+document.addEventListener("pointercancel", () => { tapAt = null; });
+document.addEventListener("pointerup", (ev) => {
+  const d = tapAt;
+  tapAt = null;
+  if (S.why === null || !d || d.pointerId !== ev.pointerId || Math.hypot(ev.clientX - d.clientX, ev.clientY - d.clientY) > 10) return;
+  if (!d.target.closest("#why, #moves .mv")) hideWhy();
+});
 function renderInsight() {
   const g = S.game, m = S.view > 0 ? g.moves[S.view - 1] : null;
   if (!m) { $("insight").innerHTML = g.moves.length ? "The starting position." : (g.turn === g.user_color ? "Your move." : ""); return; }

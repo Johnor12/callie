@@ -201,6 +201,7 @@ textarea { resize: none; width: 100%; }
   body { height: auto; min-height: 100%; }
   #game { display: flex; flex-direction: column; padding: 8px 10px 16px; }
   #board-pane { width: 100%; }
+  #board { scroll-margin: 6px; }  /* a click on a move in the list brings the board back on screen: not flush with the edge */
   #moves-pane { max-height: 300px; }
   #claude-pane { flex: none; align-self: stretch; }
   #claude-pane:has(#terminal:not([hidden])) { height: 78dvh; }

@@ -289,7 +289,9 @@ shown:
 
 - on the back of the card, once you have answered it;
 - in the game: the move's box in the move list is yellow, and a click on it shows the explanation beside it. That
-  is so while the game is still being played too, and an explanation names the better move;
+  is so while the game is still being played too, and an explanation names the better move. On a phone, where
+  the list is below the board, the click also brings the board back on screen and the explanation stays below
+  it; a tap elsewhere puts the explanation away, and scrolling the page does not;
 - to the game's own Claude session: `game` and `review` give it with the move, as previous analysis generated
   by Claude with access to Stockfish and Allie.
 
