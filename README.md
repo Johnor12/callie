@@ -29,7 +29,7 @@ installed: a model with an environment of its own, beside the server.
     with the result what the game did to your rating and where that leaves it;
   - your clock, with a pause button, and Allie's when it is the opponent;
   - a Claude pane: a box to type to Claude, and, from your first message, a real Claude Code session in a
-    terminal above it.
+    terminal above it, with the lines Claude talks about listed over it, to click through on the board.
 - Take-backs, resigning, and the game as PGN.
 - **Review**: flashcards of your own errors, made as you play: the position before a move that lost too much, to
   find the better move in, shown again after longer and longer as you get it right, with Claude's explanation
@@ -174,7 +174,7 @@ on half the machine's threads, three lines), in the background, as the position 
 **Claude, when you ask.** Nothing is sent to Claude as you play. The pane is a box to type in: your first
 message opens a Claude Code session above it, told what the game is and what is expected of it, and later ones
 are typed into that session (which is resumed if it had been closed for lack of use).
-The session is given these tools (an MCP server, `src/callie/mcp.py`), the last only where Allie is installed:
+The session is given these tools (an MCP server, `src/callie/mcp.py`), `human_moves` only where Allie is installed:
 
 | Tool | What it returns |
 | --- | --- |
@@ -182,6 +182,7 @@ The session is given these tools (an MCP server, `src/callie/mcp.py`), the last 
 | `review` | the analysis on file for moves already played: evaluations either side of each move, the engine's choices there with the lines it expected, its main line afterwards, and the explanation written for the move if it made a card |
 | `position` | any position spelled out: diagram, piece lists, legal moves |
 | `analyze` | Stockfish at full strength, run now, on any position: a point in the game or a FEN, after any "what if" moves, optionally comparing chosen candidate moves |
+| `show_lines` | nothing new: it puts a position and named lines from it [on your board](#lines-on-the-board), and returns them as they are listed there |
 | `human_moves` | Allie's prediction of what people play at a point in the game, after any "what if" moves: the most played moves of players of a chosen rating with how often each is played, how such games end from there, and the likeliest continuation |
 
 Claude is told to check lines with the engine rather than trust its own reading of the board, and not to give
@@ -201,6 +202,27 @@ about your play in one game is there in the next. The first session asks once wh
 
 The model is `claude-fable-5-2` unless `[claude] model` says otherwise, and `[claude] config_dir` picks which
 Claude Code login the sessions use.
+
+### Lines on the board
+
+A line written out in notation is slow to follow. So Claude is told to put the lines its answer turns on on the
+board (`show_lines`: a position, and one or more named lines from it), and to write around them. They are listed
+above the terminal, wherever you talk to Claude (a game, the back of a card), each move a button:
+
+- a click on a move puts the position after it on the board beside the pane, in place of the game or the card,
+  with the move marked; a click on a line's name puts its starting position there. The board is framed in blue
+  while a line is on it, and nothing on it can be moved;
+- ◀ and ▶ under the list (or the arrow keys, Home and End) step through the line. With no line on the board, ▶
+  starts the first one;
+- ✕, Esc, or a click on a move of the game puts the game or the card back. Nothing of the game changes
+  meanwhile: its clock runs as it did, and the opponent's move arrives behind the line;
+- everything a conversation was shown is kept with it (its last 30), and `‹ ›` beside the title page back
+  through it, so an answer you read again later still has its lines;
+- on a phone the board is a screen above the pane: a tap on a move brings the board on screen, and the buttons
+  that step through the line stay at the foot of the screen while one is on it.
+
+Claude's moves are checked before anything is shown: a line with a move that is not legal is refused, and Claude
+is told where it stops. The page still knows no chess: each move comes with the position after it.
 
 ## Reviewing your errors
 
@@ -318,7 +340,8 @@ terminal above the box, and later ones are typed into it. The session is the car
 - it is told the card when it is opened: the position, your move and what it lost, the engine's choice and its
   line, the moves the card takes as right, and the explanation on its back;
 - its tools are those of a game's session, and read the game the move was played in. With that game no longer on
-  file, `position` and `analyze` work from the card's position;
+  file, `position` and `analyze` work from the card's position. The [lines it shows](#lines-on-the-board) are
+  played on the card's board;
 - a message takes with it the moves you have made on the card's board since the last one, each with what it
   lost, so that "why not this?" can be asked of a move you have just tried;
 - it is kept with the card. Whenever the back of the card is on screen (the card answered again, days or months
@@ -500,14 +523,14 @@ at.
 | `src/callie/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
 | `src/callie/openings.py` | the opening books |
 | `src/callie/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return |
-| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards |
+| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards, the lines Claude showed |
 | `src/callie/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
 | `src/callie/tutor.py` | the Claude Code session of each game: how it is started, resumed and typed into |
 | `src/callie/explain.py` | the explanation of each card: Claude run once for it, in the background, behind the games |
 | `src/callie/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
 | `src/callie/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
 | `src/callie/server.py` | the page and the JSON API |
-| `src/callie/static/` | the page: `app.js` (board, clock, review, terminal), `pieces.js` (the pieces, drawn here), `style.css` |
+| `src/callie/static/` | the page: `app.js` (board, clock, review, terminal, Claude's lines), `pieces.js` (the pieces, drawn here), `style.css` |
 
 The page holds no chess rules: with each position where it is your move the server sends every legal move and
 the position it leads to, and with each where it is the opponent's the moves that can be made ahead (how your

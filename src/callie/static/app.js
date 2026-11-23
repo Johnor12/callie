@@ -29,6 +29,9 @@ const S = {
   poll: null,      // AbortController of the wait on the game
   clockAt: 0,      // when the clock in S.game was read
   term: null,
+  shown: [],       // what Claude put on the board in the session on screen: positions, each with lines from it
+  shownAt: null,   // the one of them listed above the terminal (its id)
+  line: null,      // the line on the board in place of the game or the card: { set, line, at } (at: its moves played so far)
   reopen: false,   // the game's session is to be shown again if its terminal has ended (once each time you come back)
   review: null,    // the deck being reviewed and its card on screen (see showReview)
   rating: {},      // yours in each time format, as the server last reckoned them
@@ -269,9 +272,10 @@ function setView(v) {
   const n = S.game.moves.length;
   S.view = Math.max(0, Math.min(n, v));
   S.follow = S.view === n;
-  S.sel = null; S.promo = null;
+  S.sel = null; S.promo = null; S.line = null;  // a move of the game takes a line of Claude's off the board
   hideWhy();
   render(true);
+  renderLines();
 }
 
 function render(scroll) {
@@ -348,8 +352,13 @@ const canMove = () => { const g = S.game; return g && S.view === g.moves.length 
 const canPremove = () => { const g = S.game; return g && S.view === g.moves.length && !S.pending && g.status === "active" && g.turn !== g.user_color; };
 // The board in use, a game's or the card's under review: what is on it, whose pieces move and where to (`legal`:
 // none when nothing can be moved), the arrow drawn on it, how it is marked, the move made ahead on it (`pre`), and
-// what a move made on it does.
+// what a move made on it does. With a line of Claude's on it: that position, the board turned as it was, and
+// nothing on it to move.
 function onBoard() {
+  const b = ownBoard(), l = linePos();
+  return l ? { el: b.el, fen: l.fen, last: l.last, san: l.san, color: b.color, flip: b.flip, legal: {}, arrow: null, mark: "line", send: () => {} } : b;
+}
+function ownBoard() {
   const r = S.review;
   if (r) {
     // Until you answer, the move that led to the position is marked, as in a game. Your answer stands on the
@@ -395,7 +404,7 @@ function renderBoard() {
       pieces.map((p) => `<button data-promo="${p.toLowerCase()}" title="${p}">${pieceSvg(p)}</button>`).join("") + `</div>`;
   }
   b.el.innerHTML = html;
-  for (const mark of ["review", "right", "wrong"]) b.el.classList.toggle(mark, b.mark === mark);
+  for (const mark of ["review", "right", "wrong", "line"]) b.el.classList.toggle(mark, b.mark === mark);
 }
 function arrow(uci, flip) {
   const at = (name) => { const f = FILES.indexOf(name[0]), r = +name[1] - 1; return [(flip ? 7 - f : f) + 0.5, (flip ? r : 7 - r) + 0.5]; };
@@ -498,6 +507,7 @@ async function act(fn) {
 function evalAt(ply) { const g = S.game; return ply === 0 ? g.start_eval : (g.moves[ply - 1] || {}).eval; }
 function renderEval() {
   $("evalbar").classList.toggle("flip", flipped());
+  $("evalbar").classList.toggle("off", !!linePos());
   const pos = shown(), e = pos.ply <= S.game.moves.length ? evalAt(pos.ply) : null;
   if (!e) { $("evalbar-text").textContent = "…"; return; }  // not analysed yet: the bar stays where it was
   const pct = winPct(e), whiteAhead = e.value >= 0, flip = flipped();
@@ -529,13 +539,13 @@ $("graph").onclick = (ev) => {
   setView(Math.round((ev.clientX - box.left) / box.width * S.game.moves.length));
 };
 function renderMoves(scroll) {
-  const g = S.game;
+  const g = S.game, cur = linePos() ? -1 : S.view;  // with a line of Claude's on the board, none of the game's moves is
   let html = "";
   g.moves.forEach((m, i) => {
     if (i % 2 === 0) html += `<div class="num">${i / 2 + 1}.</div>`;
     const book = m.source === "book", graded = m.verdict !== undefined;
     const loss = book ? "book" : graded ? (m.verdict === "best" ? "0" : m.cpl) : "…";
-    html += `<div class="mv${m.source === "user" ? " mine" : ""}${m.ply === S.view ? " on" : ""}${m.explanation ? " explained" : ""} v-${book ? "book" : m.verdict || "wait"}" data-ply="${m.ply}" data-testid="move"
+    html += `<div class="mv${m.source === "user" ? " mine" : ""}${m.ply === cur ? " on" : ""}${m.explanation ? " explained" : ""} v-${book ? "book" : m.verdict || "wait"}" data-ply="${m.ply}" data-testid="move"
       title="${graded ? `${m.verdict}: lost ${m.cpl} centipawns` + (m.best && m.best.uci !== m.uci ? `; the engine preferred ${esc(m.best.san)}` : "") : "being analysed"}">
       <span class="san">${esc(m.san)}${book ? "" : GLYPH[m.verdict] || ""}</span><span class="loss">${loss}</span></div>`;
   });
@@ -585,7 +595,12 @@ document.addEventListener("pointerup", (ev) => {
   if (!d.target.closest("#why, #moves .mv")) hideWhy();
 });
 function renderInsight() {
-  const g = S.game, m = S.view > 0 ? g.moves[S.view - 1] : null;
+  const g = S.game, m = S.view > 0 ? g.moves[S.view - 1] : null, l = linePos();
+  if (l) {  // a line of Claude's on the board: its name and its moves, the one on the board marked
+    const at = S.line.at;
+    $("insight").innerHTML = `${esc(l.line.name)} · ` + lineLabels(l.set, l.line).map((t, i) => i === at - 1 ? `<b>${esc(t)}</b>` : esc(t)).join(" ");
+    return;
+  }
   if (!m) { $("insight").innerHTML = g.moves.length ? "The starting position." : (g.turn === g.user_color ? "Your move." : ""); return; }
   const who = m.source === "user" ? "You played" : m.source === "book" ? "Opponent (opening book)" : "Opponent played";
   let html = `${who} <b>${moveNo(m.ply)} ${esc(m.san)}${GLYPH[m.verdict] || ""}</b>`;
@@ -614,9 +629,17 @@ $("act-pgn").onclick = async () => {
   $("act-pgn").textContent = "Copied"; setTimeout(() => { $("act-pgn").textContent = "Copy PGN"; }, 1200);
 };
 document.addEventListener("keydown", (ev) => {
-  if (!S.game || $("game").hidden || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const typing = ev.target.closest("input, textarea, select, #terminal"), l = linePos();
+  if (l && !typing) {  // a line of Claude's on the board, a game's or a card's: the keys step through it, Esc takes it off
+    const to = { ArrowLeft: S.line.at - 1, ArrowRight: S.line.at + 1, Home: 0, End: l.line.moves.length }[ev.key];
+    if (ev.key === "Escape") { ev.preventDefault(); setLine(null); }
+    else if (to !== undefined) { ev.preventDefault(); stepLine(to); }
+    return;
+  }
+  if (!S.game || $("game").hidden) return;
   if (ev.key === "Escape") hideWhy();
-  if (ev.target.closest("input, textarea, select, #terminal")) return;
+  if (typing) return;
   const to = { ArrowLeft: S.view - 1, ArrowRight: S.view + 1, Home: 0, End: S.game.moves.length }[ev.key];
   if (to !== undefined) { ev.preventDefault(); setView(to); }
 });
@@ -844,6 +867,99 @@ async function composeSend() {
 $("compose-send").onclick = composeSend;
 $("compose-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); composeSend(); } });
 
+// ---------- lines: what Claude put on the board ----------
+// A session's `show_lines` tool gives the server a position and lines from it, and the session's terminal says so
+// on its stream. They are listed above the terminal, each move a button: a click puts the position after it on
+// the board beside the pane (a game's, or a card's) in place of what was there, and the buttons under the list,
+// or the arrow keys, step through the line. Everything a session showed is kept, to page back through.
+async function loadLines(t) {
+  let d;
+  try { d = await api("GET", `/api/terminals/${t.id}/lines`); } catch (e) { return; }  // it has ended: its stream says so
+  if (S.term !== t) return;
+  const last = (list) => list.length ? list[list.length - 1].id : null, more = last(d.shown) !== last(S.shown);
+  S.shown = d.shown;
+  if (S.line && !linePos()) { S.line = null; redraw(); }  // no longer kept
+  // What is new is what is listed, unless a line is being stepped through.
+  if (!S.shown.some((b) => b.id === S.shownAt) || (more && !S.line)) S.shownAt = last(S.shown);
+  renderLines();
+}
+function linePos() {  // the line on the board and where it has got to; null: the board is the game's, or the card's
+  const l = S.line, set = l && S.shown.find((b) => b.id === l.set);
+  if (!set) return null;
+  const line = set.lines[l.line], m = l.at ? line.moves[l.at - 1] : null;
+  return { set, line, fen: m ? m.fen : set.fen, last: m ? m.uci : null, san: m ? m.san : "" };
+}
+// Its moves as they are written in a row: "12. Nf3", "Nc6", and "12... Nc6" where Black starts. `alone`: as each is
+// written by itself, a move of Black's with its number too.
+function lineLabels(set, line, alone) {
+  const f = set.fen.split(" "), first = 2 * (+f[5] - 1) + (f[1] === "w" ? 1 : 2);
+  return line.moves.map((m, i) => (alone || (first + i) % 2 || i === 0 ? moveNo(first + i) + " " : "") + m.san);
+}
+function redraw() {  // the board on screen, and with a game what is written around it
+  if (S.review) { if (S.review.card) renderBoard(); }
+  else if (S.game) render();
+}
+function setLine(l) {  // null: what was on the board is back
+  S.line = l; S.sel = null; S.promo = null;
+  if (l) S.shownAt = l.set;
+  hideWhy();
+  redraw();
+  renderLines();
+}
+function stepLine(to) {  // to that many of its moves played; with no line on the board, the first one listed is started
+  const l = linePos(), set = S.shown.find((b) => b.id === S.shownAt);
+  if (l) setLine({ ...S.line, at: Math.max(0, Math.min(l.line.moves.length, to)) });
+  else if (set) setLine({ set: set.id, line: 0, at: 1 });
+}
+function renderLines() {
+  const set = S.shown.find((b) => b.id === S.shownAt);
+  $("lines").hidden = !S.term || !set;
+  if ($("lines").hidden) return;
+  const i = S.shown.indexOf(set), n = S.shown.length, l = linePos(), on = l && l.set === set ? S.line : null;
+  $("lines-title").textContent = set.title;
+  $("lines-pager").hidden = n < 2;
+  $("lines-n").textContent = `${i + 1}/${n}`;
+  $("lines-older").disabled = i === 0; $("lines-newer").disabled = i === n - 1;
+  $("lines-list").innerHTML = set.lines.map((line, j) => {
+    const at = on && on.line === j ? on.at : -1;
+    return `<div class="line" data-line="${j}" data-testid="line"><button class="name${at === 0 ? " on" : ""}" data-at="0">${esc(line.name)}</button>` +
+      lineLabels(set, line).map((t, k) => `<button class="${at === k + 1 ? "on" : ""}" data-at="${k + 1}" data-testid="line-move">${esc(t)}</button>`).join("") + `</div>`;
+  }).join("");
+  const list = $("lines-list"), moved = list.querySelector("button.on");
+  if (moved) {  // kept in sight in the list, which scrolls by itself: the page stays where it is
+    const a = moved.getBoundingClientRect(), box = list.getBoundingClientRect();
+    list.scrollTop += a.top < box.top ? a.top - box.top : Math.max(0, a.bottom - box.bottom);
+  }
+  const end = l ? l.line.moves.length : 0;
+  $("line-nav").classList.toggle("on", !!l);
+  $("line-first").disabled = $("line-prev").disabled = !l || S.line.at === 0;
+  $("line-next").disabled = !!l && S.line.at === end;  // with none on the board, it starts the first
+  $("line-last").disabled = !l || S.line.at === end;
+  // The move on the board first: where the row is short (a phone), it is the name that is cut.
+  $("line-at").innerHTML = l ? (S.line.at ? `<b>${esc(lineLabels(l.set, l.line, true)[S.line.at - 1])}</b> · ` : "") + esc(l.line.name) : "";
+  $("line-close").hidden = !l;
+  $("line-close").title = `Back to the ${S.review ? "card" : "game"} (Esc)`;
+}
+$("lines-list").onclick = (ev) => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  setLine({ set: S.shownAt, line: +b.parentNode.dataset.line, at: +b.dataset.at });
+  onBoard().el.scrollIntoView({ block: "nearest" });  // on a phone the board is above the pane, and the move is to be seen on it
+};
+function pageLines(by) {  // what was shown before, or after: listed, and the line on the board put away
+  const i = S.shown.findIndex((b) => b.id === S.shownAt) + by;
+  if (i < 0 || i >= S.shown.length) return;
+  S.shownAt = S.shown[i].id;
+  setLine(null);
+}
+$("lines-older").onclick = () => pageLines(-1);
+$("lines-newer").onclick = () => pageLines(1);
+$("line-first").onclick = () => stepLine(0);
+$("line-prev").onclick = () => stepLine(S.line.at - 1);
+$("line-next").onclick = () => stepLine(S.line ? S.line.at + 1 : 1);
+$("line-last").onclick = () => stepLine(linePos().line.moves.length);
+$("line-close").onclick = () => setLine(null);
+
 const addon = (load) => { try { load(); } catch (e) { /* not there, or no GPU: the terminal works without it */ } };
 function openTerminal(id) {
   closeTerminal();
@@ -883,13 +999,19 @@ function closeTerminal() {
   unlisten(t); t.observer.disconnect(); clearTimeout(t.timer); t.xterm.dispose();
   $("terminal").innerHTML = "";
   renderKeys();
+  // What its session put on the board goes with it, off the board too.
+  const was = S.line;
+  S.shown = []; S.shownAt = null; S.line = null;
+  renderLines();
+  if (was) redraw();
 }
 // The terminal's output, for as long as the tab is shown (a browser allows a site only a few connections).
 function listen(t) {
   if (t.source || document.hidden) return;
   const src = t.source = new EventSource(`/api/terminals/${t.id}/stream`);
   // Each connection starts with the terminal's state: after the first, that is written over a cleared screen.
-  src.onopen = () => { if (t.opened++) t.xterm.reset(); t.fresh = true; };
+  src.onopen = () => { if (t.opened++) t.xterm.reset(); t.fresh = true; loadLines(t); };
+  src.addEventListener("lines", () => loadLines(t));
   src.onmessage = (ev) => {
     const bytes = Uint8Array.from(atob(ev.data), (c) => c.charCodeAt(0));
     if (!t.fresh) return t.xterm.write(bytes);

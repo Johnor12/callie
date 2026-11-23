@@ -519,6 +519,13 @@ def test_a_card_has_a_claude_session_of_its_own():
         assert told.endswith("[tried on the card: Nh6 (loses 75), Qe7]\nwhy not this?")
         tools = json.loads((s.cfg.home / "sessions" / f"card-{cid}.mcp.json").read_text())["mcpServers"]["chess"]
         assert tools["env"]["CALLIE_GAME"] == "0"  # the game is not on file: the tools have the FEN to work from
+        # lines for the card's board: asked for by its session, they are in the pane on the back of the card
+        said_so = {"name": "show_lines", "session": tools["env"]["CALLIE_SESSION"]}
+        shown = {"fen": FEN, "lines": [{"name": "The move played", "moves": ["Nf6", "Qxf7"]}]}
+        code, told = s.call("POST", "/api/games/0/tool", {**said_so, "arguments": shown})
+        assert code == 200 and "- The move played: 3... Nf6 4. Qxf7#" in told["text"]
+        (board,) = s.call("GET", f"/api/terminals/{r['terminal']}/lines")[1]["shown"]
+        assert board["fen"] == FEN and board["lines"][0]["moves"][1]["san"] == "Qxf7#"
         row = s.svc.store.one("SELECT session_id, session_started FROM cards")
         assert row == {"session_id": first["session"], "session_started": 1}
         # the back of the card shows that terminal, and a second message is typed into it

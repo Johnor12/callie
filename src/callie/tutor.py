@@ -3,7 +3,7 @@ that was asked about, on the back of the card.
 
 Nothing here runs by itself. A session is opened when the page sends it a message (or, over the API, when an
 analysis is asked for), and is told then what is expected of it and how to get at the game: the tools of `mcp.py` (the moves,
-the engine's analysis of each, the engine itself). From then on the page shows it whenever it shows the game,
+the engine's analysis of each, the engine itself, and the student's board, to put lines on). From then on the page shows it whenever it shows the game,
 resuming it if its terminal has ended since. The app talks to it the way a person would: it pastes a
 message into the terminal and presses Enter. Every session runs in the same directory, so they share one
 Claude Code project: its memory carries from game to game.
@@ -55,7 +55,7 @@ picture of the board.
 - analyze: full-strength Stockfish, live, on any position: a point in the game or a FEN, optionally after extra \
 moves ("what if ..."), optionally restricted to candidate moves you want compared. Use it to check a refutation \
 or a "why not this instead" line instead of guessing; it takes seconds.
-Never state a concrete line or tactic you have not verified with the engine or the legal-move list.
+{show}Never state a concrete line or tactic you have not verified with the engine or the legal-move list.
 
 What an analysis is
 - Start from `game`, then `review` for the moves that matter (the student's inaccuracies, mistakes and \
@@ -63,7 +63,7 @@ blunders first). For each one worth talking about: what the move allowed or miss
 line as far as it makes the point, and the idea to carry into later games (the pattern, or the question they \
 should have asked themselves before moving). Ordinary good moves need no comment.
 - Turn engine output into chess reasons. Do not recite evaluations or long lines. Use notation the student can \
-follow on the board (SAN with move numbers).
+follow on the board (SAN with move numbers), and put the lines you give on the board with `show_lines`.
 - If the game is still in progress, do not give it away: no hints about the position on the board now (the best \
 move, a tactic that is waiting) unless the student asks. When they ask for a hint, start small (where to look) \
 unless they ask for the move itself.
@@ -108,13 +108,13 @@ picture of the board.
 the move, the engine's choices in that position with the lines it expected, and its main line after the move.
 - game: the whole game, one line a move, with the engine's evaluation, the centipawns each move lost, its grade, \
 and the explanations written for the student's other errors.
-Never state a concrete line or tactic you have not verified with the engine or the legal-move list.
+{show}Never state a concrete line or tactic you have not verified with the engine or the legal-move list.
 
 How to answer
 - Answer what was asked, in a few sentences: what the move allows or misses, shown with the concrete line as far \
 as it makes the point, and how that compares with the move the card asks for. A refutation is a line, not a number.
 - Turn engine output into chess reasons. Do not recite evaluations or long lines. Use notation the student can \
-follow on the board (SAN with move numbers).
+follow on the board (SAN with move numbers), and put the lines you give on the board with `show_lines`.
 - The explanation on the back of the card is something the student has just read: build on it, and say so where \
 your own reading of the position differs.
 - If the game is still in progress, do not give away the position on its board now unless the student asks.
@@ -125,6 +125,19 @@ your own reading of the position differs.
 Every session of the app runs in this same directory, so your memory here is shared with the sessions of the \
 student's games and of their other cards. Look at what you already know about their play, and keep it current: \
 recurring mistakes, openings they play, what they have been working on, how they like feedback given.
+"""
+
+# The part of both about `show_lines`: the board beside the terminal is a game's or a card's, and Claude's lines
+# are played on it.
+SHOW = """\
+- show_lines: puts a position and lines from it on the student's board, beside this terminal. The lines are \
+listed there under the names you give them, each move a button, and the student plays through them on the board \
+while reading your answer. A line written in notation is hard for them to follow, and one they can step through \
+is not: so whenever what you say turns on a concrete line (what a move allowed, the refutation, what should have \
+been played and how it goes on), show it, once you have verified it, and before you write about it. One call for \
+each position you discuss, with every line from that position in it: the move that was played beside the better \
+one, say. Then write around what is on the board: still give the line in your text, call it by the name it has \
+there, and say what to watch for as it is played. What you showed earlier stays there for them to go back to.
 """
 
 # The part of SYSTEM about `human_moves`, for sessions that are given it (Allie installed).
@@ -209,15 +222,15 @@ class Tutor:
 
     # ---------- the session ----------
 
-    def _files(self, key: str, game_id: str) -> tuple[Path, Path]:
+    def _files(self, key: str, game_id: str, session_id: str) -> tuple[Path, Path]:
         """The Claude Code settings and MCP configuration of one session (a game's, or a card's: ``key``), whose
-        tools read ``game_id``."""
+        tools read ``game_id`` and put lines on the board beside the conversation ``session_id``."""
         settings = {
             "permissions": {"allow": ["mcp__chess"]},  # its own tools never ask
             "tui": "fullscreen",
             "wheelScrollAccelerationEnabled": False,  # the page sends one wheel event per line (see app.js)
         }
-        env = {"CALLIE_URL": self.cfg.url, "CALLIE_GAME": game_id}
+        env = {"CALLIE_URL": self.cfg.url, "CALLIE_GAME": game_id, "CALLIE_SESSION": session_id}  # `show_lines`
         if self.svc.allie.available():
             env["CALLIE_ALLIE"] = "1"  # the session is offered `human_moves`
         mcp = {"mcpServers": {"chess": {"command": sys.executable, "args": [str(_ROOT / "mcp.py")], "env": env}}}
@@ -287,13 +300,13 @@ class Tutor:
             # it has none yet (a card), or its transcript is gone: a session id cannot be used twice
             session_id = str(uuid.uuid4())
             self.svc.store.run(f"UPDATE {table} SET session_id=? WHERE id=?", (session_id, row["id"]))
-        settings, mcp = self._files(key, game_id)
+        settings, mcp = self._files(key, game_id, session_id)
         argv = [self.cfg.claude_bin, *(["--resume", session_id] if started else ["--session-id", session_id])]
         argv += ["--model", self.cfg.claude_model]
         if self.cfg.claude_effort:
             argv += ["--effort", self.cfg.claude_effort]
         argv += ["--settings", str(settings), "--mcp-config", str(mcp), "--strict-mcp-config"]
-        system = system.replace("{allie}", ALLIE if self.svc.allie.available() else "")
+        system = system.replace("{show}", SHOW).replace("{allie}", ALLIE if self.svc.allie.available() else "")
         argv += ["--append-system-prompt", system, *self.cfg.claude_args]
         if parts:
             argv += ["--", _clean("\n\n".join(parts))]
@@ -304,6 +317,7 @@ class Tutor:
         except OSError as e:
             raise TutorError(f"cannot start Claude Code ({self.cfg.claude_bin}): {e}") from None
         self.terms[key] = self.by_id[t.id] = t
+        t.session = session_id  # the conversation it shows: what Claude puts on the board there is its viewers' to see
         if table == "cards":
             self.kept[key] = session_id
         if parts:
@@ -429,6 +443,17 @@ class Tutor:
         if t is None:
             raise TutorError(f"no terminal {term_id}")
         return t
+
+    def lines(self, term_id: str) -> dict:
+        """What Claude put on the board in the conversation a terminal shows: each a position and lines from it,
+        the oldest first."""
+        return {"shown": self.svc.store.shown(self.terminal(term_id).session)}
+
+    def shown(self, session_id: str) -> None:
+        """There is more of that: the pages on the conversation's terminal are told, and ask for it."""
+        for t in list(self.by_id.values()):
+            if t.session == session_id:
+                t.tell("lines")
 
     def reset(self, game_id: str) -> dict:
         """End the game's session and forget it: the next analysis starts a new one."""

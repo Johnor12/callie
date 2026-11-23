@@ -77,6 +77,7 @@ textarea { resize: none; width: 100%; }
 #evalbar-text { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center; font-size: 9.5px; font-weight: 700; color: #20242b; letter-spacing: -.03em; }
 #evalbar-text.top { bottom: auto; top: 3px; }
 #evalbar-text.onblack { color: #e8eaed; }
+#evalbar.off { opacity: .3; }  /* the board shows a line of Claude's: the evaluation is not of that */
 #evalbar::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid rgba(224, 104, 60, .7); }
 .board { width: var(--board); height: var(--board); position: relative; display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); border-radius: 4px; overflow: hidden; user-select: none; touch-action: none; flex: none; }
 .sq { position: relative; background: var(--light); }
@@ -104,6 +105,8 @@ textarea { resize: none; width: 100%; }
 #promo button { border: 0; border-radius: 0; background: none; padding: 0; aspect-ratio: 1; position: relative; }
 #promo button:hover { background: #cfd8dc; }
 .board.review { outline: 2px dashed rgba(224, 179, 79, .7); outline-offset: -2px; }
+/* a line of Claude's is on it, not the game or the card: framed, over the squares */
+.board.line::after { content: ""; position: absolute; inset: 0; z-index: 10; border: 3px solid var(--accent); border-radius: 4px; pointer-events: none; }
 .board.right .sq.last::before { background: rgba(127, 195, 107, .62); }
 .board.wrong .sq.last::before { background: rgba(217, 69, 61, .6); }
 .board.wrong { box-shadow: 0 0 0 3px var(--worst); }
@@ -160,6 +163,23 @@ textarea { resize: none; width: 100%; }
 #keys { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
 #keys button { padding: 6px 12px; font-size: 13px; flex: none; }
 #claude-err:not(:empty) { padding: 8px 10px 0; }
+/* What Claude put on the board in the session, above its terminal: a position's lines, each move a button that
+   puts it on the board, and under them the buttons that step through the one that is on it. */
+#lines { flex: none; display: grid; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.lines-head { display: flex; align-items: baseline; gap: 8px; }
+#lines-title { flex: 1; min-width: 0; font-weight: 600; }
+#lines-pager { display: flex; align-items: baseline; gap: 2px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#lines-pager button { padding: 0 7px; }
+#lines-list { display: grid; gap: 3px; max-height: 148px; overflow-y: auto; }
+#lines .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px; }
+#lines .line button { border: 0; background: none; padding: 2px 5px; border-radius: 5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#lines .line button.name { color: var(--dim); font-weight: 400; text-align: left; margin-right: 3px; }
+#lines .line button:hover { background: var(--panel2); }
+#lines .line button.on { background: #33415a; color: #fff; }
+#line-nav { display: flex; align-items: center; gap: 6px; }
+#line-nav button { min-width: 38px; padding: 3px 0; }
+#line-at { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+#line-at b { color: var(--text); }
 #compose { display: flex; gap: 8px; padding: 8px; flex: none; align-items: flex-end; }
 #compose button { height: 34px; }
 
@@ -187,7 +207,7 @@ textarea { resize: none; width: 100%; }
 #card-side #claude-pane { align-self: stretch; gap: 8px; background: none; border: 0; border-radius: 0; overflow: visible; }
 #card-side:has(#terminal:not([hidden])) { height: max(var(--board), 520px); }
 #card-side:has(#terminal:not([hidden])) #claude-pane { flex: 1; }
-#card-side #terminal { border: 1px solid var(--line); border-radius: 6px; }
+#card-side #terminal, #card-side #lines { border: 1px solid var(--line); border-radius: 6px; }
 #card-side #keys, #card-side #compose, #card-side #claude-err:not(:empty) { padding: 0; border: 0; }
 #card-wait { color: var(--dim); font-size: 14px; margin-top: 10px; }
 #card-done { max-width: 860px; margin: 60px auto 0; text-align: center; font-size: 16px; }
@@ -208,7 +228,12 @@ textarea { resize: none; width: 100%; }
   body { height: auto; min-height: 100%; }
   #game { display: flex; flex-direction: column; padding: 8px 10px 16px; }
   #board-pane { width: 100%; }
-  #board { scroll-margin: 6px; }  /* a click on a move in the list brings the board back on screen: not flush with the edge */
+  #board, #card-board { scroll-margin: 6px; }  /* a click on a move in a list brings the board back on screen: not flush with the edge */
+  /* The lines are a screen below the board they are played on: while one is on it, the buttons that step
+     through it stay at the foot of the screen. */
+  #line-nav.on { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); background: var(--panel2); border-top: 1px solid var(--line); }
+  #line-nav.on button { min-width: 46px; padding: 7px 0; }
+  body:has(#line-nav.on) { padding-bottom: 54px; }
   #moves-pane { max-height: 300px; }
   #claude-pane { flex: none; align-self: stretch; }
   #claude-pane:has(#terminal:not([hidden])) { height: 78dvh; }

@@ -57,6 +57,10 @@ def _tool(svc: Service, game_id: str, b: dict) -> dict:
     if name == "analyze":
         extra = {k: args[k] for k in ("seconds", "lines", "candidates") if args.get(k) is not None}
         return {"text": svc.tool_analyze(game_id, **where, **extra, quiet=quiet)}
+    if name == "show_lines":
+        return {
+            "text": svc.tool_show(game_id, b.get("session"), **where, title=args.get("title"), lines=args.get("lines"))
+        }
     if name == "human_moves":
         if args.get("fen"):
             raise GameError(
@@ -131,6 +135,8 @@ def _routes(svc: Service, tutor: Tutor):
             lambda m, b, q: tutor.terminal(m[1]).write(str(b.get("data", "")).encode()) or ok,
         ),
         ("POST", rf"/api/terminals/{_ID}/resize", lambda m, b, q: tutor.terminal(m[1]).resize(*_size(b)) or ok),
+        # what Claude put on the board in the session a terminal shows (its stream says when there is more)
+        ("GET", rf"/api/terminals/{_ID}/lines", lambda m, b, q: tutor.lines(m[1])),
         # what a Claude session's tools call (src/callie/mcp.py)
         ("POST", rf"/api/games/{_ID}/tool", lambda m, b, q: _tool(svc, m[1], b)),
     ]
@@ -229,7 +235,8 @@ def make_handler(svc: Service, tutor: Tutor, bind_host: str):
             self._json(404, {"error": f"no route {method} {path}"})
 
         def _stream(self, term_id: str) -> None:
-            """Server-sent events: the terminal's output as base64 `data:` lines, then an `exit` event."""
+            """Server-sent events: the terminal's output as base64 `data:` lines, then an `exit` event. A `lines`
+            event in between: Claude put lines on the board in its session, for the page to ask for."""
             try:
                 frames = tutor.terminal(term_id).stream()
             except TutorError as e:
@@ -247,6 +254,8 @@ def make_handler(svc: Service, tutor: Tutor, bind_host: str):
                         self.wfile.write(b"data: " + base64.b64encode(payload) + b"\n\n")
                     elif kind == "x":
                         self.wfile.write(b"event: exit\ndata: {}\n\n")
+                    elif kind == "lines":
+                        self.wfile.write(b"event: lines\ndata: {}\n\n")
                     else:
                         self.wfile.write(b": idle\n\n")  # also how a closed browser tab is noticed
                     self.wfile.flush()

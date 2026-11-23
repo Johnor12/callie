@@ -41,6 +41,7 @@ PV_PLIES = 10  # how much of an engine line is kept and shown
 QUIET_S = 3.0  # the longest search a background question gets, in seconds of one thread's work
 QUIET_NPS = 700_000  # what a second of that is, in positions searched: it is given the work, however long it waits for the processor
 IN_PLAY_S = 600.0  # a game that is not over and had a move this recently is being played
+SHOWN_LINES, SHOWN_PLIES = 8, 40  # the most Claude puts on the board at once: lines from a position, half-moves of one
 _RULE_DRAWS = ("insufficient material", "fifty-move rule", "threefold repetition")
 
 
@@ -1184,6 +1185,49 @@ class Service:
     def tool_position(self, game_id: str, ply=None, fen=None, moves=None) -> str:
         _, _, pos, label = self._resolve(game_id, ply, fen, moves)
         return f"{label[0].upper()}{label[1:]}:\n{describe(pos)}"
+
+    def tool_show(self, game_id: str, session, ply=None, fen=None, moves=None, title=None, lines=None) -> str:
+        """A position and lines from it, put before the student: kept for the conversation that showed them
+        (``session``: its Claude Code session), whose pane lists them and plays them on the board beside it."""
+        if not self.store.conversation(session):
+            raise GameError("this session has no board beside it to show lines on")
+        _, _, pos, label = self._resolve(game_id, ply, fen, moves)
+        if not isinstance(lines, list) or not 1 <= len(lines) <= SHOWN_LINES:
+            raise GameError(f'give 1 to {SHOWN_LINES} lines, each {{"name": "...", "moves": ["...", ...]}}')
+        shown, said = [], []
+        for i, line in enumerate(lines, 1):
+            line = line if isinstance(line, dict) else {}
+            name = " ".join(str(line.get("name") or "").split())[:80] or f"Line {i}"
+            given = line.get("moves")
+            if not isinstance(given, list) or not 1 <= len(given) <= SHOWN_PLIES:
+                raise GameError(f"line {i} ({name}): give 1 to {SHOWN_PLIES} moves")
+            at, played = pos, []
+            for text in given:
+                try:
+                    uci = at.parse(str(text))
+                except ValueError:
+                    legal = " ".join(sorted(at.san(m) for m in at.legal_moves())) or "none, the game is over there"
+                    so_far = _numbered(pos.fullmove, pos.turn, [m["san"] for m in played]) or "no move of it"
+                    raise GameError(
+                        f"line {i} ({name}): {text!r} is not legal after {so_far}. Legal: {legal}. Nothing was shown."
+                    ) from None
+                played.append({"uci": uci, "san": at.san(uci)})
+                at = at.push(uci)
+                played[-1]["fen"] = at.fen()
+            shown.append({"name": name, "moves": played})
+            said.append(f"- {name}: {_numbered(pos.fullmove, pos.turn, [m['san'] for m in played])}")
+        title = " ".join(str(title or "").split())[:120] or f"{label[0].upper()}{label[1:]}"
+        self.store.show(session, {"title": title, "fen": pos.fen(), "lines": shown})
+        if self.tutor:
+            self.tutor.shown(session)
+        return "\n".join(
+            [
+                f'On the student\'s board now, as "{title}", from {label} ({pos.fen()}):',
+                *said,
+                "Each move is a button beside this conversation that puts it on the board. Call the lines by these "
+                "names in what you write.",
+            ]
+        )
 
     def tool_analyze(
         self, game_id: str, ply=None, fen=None, moves=None, seconds=2.0, lines=3, candidates=None, quiet=False

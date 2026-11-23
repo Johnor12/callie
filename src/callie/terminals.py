@@ -152,8 +152,15 @@ class Terminal:
         except OSError:
             pass
 
+    def tell(self, kind: str) -> None:
+        """Hand every viewer news that is not the program's output: `stream` yields it as (kind, b"")."""
+        with self.lock:
+            for q in self.viewers:
+                q.put((kind, b""))
+
     def stream(self, idle: float = 15.0):
-        """Yield ("o", bytes) as the program writes, ("idle", b"") when it is quiet, ("x", b"") once it has ended."""
+        """Yield ("o", bytes) as the program writes, ("idle", b"") when it is quiet, ("x", b"") once it has ended,
+        and what `tell` was given in between."""
         q: queue.Queue = queue.Queue()
         with self.lock:
             q.put(("o", self._state()))

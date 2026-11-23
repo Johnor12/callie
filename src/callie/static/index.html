@@ -99,6 +99,25 @@
     </section>
 
     <section id="claude-pane" data-testid="claude-pane">
+      <div id="lines" data-testid="lines" hidden>
+        <div class="lines-head">
+          <span id="lines-title" data-testid="lines-title"></span>
+          <span id="lines-pager">
+            <button id="lines-older" class="quiet" data-testid="lines-older" title="Shown before">‹</button>
+            <span id="lines-n" data-testid="lines-n"></span>
+            <button id="lines-newer" class="quiet" data-testid="lines-newer" title="Shown after">›</button>
+          </span>
+        </div>
+        <div id="lines-list" data-testid="lines-list"></div>
+        <div id="line-nav" data-testid="line-nav">
+          <button id="line-first" data-testid="line-first" title="Start of the line (Home)">⏮</button>
+          <button id="line-prev" data-testid="line-prev" title="Back (←)">◀</button>
+          <button id="line-next" data-testid="line-next" title="Forward (→)">▶</button>
+          <button id="line-last" data-testid="line-last" title="End of the line (End)">⏭</button>
+          <span id="line-at" data-testid="line-at"></span>
+          <button id="line-close" class="quiet" data-testid="line-close" hidden>✕</button>
+        </div>
+      </div>
       <div id="terminal" data-testid="terminal" hidden></div>
       <div id="keys" data-testid="keys" hidden>
         <button data-key="esc">esc</button><button data-key="up">↑</button><button data-key="down">↓</button>

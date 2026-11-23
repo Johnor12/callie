@@ -2,9 +2,11 @@
 
 It holds no chess of its own. Each tool call is passed to the running Callie server (CALLIE_URL) for the
 game this session belongs to (CALLIE_GAME), which owns the game and the engines. `human_moves` is offered
-only where Allie is installed (CALLIE_ALLIE). A session that works in the background (CALLIE_QUIET: one
-that explains a card) says so with each call, and the server answers it with what the games can spare. Standard library only, and run as a file, so it needs nothing
-from the environment Claude Code starts it in.
+only where Allie is installed (CALLIE_ALLIE), and `show_lines` only to a session the student talks to, in a pane
+beside a board (CALLIE_SESSION: which one, so that the lines go to its pane). A session that works in the
+background (CALLIE_QUIET: one that explains a card) says so with each call, and the server answers it with what
+the games can spare. Standard library only, and run as a file, so it needs nothing from the environment Claude
+Code starts it in.
 """
 
 import json
@@ -113,15 +115,65 @@ HUMAN_MOVES = {
     },
 }
 
+SHOW_LINES = {
+    "name": "show_lines",
+    "description": "Put a position and lines from it on the student's board, beside this conversation: the lines "
+    "are listed there by name, each move a button, and the student plays through them on the board while reading "
+    "what you write. Use it whenever your answer turns on a concrete line: a line read in notation is hard to "
+    "follow, one seen on the board is not. One call for each position you discuss, with every line from that "
+    "position in it; what you showed earlier in the conversation stays there to go back to. It returns the lines "
+    "as they are listed (in SAN, with move numbers), or says which move of which line is not legal.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            **_POSITION,
+            "title": {
+                "type": "string",
+                "description": 'What the lines are about, in a few words: "Why 14... Qd7 loses a piece".',
+            },
+            "lines": {
+                "type": "array",
+                "description": "The lines, each played from that position (1 to 8).",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": 'What the line is, in a few words, as you call it in your text: "What you '
+                            'played", "The engine\'s choice", "If Black takes".',
+                        },
+                        "moves": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Its moves in order, both sides', in SAN or UCI (1 to 40).",
+                        },
+                    },
+                    "required": ["name", "moves"],
+                },
+            },
+        },
+        "required": ["lines"],
+    },
+}
+
 
 def tools() -> list[dict]:
-    return TOOLS + ([HUMAN_MOVES] if os.environ.get("CALLIE_ALLIE") == "1" else [])
+    return (
+        TOOLS
+        + ([SHOW_LINES] if os.environ.get("CALLIE_SESSION") else [])
+        + ([HUMAN_MOVES] if os.environ.get("CALLIE_ALLIE") == "1" else [])
+    )
 
 
 def call(name: str, arguments: dict) -> tuple[str, bool]:
     url = f"{os.environ.get('CALLIE_URL', 'http://127.0.0.1:8750')}/api/games/{os.environ.get('CALLIE_GAME', '')}/tool"
     body = json.dumps(
-        {"name": name, "arguments": arguments or {}, "quiet": os.environ.get("CALLIE_QUIET") == "1"}
+        {
+            "name": name,
+            "arguments": arguments or {},
+            "quiet": os.environ.get("CALLIE_QUIET") == "1",
+            "session": os.environ.get("CALLIE_SESSION"),
+        }
     ).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
