@@ -112,6 +112,13 @@ def _routes(svc: Service, tutor: Tutor):
         ),
         ("GET", r"/api/cards/(\d+)/loss", lambda m, b, q: svc.card_loss(int(m[1]), q.get("move", ""))),
         ("POST", r"/api/cards/(\d+)/delete", lambda m, b, q: svc.cards.remove(int(m[1])) or ok),
+        # Claude on the back of a card: a message opens the card's own session, which is shown there from then on
+        (
+            "POST",
+            r"/api/cards/(\d+)/claude/say",
+            lambda m, b, q: tutor.say_card(int(m[1]), str(b.get("text", "")), b.get("tried"), *_size(b)),
+        ),
+        ("POST", r"/api/cards/(\d+)/claude/resume", lambda m, b, q: tutor.resume_card(int(m[1]), *_size(b))),
         # Claude: nothing starts unless one of these is called
         ("POST", rf"/api/games/{_ID}/claude/analyse", lambda m, b, q: tutor.analyse(m[1], *_size(b))),
         ("POST", rf"/api/games/{_ID}/claude/say", lambda m, b, q: tutor.say(m[1], str(b.get("text", "")), *_size(b))),

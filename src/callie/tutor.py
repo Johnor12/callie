@@ -1,4 +1,5 @@
-"""Claude: one Claude Code session per game, in a real terminal that the game's page shows.
+"""Claude: one Claude Code session per game, in a real terminal that the game's page shows, and one per card
+that was asked about, on the back of the card.
 
 Nothing here runs by itself. A session is opened when the page sends it a message (or, over the API, when an
 analysis is asked for), and is told then what is expected of it and how to get at the game: the tools of `mcp.py` (the moves,
@@ -6,12 +7,18 @@ the engine's analysis of each, the engine itself). From then on the page shows i
 resuming it if its terminal has ended since. The app talks to it the way a person would: it pastes a
 message into the terminal and presses Enter. Every session runs in the same directory, so they share one
 Claude Code project: its memory carries from game to game.
+
+A card's session is the same thing, about one card: opened by a message from the back of the card, with tools
+that read the game the card's move was played in, and shown again whenever the back of the card is. A card comes
+back for months and Claude Code deletes a conversation nobody has used for a few weeks, so the app keeps a copy
+of a card's and puts it back when it is missing (`_keep`).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import threading
 import time
@@ -72,6 +79,54 @@ Look at what you already know about their play before you analyse, and keep it c
 openings they play, what they have been working on, how they like feedback given.
 """
 
+# What a card's session is told instead: it is asked about one position, from the back of its card.
+CARD = """\
+You are the chess tutor inside Callie, a local app. The person you are talking to (the student) plays games \
+against Stockfish held to a limited strength, or against Allie, a model that plays the way people of a chosen \
+rating do. Every move of theirs that loses 50 centipawns or more becomes a flashcard: the position before the \
+move, in which they later try to find the better one. This session belongs to one of those cards. The student \
+has answered it and is looking at its back, beside this terminal: the engine's move, what their own lost, and an \
+explanation written for the card when it was made. They ask you about it from there, most often why another move \
+in the position, or a line that follows from one, is not as good. The card comes back, after minutes at first and \
+months in the end, and this conversation is shown with it each time: what you wrote before is read again.
+
+What reaches you
+- A message that starts with [card] was sent by the app when the session was opened: the card, the game its move \
+was played in, and what is written on its back.
+- A message of the student's may begin with a line the app adds, [tried on the card: ...]: the moves they have \
+made on the card's board since you last heard from them, in order, each with the centipawns it loses against the \
+engine's first choice where the app knows it. "This move" or "that" in their question is most likely the last of them.
+- Anything else is the student talking to you.
+
+Your tools (MCP server "chess"). They read the game the card's move was played in.
+- analyze: full-strength Stockfish, live, on any position: a point in the game or a FEN, optionally after extra \
+moves ("what if ..."), optionally restricted to candidate moves you want compared. It is how "why not this move" \
+is answered: play the move on the card's position and see what the engine does to it. It takes seconds.
+- position: any position spelled out (diagram, piece lists, legal moves). Use it instead of trusting your own \
+picture of the board.
+- review: the engine's analysis on file for moves that were played in the game: the evaluation either side of \
+the move, the engine's choices in that position with the lines it expected, and its main line after the move.
+- game: the whole game, one line a move, with the engine's evaluation, the centipawns each move lost, its grade, \
+and the explanations written for the student's other errors.
+Never state a concrete line or tactic you have not verified with the engine or the legal-move list.
+
+How to answer
+- Answer what was asked, in a few sentences: what the move allows or misses, shown with the concrete line as far \
+as it makes the point, and how that compares with the move the card asks for. A refutation is a line, not a number.
+- Turn engine output into chess reasons. Do not recite evaluations or long lines. Use notation the student can \
+follow on the board (SAN with move numbers).
+- The explanation on the back of the card is something the student has just read: build on it, and say so where \
+your own reading of the position differs.
+- If the game is still in progress, do not give away the position on its board now unless the student asks.
+- Pitch it to the student's level as their play and questions show it. Be direct and kind, with no filler praise.
+- Write plain text for a terminal: short paragraphs, no tables, no headers.
+
+{allie}Memory
+Every session of the app runs in this same directory, so your memory here is shared with the sessions of the \
+student's games and of their other cards. Look at what you already know about their play, and keep it current: \
+recurring mistakes, openings they play, what they have been working on, how they like feedback given.
+"""
+
 # The part of SYSTEM about `human_moves`, for sessions that are given it (Allie installed).
 ALLIE = """\
 People, not engines
@@ -115,6 +170,11 @@ def _clean(text: str) -> str:
     return "".join(c for c in text.replace("\r\n", "\n").replace("\r", "\n") if c in "\n\t" or ord(c) >= 32).strip()
 
 
+def _card_key(card_id: int) -> str:
+    """What a card's session goes by where a game's goes by the game's id (which is hexadecimal: never this)."""
+    return f"card-{card_id}"
+
+
 def environment(cfg: Config) -> dict:
     """The environment a `claude` of the app's is started in: the server's own, less what would tie it to the
     session the server was started from, with the account the app's sessions run in."""
@@ -128,10 +188,12 @@ class Tutor:
     def __init__(self, cfg: Config, service):
         self.cfg, self.svc = cfg, service
         self.lock = threading.RLock()
-        self.terms: dict[str, Terminal] = {}  # by game
+        self.terms: dict[str, Terminal] = {}  # by game, or by card (`_card_key`)
         self.by_id: dict[str, Terminal] = {}
+        self.kept: dict[str, str] = {}  # by card: the session in its terminal, whose transcript a copy is kept of
         self.dir = cfg.home / "sessions"
         self.dir.mkdir(parents=True, exist_ok=True)
+        self.transcripts = cfg.home / "transcripts"  # the copies, laid out as Claude Code's own `projects` is
         self.stop = threading.Event()
 
     def start(self) -> None:
@@ -139,13 +201,17 @@ class Tutor:
 
     def close(self) -> None:
         self.stop.set()
+        with self.lock:
+            for session_id in self.kept.values():
+                self._keep(session_id)
         for t in list(self.by_id.values()):
             threading.Thread(target=t.stop, daemon=True).start()
 
     # ---------- the session ----------
 
-    def _files(self, game_id: str) -> tuple[Path, Path]:
-        """The Claude Code settings and MCP configuration of one game's session."""
+    def _files(self, key: str, game_id: str) -> tuple[Path, Path]:
+        """The Claude Code settings and MCP configuration of one session (a game's, or a card's: ``key``), whose
+        tools read ``game_id``."""
         settings = {
             "permissions": {"allow": ["mcp__chess"]},  # its own tools never ask
             "tui": "fullscreen",
@@ -155,14 +221,37 @@ class Tutor:
         if self.svc.allie.available():
             env["CALLIE_ALLIE"] = "1"  # the session is offered `human_moves`
         mcp = {"mcpServers": {"chess": {"command": sys.executable, "args": [str(_ROOT / "mcp.py")], "env": env}}}
-        s, m = self.dir / f"{game_id}.settings.json", self.dir / f"{game_id}.mcp.json"
+        s, m = self.dir / f"{key}.settings.json", self.dir / f"{key}.mcp.json"
         s.write_text(json.dumps(settings, indent=2))
         m.write_text(json.dumps(mcp, indent=2))
         return s, m
 
-    def _has_transcript(self, session_id: str) -> bool:
+    def _projects(self) -> Path:
+        """Where Claude Code keeps its transcripts: a directory for each directory it has run in."""
         base = self.cfg.claude_config_dir or Path(os.environ.get("CLAUDE_CONFIG_DIR") or "~/.claude").expanduser()
-        return any((base / "projects").glob(f"*/{session_id}.jsonl"))
+        return base / "projects"
+
+    def _has_transcript(self, session_id: str) -> bool:
+        return any(self._projects().glob(f"*/{session_id}.jsonl"))
+
+    def _keep(self, session_id: str) -> None:
+        """A card's conversation is kept for as long as the card is: a copy of its transcript is made here as
+        it grows, and put back where Claude Code looks for it when it is no longer there (Claude Code deletes
+        the transcripts nothing was added to for its `cleanupPeriodDays`, 30 unless set)."""
+        try:
+            theirs = next(self._projects().glob(f"*/{session_id}.jsonl"), None)
+            ours = next(self.transcripts.glob(f"*/{session_id}.jsonl"), None)
+            if theirs is not None:
+                ours = self.transcripts / theirs.parent.name / theirs.name
+                if not ours.exists() or ours.stat().st_mtime_ns < theirs.stat().st_mtime_ns:
+                    ours.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(theirs, ours)
+            elif ours is not None:
+                back = self._projects() / ours.parent.name / ours.name
+                back.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ours, back)  # written now: not one to delete for its age
+        except OSError as e:
+            print(f"callie: the transcript of session {session_id} was not kept: {e}", file=sys.stderr, flush=True)
 
     def _request(self, row: dict, plies: int) -> str:
         """What a request for an analysis sends."""
@@ -183,20 +272,28 @@ class Tutor:
         row = self.svc.store.game(game_id)
         if row is None:
             raise TutorError(f"no game {game_id}")
-        started = bool(row["session_started"]) and self._has_transcript(row["session_id"])
+        return self._start(game_id, "games", row, game_id, SYSTEM, cols, rows, parts)
+
+    def _start(
+        self, key: str, table: str, row: dict, game_id: str, system: str, cols: int, rows: int, parts: list[str]
+    ) -> Terminal:
+        """Start a session in a terminal (resuming it if it has run before), with ``parts`` as its prompt: the
+        one that ``row`` of ``table`` ("games" or "cards") keeps, whose tools read ``game_id``."""
         session_id = row["session_id"]
-        if not started and self._has_transcript(session_id):
-            started = True
-        if not started and row["session_started"]:
-            session_id = str(uuid.uuid4())  # its transcript is gone: a session id cannot be used twice
-            self.svc.store.run("UPDATE games SET session_id=? WHERE id=?", (session_id, game_id))
-        settings, mcp = self._files(game_id)
+        if session_id and table == "cards":
+            self._keep(session_id)
+        started = bool(session_id) and self._has_transcript(session_id)
+        if not started and (row["session_started"] or not session_id):
+            # it has none yet (a card), or its transcript is gone: a session id cannot be used twice
+            session_id = str(uuid.uuid4())
+            self.svc.store.run(f"UPDATE {table} SET session_id=? WHERE id=?", (session_id, row["id"]))
+        settings, mcp = self._files(key, game_id)
         argv = [self.cfg.claude_bin, *(["--resume", session_id] if started else ["--session-id", session_id])]
         argv += ["--model", self.cfg.claude_model]
         if self.cfg.claude_effort:
             argv += ["--effort", self.cfg.claude_effort]
         argv += ["--settings", str(settings), "--mcp-config", str(mcp), "--strict-mcp-config"]
-        system = SYSTEM.replace("{allie}", ALLIE if self.svc.allie.available() else "")
+        system = system.replace("{allie}", ALLIE if self.svc.allie.available() else "")
         argv += ["--append-system-prompt", system, *self.cfg.claude_args]
         if parts:
             argv += ["--", _clean("\n\n".join(parts))]
@@ -206,14 +303,21 @@ class Tutor:
             t = Terminal(argv, env, str(self.cfg.workspace), cols, rows, self.cfg.home / "claude.log")
         except OSError as e:
             raise TutorError(f"cannot start Claude Code ({self.cfg.claude_bin}): {e}") from None
-        self.terms[game_id] = self.by_id[t.id] = t
+        self.terms[key] = self.by_id[t.id] = t
+        if table == "cards":
+            self.kept[key] = session_id
         if parts:
-            self.svc.store.run("UPDATE games SET session_started=1 WHERE id=?", (game_id,))
+            self.svc.store.run(f"UPDATE {table} SET session_started=1 WHERE id=?", (row["id"],))
         return t
 
-    def _live(self, game_id: str) -> Terminal | None:
-        t = self.terms.get(game_id)
+    def _live(self, key: str) -> Terminal | None:
+        t = self.terms.get(key)
         return t if t is not None and t.alive else None
+
+    def _changed(self, key: str) -> None:
+        """A session's terminal came or went: the pages on its game are told (a card has no page waiting on it)."""
+        if not key.startswith("card-"):
+            self.svc._bump(key)
 
     def analyse(self, game_id: str, cols: int = 110, rows: int = 32) -> dict:
         """Open the game's session if need be, and ask it for an analysis of the game as it stands."""
@@ -268,6 +372,58 @@ class Tutor:
         t = self._live(game_id)
         return {"terminal": t.id if t else None}
 
+    # ---------- a card's session ----------
+
+    def _card(self, card_id: int) -> dict:
+        row = self.svc.store.one("SELECT * FROM cards WHERE id=? AND state != 'removed'", (card_id,))
+        if row is None:
+            raise TutorError(f"no card {card_id}")
+        return row
+
+    def _begun(self, card: dict) -> bool:
+        """The card has a conversation to go on with: one was started, and its transcript, or the copy, is there."""
+        session_id = card["session_id"]
+        if not (card["session_started"] and session_id):
+            return False
+        self._keep(session_id)
+        return self._has_transcript(session_id)
+
+    def say_card(self, card_id: int, text: str, tried=None, cols: int = 110, rows: int = 32) -> dict:
+        """A message from the back of a card: typed into the card's session, which it opens, or resumes, if it
+        is not running. ``tried`` is the moves made on the card's board that the session has not been told of."""
+        text = _clean(text)
+        if not text:
+            raise TutorError("nothing to send")
+        key = _card_key(card_id)
+        with self.lock:
+            card = self._card(card_id)
+            text = self.svc.card_tried(card, tried) + text
+            t = self._live(key)
+            if t is not None:
+                self._type(t, text)
+            else:
+                game_id, about = self.svc.card_context(card)
+                parts = ([] if self._begun(card) else [f"[card] {about}"]) + [text]
+                t = self._start(key, "cards", card, game_id, CARD, cols, rows, parts)
+        return {"terminal": t.id}
+
+    def resume_card(self, card_id: int, cols: int = 110, rows: int = 32) -> dict:
+        """The card's session as it was left, without asking it anything: what the back of the card shows.
+        "terminal" is None for a card that was never asked about."""
+        key = _card_key(card_id)
+        with self.lock:
+            t = self._live(key)
+            if t is None:
+                card = self._card(card_id)
+                if not self._begun(card):
+                    return {"terminal": None}
+                t = self._start(key, "cards", card, self.svc.card_context(card)[0], CARD, cols, rows, [])
+        return {"terminal": t.id}
+
+    def forget_card(self, card_id: int) -> None:
+        """The card is gone (with its game): its terminal ends, and no later card of that number is taken for it."""
+        self.forget(_card_key(card_id))
+
     def terminal(self, term_id: str) -> Terminal:
         t = self.by_id.get(term_id)
         if t is None:
@@ -292,14 +448,16 @@ class Tutor:
         self.svc._bump(game_id)
         return {"ok": True}
 
-    def forget(self, game_id: str) -> None:
+    def forget(self, key: str) -> None:
         with self.lock:
-            self._drop(game_id)
-            for name in (f"{game_id}.settings.json", f"{game_id}.mcp.json"):
+            self._drop(key)
+            for name in (f"{key}.settings.json", f"{key}.mcp.json"):
                 (self.dir / name).unlink(missing_ok=True)
 
-    def _drop(self, game_id: str) -> None:
-        t = self.terms.pop(game_id, None)
+    def _drop(self, key: str) -> None:
+        t = self.terms.pop(key, None)
+        if key in self.kept:
+            self._keep(self.kept.pop(key))
         if t is not None:
             self.by_id.pop(t.id, None)
             threading.Thread(target=t.stop, daemon=True).start()
@@ -310,14 +468,18 @@ class Tutor:
         threading.Timer(0.4, t.write, args=(b"\r",)).start()
 
     def _sweep(self) -> None:
-        """Forget terminals that have ended, and end those nobody has watched for a while (they resume)."""
+        """Forget terminals that have ended, and end those nobody has watched for a while (they resume). A
+        card's conversation is copied as it grows."""
         while not self.stop.wait(3):
             with self.lock:
-                for game_id, t in list(self.terms.items()):
+                for key, t in list(self.terms.items()):
+                    if key in self.kept:
+                        self._keep(self.kept[key])
                     if not t.alive:
-                        self.terms.pop(game_id, None)
+                        self.terms.pop(key, None)
                         self.by_id.pop(t.id, None)
-                        self.svc._bump(game_id)
+                        self.kept.pop(key, None)
+                        self._changed(key)
                     elif not t.viewers and time.time() - t.last_viewed > self.cfg.idle_terminal_s:
-                        self._drop(game_id)
-                        self.svc._bump(game_id)
+                        self._drop(key)
+                        self._changed(key)

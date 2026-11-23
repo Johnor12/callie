@@ -25,7 +25,7 @@ from collections import deque
 
 from . import allie, openings, opponent, rating
 from .allie import Allie, AllieError
-from .cards import Cards, deck_of
+from .cards import Cards, deck_of, right_moves
 from .chess import START_FEN, Game, Position, describe
 from .config import Config
 from .engine import MATE_CP, Engine, EngineError, loss, show, verdict, win_percent
@@ -890,7 +890,8 @@ class Service:
         """A game was deleted: its cards go with it. One whose move a game still on file has too, in the same
         position, is that game's card from here on, and stands where it stood in its schedule."""
         with self.store.lock:  # what explains the cards sees none of them on its way back
-            for card in self.cards.drop(game_id):
+            dropped = self.cards.drop(game_id)
+            for card in dropped:
                 board = " ".join(card["position"].split()[:2]) + " "  # the pieces and the side to move, as a FEN begins
                 for at in self.store.all(
                     "SELECT m.game_id, m.ply FROM moves m JOIN games g ON g.id = m.game_id "
@@ -901,6 +902,9 @@ class Service:
                     row, moves = self._row(at["game_id"]), self.store.moves(at["game_id"])
                     self._cards(row, moves, self._evals(row, moves), (at["ply"],))
                 self.cards.resume(card)
+        for card in dropped:  # their terminals end: the number of a card that is gone may be another card's by now
+            if self.tutor:
+                self.tutor.forget_card(card["id"])
 
     def _cards_on_file(self) -> None:
         """Cards for the games already on file: those played before there were cards, or put there by an import."""
@@ -1003,17 +1007,56 @@ class Service:
             raise EngineError("the chess engine gave no evaluation of that move")
         return res.lines[0].value
 
+    @staticmethod
+    def _kind(card: dict) -> str:
+        """What the move of a card was, as Claude is told: "a blunder"."""
+        return {"blunder": "a blunder", "mistake": "a mistake", "inaccuracy": "inaccurate"}[
+            deck_of(card["cpl"]) or "inaccuracy"
+        ]
+
     def card_request(self, card: dict) -> tuple[str, str]:
         """What Claude is asked, to explain the move a card is about, and the game its tools read for it: the
         one the move was last played in ("0", which is no game, when that is no longer on file)."""
+        game_id, about = self._card_about(card)
+        return game_id, f"Explain why this move was {self._kind(card)}.\n\n{about}"
+
+    def card_context(self, card: dict) -> tuple[str, str]:
+        """What a card's own Claude session is told when a message from the back of the card opens it: the
+        card and what is on its back. And the game its tools read, as for `card_request`."""
+        game_id, about = self._card_about(card)
+        pos = Position.from_fen(card["fen"])
+        right = [pos.san(m) for m in right_moves(json.loads(card["lines"]), pos.turn == "w", card["uci"])]
+        out = [
+            f"The student is on the back of a card of theirs, of a move that was {self._kind(card)}, and asks you about it.",
+            "",
+            about,
+            f"The card takes as right: {', '.join(right)}.",
+        ]
+        if card["explanation"]:
+            out.append(f"The explanation on its back, {self._written_by()}: {card['explanation']}")
+        return game_id, "\n".join(out)
+
+    def card_tried(self, card: dict, tried) -> str:
+        """The line put before a message from the back of a card: the moves made on the card's board that its
+        session has not been told of (``tried``: each a "move" and, where the page knows it, the "cpl" it loses).
+        Empty when there are none."""
+        pos, said = Position.from_fen(card["fen"]), []
+        for t in tried if isinstance(tried, list) else []:
+            try:
+                san = pos.san(pos.parse(str(t.get("move"))))
+            except (ValueError, AttributeError):
+                continue  # not a move of this position: nothing to tell
+            cpl = t.get("cpl")
+            said.append(f"{san} (loses {cpl})" if isinstance(cpl, int) else san)
+        return f"[tried on the card: {', '.join(said)}]\n" if said else ""
+
+    def _card_about(self, card: dict) -> tuple[str, str]:
+        """A card as Claude is told of it: the position, the move, what it lost, what the engine preferred, and
+        where it is in the game its tools read: the one the move was last played in ("0", which is no game,
+        when that is no longer on file)."""
         pos = Position.from_fen(card["fen"])
         best = json.loads(card["lines"])[0]
-        kind = {"blunder": "a blunder", "mistake": "a mistake", "inaccuracy": "inaccurate"}[
-            deck_of(card["cpl"]) or "inaccuracy"
-        ]
         out = [
-            f"Explain why this move was {kind}.",
-            "",
             f"The student, playing {'White' if pos.turn == 'w' else 'Black'}, played "
             f"{_numbered(pos.fullmove, pos.turn, [card['san']])} in this position: {card['fen']}",
             f"It lost {card['cpl']} centipawns. The engine preferred {best['san'][0]} ({show(best['cp'], best['mate'])}, "

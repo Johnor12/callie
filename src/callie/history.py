@@ -26,7 +26,9 @@ def _rows(store: Store, table: str, where: str = "", args: tuple = ()) -> list[s
     out = []
     for row in store.all(f"SELECT * FROM {table} {where} ORDER BY {ORDER[table]}", args):
         if table == "cards":
-            del row["id"]  # a number of this database only: a card is its position and move
+            # of this database only: its number (a card is its position and move), and its conversation with Claude
+            for mine in ("id", "session_id", "session_started"):
+                del row[mine]
         if "lines" in row:
             row["lines"] = json.loads(row["lines"])  # JSON in the database: written as what it holds
         out.append(json.dumps([table, row], ensure_ascii=False))

@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   reviewed_at REAL,                     -- when it was last answered
   explanation TEXT,                     -- why the move was bad, as Claude wrote it; NULL: not written yet
   game_id TEXT,                         -- the game it was last played in, which it is deleted with; NULL: not known
+  session_id TEXT,                      -- the Claude Code session asked about it from its back; NULL: none yet
+  session_started INTEGER NOT NULL DEFAULT 0,  -- it was given its first prompt, so it can be resumed
   UNIQUE (position, uci)
 );
 """
@@ -93,6 +95,8 @@ ADDED = {
         "steps": "INTEGER NOT NULL DEFAULT 0",
         "ease": "REAL NOT NULL DEFAULT 2.5",
         "game_id": "TEXT",
+        "session_id": "TEXT",
+        "session_started": "INTEGER NOT NULL DEFAULT 0",
     },
 }
 

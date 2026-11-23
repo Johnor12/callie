@@ -33,7 +33,8 @@ installed: a model with an environment of its own, beside the server.
 - Take-backs, resigning, and the game as PGN.
 - **Review**: flashcards of your own errors, made as you play: the position before a move that lost too much, to
   find the better move in, shown again after longer and longer as you get it right, with Claude's explanation
-  of why the move was bad on its back.
+  of why the move was bad on its back, and a box there to ask Claude about the position, in a session the card
+  keeps.
 
 ## Setting it up
 
@@ -307,6 +308,27 @@ The games come first (`src/callie/explain.py`):
 
 A card that could not be explained (Claude Code not logged in, say) is tried again after an hour. Each
 explanation is one run of Claude on the account the app's sessions use.
+
+### Asking Claude about a card
+
+The back of a card has a box to type to Claude, under the explanation: for why another move does not work, or
+where a line you had in mind goes wrong. As in a game, your first message opens a Claude Code session in a
+terminal above the box, and later ones are typed into it. The session is the card's own (`src/callie/tutor.py`):
+
+- it is told the card when it is opened: the position, your move and what it lost, the engine's choice and its
+  line, the moves the card takes as right, and the explanation on its back;
+- its tools are those of a game's session, and read the game the move was played in. With that game no longer on
+  file, `position` and `analyze` work from the card's position;
+- a message takes with it the moves you have made on the card's board since the last one, each with what it
+  lost, so that "why not this?" can be asked of a move you have just tried;
+- it is kept with the card. Whenever the back of the card is on screen (the card answered again, days or months
+  later; the page loaded again), its terminal is there with the conversation as you left it, resumed the way a
+  game's is. A card that a later game makes new again keeps it too.
+
+Claude Code deletes the transcripts nothing was added to for 30 days (its `cleanupPeriodDays`), and a card can be
+away for six months. So the server keeps a copy of each card's transcript as it grows
+(`~/.local/share/callie/transcripts`), and puts it back where Claude Code looks for it before the session is
+resumed. Like the games' conversations, these are not part of the history kept in git.
 
 ## The games, kept in git
 

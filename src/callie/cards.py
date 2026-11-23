@@ -241,13 +241,23 @@ class Cards:
 
     def resume(self, card: dict) -> None:
         """A card that was dropped and has been made again, of another game with the same move in the same
-        position: it stands where it stood in its schedule (removed, if it was), and keeps its explanation."""
+        position: it stands where it stood in its schedule (removed, if it was), and keeps its explanation and
+        its conversation with Claude."""
+        kept = (
+            "state",
+            "steps",
+            "interval",
+            "ease",
+            "due",
+            "reviewed_at",
+            "explanation",
+            "session_id",
+            "session_started",
+        )
         self.store.run(
-            "UPDATE cards SET state=?, steps=?, interval=?, ease=?, due=?, reviewed_at=?, explanation=? "
-            "WHERE position=? AND uci=?",
-            (*(card[k] for k in ("state", "steps", "interval", "ease", "due", "reviewed_at", "explanation")),
-             card["position"], card["uci"]),
-        )  # fmt: skip
+            f"UPDATE cards SET {', '.join(f'{k}=?' for k in kept)} WHERE position=? AND uci=?",
+            (*(card[k] for k in kept), card["position"], card["uci"]),
+        )
 
     def remove(self, card_id: int) -> None:
         """Take a card out of its deck for good: it is not one to study. Its game does not make it again; the

@@ -216,6 +216,7 @@ function showGame(id) {
   if (S.gid === id) return;
   leaveGame();
   Object.assign(S, { gid: id, game: null, view: 0, follow: true, flip: false, sel: null, drag: null, promo: null, pending: null, reopen: true });
+  claudeIn($("game"), "Ask Claude about the game…");
   $("board").innerHTML = ""; $("moves").innerHTML = ""; $("insight").innerHTML = ""; $("game-err").textContent = "";
   loadMeta().catch(() => {});
   startPoll();
@@ -250,7 +251,7 @@ function stopPoll() { if (S.poll) S.poll.abort(); S.poll = null; }
 // The wait on the game is also what runs your clock: a hidden tab stops waiting, and the clock stops with it.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { stopPoll(); if (S.term) unlisten(S.term); }
-  else { S.reopen = true; startPoll(); if (S.term) listen(S.term); }
+  else { S.reopen = true; startPoll(); if (S.term) listen(S.term); if (S.review && S.review.result) cardSession(S.review); }
 });
 
 function setGame(g) {
@@ -625,7 +626,8 @@ document.addEventListener("keydown", (ev) => {
 // null once none is active), when that was shown (`at`), your move on it while the server answers (`pending`),
 // what the server said of it (`result`), and the moves made on the position: the answer first, and after a
 // wrong one any others (`tries`: each with its `cpl`, what it lost, once the server has said; `tried` is the
-// last of them). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
+// last of them; `told`: how many of them Claude has been told of, `session`: the card's Claude session was asked
+// for, to show on its back). The card and what came of it are kept for the tab (`keepReview`): a page loaded again is on
 // the same card, as it was, and the next one comes only with Next or a grade. Unless the card is no longer
 // there (its game was deleted, or the card was) or no longer that position: then the page is on the next one.
 const KEPT = (deck) => `callie.review.${deck}`;
@@ -642,7 +644,8 @@ async function showReview(deck) {
   $("home").hidden = true; $("game").hidden = true; $("review").hidden = false;
   $("card-pane").hidden = true; $("card-done").hidden = true; $("card-err").textContent = "";
   $("crumb").textContent = "Review"; document.title = "Review · Callie";
-  S.review = { deck, name: "", active: 0, card: null, at: 0, pending: null, result: null, tries: [], tried: null, fast: false, timer: 0 };
+  S.review = { deck, name: "", active: 0, card: null, at: 0, pending: null, result: null, tries: [], tried: null, told: 0, session: false, fast: false, timer: 0 };
+  claudeIn($("card-side"), "Ask Claude about the position…");
   loadMeta().catch(() => {});
   let kept = null;
   try { kept = JSON.parse(sessionStorage.getItem(KEPT(deck)) || "null"); } catch (e) { /* no storage */ }
@@ -654,7 +657,7 @@ async function showReview(deck) {
   renderReview();
   for (const t of r.tries) if (t.cpl === undefined) cardLoss(r, t);  // asked when the page went: asked again
 }
-function leaveReview() { if (S.review) clearTimeout(S.review.timer); S.review = null; $("card-delete").hidden = true; }
+function leaveReview() { if (S.review) { clearTimeout(S.review.timer); closeTerminal(); } S.review = null; $("card-delete").hidden = true; }
 async function nextCard() {
   const r = S.review;
   if (!r) return;
@@ -662,8 +665,9 @@ async function nextCard() {
   try {
     const d = await api("GET", `/api/cards/${r.deck}` + (r.card ? `?skip=${r.card.id}` : ""));
     if (S.review !== r) return;
-    Object.assign(r, { name: d.name, active: d.active, card: d.card, wait: d.wait, pending: null, result: null, tries: [], tried: null, fast: false });
+    Object.assign(r, { name: d.name, active: d.active, card: d.card, wait: d.wait, pending: null, result: null, tries: [], tried: null, told: 0, session: false, fast: false });
     S.sel = null; S.promo = null;
+    showTerminal(null); $("compose-text").value = ""; $("claude-err").textContent = "";  // the last card's
     renderReview();
     r.at = performance.now();
     clearTimeout(r.timer);
@@ -753,7 +757,9 @@ function renderReview() {
   }
   $("card-next").hidden = !res || (res.right && !r.fast);
   $("card-grade").hidden = !res;
+  $("claude-pane").hidden = !res;  // Claude is asked from the back of the card, and what was asked before is there
   if (!res) return;
+  if (!r.session) { r.session = true; cardSession(r); }
   // One line: your answer with what it lost, once that is known (and that it is the engine's first choice, when
   // it is), and the move of the game with what that lost. Under it: the engine's first choice, after a right
   // answer that was another move; the other moves tried after a wrong answer, each with what it would have lost.
@@ -768,20 +774,32 @@ function renderReview() {
 
 // ---------- Claude ----------
 // A Claude Code session in a terminal, shown with xterm.js. Nothing starts one but a message sent from the box
-// here; once a game has one, it is shown whenever the game is.
+// here; once a game has one, it is shown whenever the game is. A card has one of its own, asked from the back of
+// the card and shown there whenever that is. The page has the one pane, in what is on screen: the game, where it
+// is the game's session, or the side of a card, where it is the card's.
+function claudeIn(el, ask) {
+  if ($("claude-pane").parentNode !== el) { el.append($("claude-pane")); $("compose-text").value = ""; }
+  $("compose-text").placeholder = ask; $("claude-err").textContent = "";
+  $("claude-pane").hidden = false;
+  showTerminal(null);
+}
 function paneSize() {
   if (S.term) return { cols: S.term.xterm.cols, rows: S.term.xterm.rows };
   // No terminal yet: the pane holds only the box. The size is that of the terminal it grows to hold (style.css).
   const font = TOUCH.matches ? 12 : 13, width = $("claude-pane").clientWidth;
-  const height = (PHONE.matches ? innerHeight * 0.78 : $("game").clientHeight - 24) - $("compose").offsetHeight;
+  const height = S.review ? (PHONE.matches ? innerHeight * 0.7 : Math.max($("card-board").clientHeight, 440) - $("card-side").offsetHeight)
+    : (PHONE.matches ? innerHeight * 0.78 : $("game").clientHeight - 24) - $("compose").offsetHeight;
   return { cols: Math.max(40, Math.floor((width - 24) / (font * 0.61))), rows: Math.max(12, Math.floor((height - 12) / (font * 1.25))) };
 }
-function syncClaude() {
-  const c = S.game.claude, id = c.terminal;
+function showTerminal(id) {  // the terminal of that number in the pane; null: none
   if (id && (!S.term || S.term.id !== id)) openTerminal(id);
   if (!id && S.term) closeTerminal();
   $("terminal").hidden = !id;
   renderKeys();
+}
+function syncClaude() {
+  const c = S.game.claude, id = c.terminal;
+  showTerminal(id);
   if (id) S.reopen = false;
   else if (S.reopen && c.started && !document.hidden) { S.reopen = false; reopen(); }
 }
@@ -794,19 +812,34 @@ async function reopen() {
     if (S.gid === gid && S.game) { S.game.claude.terminal = r.terminal; syncClaude(); }
   } catch (e) { /* nothing to resume (its transcript is gone), or no Claude Code: a message sent says which */ }
 }
+// The session of the card on screen, if the card has one: on its back as it was left, each time that is shown.
+async function cardSession(r) {
+  const c = r.card;
+  try {
+    const d = await api("POST", `/api/cards/${c.id}/claude/resume`, paneSize());
+    if (S.review === r && r.card === c && d.terminal) showTerminal(d.terminal);
+  } catch (e) { /* no Claude Code: a message sent says so */ }
+}
 async function claude(path, body) {
   $("claude-err").textContent = "";
+  const r = S.review, c = r && r.card;
   try {
-    const r = await api("POST", `/api/games/${S.gid}/claude/${path}`, { ...paneSize(), ...(body || {}) });
-    if (r.terminal && S.game) { S.game.claude.terminal = r.terminal; S.game.claude.started = true; syncClaude(); }
-    return r;
+    const d = await api("POST", `/api/${c ? `cards/${c.id}` : `games/${S.gid}`}/claude/${path}`, { ...paneSize(), ...(body || {}) });
+    if (c) { if (S.review === r && r.card === c) showTerminal(d.terminal); }
+    else if (d.terminal && S.game) { S.game.claude.terminal = d.terminal; S.game.claude.started = true; syncClaude(); }
+    return d;
   } catch (e) { $("claude-err").textContent = e.message; throw e; }
 }
 async function composeSend() {
-  const text = $("compose-text").value;
-  if (!text.trim() || !S.gid) return;
+  const text = $("compose-text").value, r = S.review;
+  if (!text.trim() || !(r ? r.result : S.gid)) return;
   $("compose-text").value = "";
-  try { await claude("say", { text }); } catch (e) { $("compose-text").value = text; }
+  // From a card, with the moves made on its board since Claude last heard: "why not this?" is about one of them.
+  const tried = r ? r.tries.slice(r.told).map((t) => ({ move: t.uci, cpl: t.cpl })) : [];
+  try {
+    await claude("say", r ? { text, tried } : { text });
+    if (r) r.told += tried.length;
+  } catch (e) { $("compose-text").value = text; }
 }
 $("compose-send").onclick = composeSend;
 $("compose-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); composeSend(); } });
@@ -863,7 +896,11 @@ function listen(t) {
     t.fresh = false;
     t.xterm.write(bytes, () => t.resize(true));  // a viewer that has just arrived has none of a full-screen program's screen
   };
-  const ended = () => { if (S.term === t) { closeTerminal(); if (S.game) { S.game.claude.terminal = null; syncClaude(); } } };
+  const ended = () => {
+    if (S.term !== t) return;
+    closeTerminal();
+    if (S.game) { S.game.claude.terminal = null; syncClaude(); } else showTerminal(null);
+  };
   src.addEventListener("exit", ended);
   src.onerror = () => { if (src.readyState === EventSource.CLOSED) ended(); };
 }

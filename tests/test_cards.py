@@ -1,14 +1,15 @@
 """The cards made of your errors: which deck, what answers one, how long it is hidden, and that games make them."""
 
+import json
 import time
 from datetime import datetime
 
-from callie import cards, opponent
+from callie import cards, history, opponent
 from callie.cards import CardError, Cards
 from callie.store import Store
 from tests import function_tests, need_engine, scratch_config
 from tests.test_play import done, service, until
-from tests.test_server import Running
+from tests.test_server import Running, output
 
 # After 1. e4 e5 2. Qh5 Nc6 3. Bc4, Black to move: g6 and Qe7 hold, Nh6 less well, and Nf6 is mated.
 FEN = "r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3"
@@ -491,6 +492,57 @@ def test_a_card_is_explained_in_the_background():
         assert s.svc.in_play() is False  # the game is over
     finally:
         opponent.pick = old
+        s.close()
+
+
+def test_a_card_has_a_claude_session_of_its_own():
+    s = Running()
+    try:
+        s.svc.cards.note(FEN, "g8f6", "Nf6", 990, LINES, NOON - 30 * DAY)
+        cid = s.svc.store.one("SELECT id FROM cards")["id"]
+        explained(s, cid)  # written in the background first: what is put on the card here is not written over
+        s.svc.cards.explain(s.svc.store.one("SELECT * FROM cards"), "Qxf7 is mate.")
+        said = lambda term: json.loads(output(term, '"prompt"').split("\n")[0])  # noqa: E731
+        # never asked about: nothing to show on its back, and nothing is started to find that out
+        assert s.call("POST", f"/api/cards/{cid}/claude/resume") == (200, {"terminal": None})
+        assert s.call("POST", "/api/cards/999/claude/resume")[0] == 400
+        assert s.call("POST", f"/api/cards/{cid}/claude/say", {"text": "  "})[0] == 400 and not s.tutor.terms
+        # a message from its back: a session of the card's, told the card, and which moves were tried on its board
+        tried = [{"move": "g8h6", "cpl": 75}, {"move": "d8e7"}, {"move": "a1a8", "cpl": 1}, "nonsense"]
+        code, r = s.call("POST", f"/api/cards/{cid}/claude/say", {"text": "why not this?", "tried": tried, "cols": 90})
+        first = said(s.tutor.terminal(r["terminal"]))
+        assert code == 200 and first["mode"] == "new" and first["cwd"] == str(s.cfg.workspace) and first["mcp"]
+        told = first["prompt"]
+        assert told.startswith("[card] The student is on the back of a card of theirs, of a move that was a blunder")
+        assert "played 3... Nf6 in this position: " + FEN in told and "The card takes as right: g6, Qe7." in told
+        assert "Qxf7 is mate." in told and "no longer on file" in told
+        assert told.endswith("[tried on the card: Nh6 (loses 75), Qe7]\nwhy not this?")
+        tools = json.loads((s.cfg.home / "sessions" / f"card-{cid}.mcp.json").read_text())["mcpServers"]["chess"]
+        assert tools["env"]["CALLIE_GAME"] == "0"  # the game is not on file: the tools have the FEN to work from
+        row = s.svc.store.one("SELECT session_id, session_started FROM cards")
+        assert row == {"session_id": first["session"], "session_started": 1}
+        # the back of the card shows that terminal, and a second message is typed into it
+        assert s.call("POST", f"/api/cards/{cid}/claude/resume")[1] == r
+        s.call("POST", f"/api/cards/{cid}/claude/say", {"text": "and Qe7?", "tried": []})
+        assert "and Qe7?" in output(s.tutor.terminal(r["terminal"]), "heard:")  # pasted, then Enter
+        # its terminal gone (the server was restarted, say) and its transcript deleted by Claude Code for its age:
+        # the card has the conversation still, from the copy that was kept, and goes on with it
+        s.tutor.forget_card(cid)
+        transcript = s.cfg.claude_config_dir / "projects" / "-fake" / f"{first['session']}.jsonl"
+        assert (s.cfg.home / "transcripts" / "-fake" / transcript.name).read_text() == transcript.read_text()
+        transcript.unlink()
+        code, r2 = s.call("POST", f"/api/cards/{cid}/claude/resume")
+        again = said(s.tutor.terminal(r2["terminal"]))
+        assert r2 != r and again["mode"] == "resume" and again["session"] == first["session"] and again["prompt"] == ""
+        s.tutor.forget_card(cid)
+        code, r3 = s.call("POST", f"/api/cards/{cid}/claude/say", {"text": "one more"})
+        more = said(s.tutor.terminal(r3["terminal"]))
+        assert more["mode"] == "resume" and more["prompt"] == "one more"  # it knows the card already
+        # none of it goes into the history kept in git, and a card taken out of its deck is not asked about
+        assert "session" not in "".join(history._rows(s.svc.store, "cards"))
+        s.call("POST", f"/api/cards/{cid}/delete")
+        assert s.call("POST", f"/api/cards/{cid}/claude/say", {"text": "hello"})[0] == 400
+    finally:
         s.close()
 
 
