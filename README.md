@@ -218,8 +218,9 @@ above the terminal, wherever you talk to Claude (a game, the back of a card), ea
   meanwhile: its clock runs as it did, and the opponent's move arrives behind the line;
 - everything a conversation was shown is kept with it (its last 30), and `‹ ›` beside the title page back
   through it, so an answer you read again later still has its lines;
-- on a phone the board is a screen above the pane: a tap on a move brings the board on screen, and the buttons
-  that step through the line stay at the foot of the screen while one is on it.
+- on a phone, where the pane is a screen below the board, they are listed directly under the board instead (a
+  game's: under the buttons that step through its moves), so that the board, the list and its buttons are on
+  one screen. The list is no taller than the screen leaves under the board, and scrolls by itself past that.
 
 Claude's moves are checked before anything is shown: a line with a move that is not legal is refused, and Claude
 is told where it stops. The page still knows no chess: each move comes with the position after it.

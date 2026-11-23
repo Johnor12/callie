@@ -164,9 +164,10 @@ textarea { resize: none; width: 100%; }
 #keys { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
 #keys button { padding: 6px 12px; font-size: 13px; flex: none; }
 #claude-err:not(:empty) { padding: 8px 10px 0; }
-/* What Claude put on the board in the session, above its terminal: a position's lines, each move a button that
-   puts it on the board, and under them the buttons that step through the one that is on it. */
-#lines { flex: none; display: grid; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+/* What Claude put on the board in the session, above its terminal (on a phone, under the board: see there): a
+   position's lines, each move a button that puts it on the board, and under them the buttons that step through
+   the one that is on it. */
+#lines { flex: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .lines-head { display: flex; align-items: baseline; gap: 8px; }
 #lines-title { flex: 1; min-width: 0; font-weight: 600; }
 #lines-pager { display: flex; align-items: baseline; gap: 2px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -230,11 +231,13 @@ textarea { resize: none; width: 100%; }
   #game { display: flex; flex-direction: column; padding: 8px 10px 16px; }
   #board-pane { width: 100%; }
   #board, #card-board { scroll-margin: 6px; }  /* a click on a move in a list brings the board back on screen: not flush with the edge */
-  /* The lines are a screen below the board they are played on: while one is on it, the buttons that step
-     through it stay at the foot of the screen. */
-  #line-nav.on { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); background: var(--panel2); border-top: 1px solid var(--line); }
-  #line-nav.on button { min-width: 46px; padding: 7px 0; }
-  body:has(#line-nav.on) { padding-bottom: 54px; }
+  /* Claude's lines are directly under the board they are played on (app.js puts them there), a panel of their
+     own, so that the two are on one screen: the list is as tall as the screen leaves under the board and what
+     is between them, and scrolls by itself past that. */
+  #board-pane > #lines, #card-pane > #lines { align-self: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  #lines-list { max-height: clamp(48px, calc(100dvh - var(--board) - 106px), 148px); }
+  #board-pane #lines-list { max-height: clamp(48px, calc(100dvh - var(--board) - 184px), 148px); }  /* your name and the game's buttons are between */
+  #line-nav button { min-width: 46px; padding: 7px 0; }
   #moves-pane { max-height: 300px; }
   #claude-pane { flex: none; align-self: stretch; }
   #claude-pane:has(#terminal:not([hidden])) { height: 78dvh; }

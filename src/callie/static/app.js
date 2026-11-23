@@ -30,7 +30,7 @@ const S = {
   clockAt: 0,      // when the clock in S.game was read
   term: null,
   shown: [],       // what Claude put on the board in the session on screen: positions, each with lines from it
-  shownAt: null,   // the one of them listed above the terminal (its id)
+  shownAt: null,   // the one of them that is listed (its id)
   line: null,      // the line on the board in place of the game or the card: { set, line, at } (at: its moves played so far)
   reopen: false,   // the game's session is to be shown again if its terminal has ended (once each time you come back)
   review: null,    // the deck being reviewed and its card on screen (see showReview)
@@ -872,6 +872,14 @@ $("compose-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" &
 // on its stream. They are listed above the terminal, each move a button: a click puts the position after it on
 // the board beside the pane (a game's, or a card's) in place of what was there, and the buttons under the list,
 // or the arrow keys, step through the line. Everything a session showed is kept, to page back through.
+// On a phone the pane is a screen below the board, and what is used together is to be on one screen: there the
+// list is directly under the board (a game's: under the buttons that step through its moves).
+function placeLines() {
+  const el = $("lines"), over = !PHONE.matches ? null : S.review ? $("card-board") : $("nav");
+  if (over) { if (over.nextElementSibling !== el) over.after(el); }
+  else if ($("claude-pane").firstElementChild !== el) $("claude-pane").prepend(el);
+}
+PHONE.addEventListener("change", () => renderLines());
 async function loadLines(t) {
   let d;
   try { d = await api("GET", `/api/terminals/${t.id}/lines`); } catch (e) { return; }  // it has ended: its stream says so
@@ -915,6 +923,7 @@ function renderLines() {
   const set = S.shown.find((b) => b.id === S.shownAt);
   $("lines").hidden = !S.term || !set;
   if ($("lines").hidden) return;
+  placeLines();
   const i = S.shown.indexOf(set), n = S.shown.length, l = linePos(), on = l && l.set === set ? S.line : null;
   $("lines-title").textContent = set.title;
   $("lines-pager").hidden = n < 2;
@@ -931,7 +940,6 @@ function renderLines() {
     list.scrollTop += a.top < box.top ? a.top - box.top : Math.max(0, a.bottom - box.bottom);
   }
   const end = l ? l.line.moves.length : 0;
-  $("line-nav").classList.toggle("on", !!l);
   $("line-first").disabled = $("line-prev").disabled = !l || S.line.at === 0;
   $("line-next").disabled = !!l && S.line.at === end;  // with none on the board, it starts the first
   $("line-last").disabled = !l || S.line.at === end;
@@ -940,11 +948,18 @@ function renderLines() {
   $("line-close").hidden = !l;
   $("line-close").title = `Back to the ${S.review ? "card" : "game"} (Esc)`;
 }
+// A move put on the board from the list or its buttons is to be seen there, with the list still on screen. On a
+// phone they are under the board and either may be partly off the screen: the list is brought on, then the board
+// (which is the one to be whole, where the screen is too short for both).
+function lineInSight() {
+  $("lines").scrollIntoView({ block: "nearest" });
+  onBoard().el.scrollIntoView({ block: "nearest" });
+}
 $("lines-list").onclick = (ev) => {
   const b = ev.target.closest("button");
   if (!b) return;
   setLine({ set: S.shownAt, line: +b.parentNode.dataset.line, at: +b.dataset.at });
-  onBoard().el.scrollIntoView({ block: "nearest" });  // on a phone the board is above the pane, and the move is to be seen on it
+  lineInSight();
 };
 function pageLines(by) {  // what was shown before, or after: listed, and the line on the board put away
   const i = S.shown.findIndex((b) => b.id === S.shownAt) + by;
@@ -958,6 +973,7 @@ $("line-first").onclick = () => stepLine(0);
 $("line-prev").onclick = () => stepLine(S.line.at - 1);
 $("line-next").onclick = () => stepLine(S.line ? S.line.at + 1 : 1);
 $("line-last").onclick = () => stepLine(linePos().line.moves.length);
+for (const b of $("line-nav").querySelectorAll("button:not(#line-close)")) b.addEventListener("click", lineInSight);
 $("line-close").onclick = () => setLine(null);
 
 const addon = (load) => { try { load(); } catch (e) { /* not there, or no GPU: the terminal works without it */ } };
