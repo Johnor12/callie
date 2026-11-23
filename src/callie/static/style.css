@@ -104,9 +104,10 @@ textarea { resize: none; width: 100%; }
 #promo { position: absolute; z-index: 20; width: 12.5%; display: flex; flex-direction: column; background: #f4f5f7; box-shadow: 0 6px 22px rgba(0, 0, 0, .5); border-radius: 4px; overflow: hidden; }
 #promo button { border: 0; border-radius: 0; background: none; padding: 0; aspect-ratio: 1; position: relative; }
 #promo button:hover { background: #cfd8dc; }
-.board.review { outline: 2px dashed rgba(224, 179, 79, .7); outline-offset: -2px; }
-/* a line of Claude's is on it, not the game or the card: framed, over the squares */
-.board.line::after { content: ""; position: absolute; inset: 0; z-index: 10; border: 3px solid var(--accent); border-radius: 4px; pointer-events: none; }
+/* Not the position being played: framed, over the squares (an outline of the board's own is painted under them).
+   Dashed while an earlier move of the game is on it, blue while a line of Claude's is. */
+.board.review::after, .board.line::after { content: ""; position: absolute; inset: 0; z-index: 10; border: 3px dashed var(--warn); border-radius: 4px; pointer-events: none; }
+.board.line::after { border: 3px solid var(--accent); }
 .board.right .sq.last::before { background: rgba(127, 195, 107, .62); }
 .board.wrong .sq.last::before { background: rgba(217, 69, 61, .6); }
 .board.wrong { box-shadow: 0 0 0 3px var(--worst); }
