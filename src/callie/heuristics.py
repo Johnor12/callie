@@ -4,8 +4,9 @@ They are written down in `heuristics.json`, beside this file: a list of heuristi
 cards are told apart by: not to be changed once it has cards), a ``title`` (the heuristic, as it is said on the
 back of its cards) and its ``positions``. A position is a card (`cards.py`): its ``fen``, to find the move in;
 the move that led to it (``last``, as UCI; left out: none, or not known); ``why``, how the heuristic finds the
-move there, which is the back of the card; the ``answer`` the text is about, as SAN; and the engine's ``lines``
-there, best first, each its ``moves`` (UCI, in one string) and its ``cp`` or ``mate`` for White. The lines are
+move there, which is the back of the card; the ``answer`` the text is about, as SAN; where the position is from
+(``source``, for whoever reads the file: the app shows it nowhere); and the engine's ``lines`` there, best first,
+each its ``moves`` (UCI, in one string) and its ``cp`` or ``mate`` for White. The lines are
 what a card is answered by, as on any card: the engine's first choice, or another line within a few centipawns
 of it. `scripts/heuristics.py` writes them for the positions that have none.
 
