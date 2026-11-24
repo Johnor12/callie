@@ -3,7 +3,8 @@
 It holds no chess of its own. Each tool call is passed to the running Callie server (CALLIE_URL) for the
 game this session belongs to (CALLIE_GAME), which owns the game and the engines. `human_moves` is offered
 only where Allie is installed (CALLIE_ALLIE), and `show_lines` only to a session the student talks to, in a pane
-beside a board (CALLIE_SESSION: which one, so that the lines go to its pane). A session that works in the
+beside a board (CALLIE_SESSION: which one, so that the lines go to its pane). The session of the freeplay board
+(CALLIE_FREEPLAY) has no game: it is offered the tools that take any position, as a FEN. A session that works in the
 background (CALLIE_QUIET: one that explains a card) says so with each call, and the server answers it with what
 the games can spare. Standard library only, and run as a file, so it needs nothing from the environment Claude
 Code starts it in.
@@ -157,7 +158,19 @@ SHOW_LINES = {
 }
 
 
+def _of_a_fen(tool: dict) -> dict:
+    """A tool as a session with no game is offered it: about a position given as a FEN, never a point in a game."""
+    schema = tool["inputSchema"]
+    props = {k: v for k, v in schema["properties"].items() if k != "ply"}
+    props["fen"] = {"type": "string", "description": "The position, as a FEN."}
+    required = ["fen", *schema.get("required", [])]
+    return {**tool, "inputSchema": {**schema, "properties": props, "required": required}}
+
+
 def tools() -> list[dict]:
+    if os.environ.get("CALLIE_FREEPLAY") == "1":
+        by_name = {t["name"]: t for t in (*TOOLS, SHOW_LINES)}
+        return [_of_a_fen(by_name[name]) for name in ("position", "analyze", "show_lines")]
     return (
         TOOLS
         + ([SHOW_LINES] if os.environ.get("CALLIE_SESSION") else [])

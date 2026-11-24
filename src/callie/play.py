@@ -1,9 +1,11 @@
 """Games: making moves, the opponent's replies, the clocks, and the engine's analysis of every position (from
 which the cards of your errors are made: `cards.py`).
 
-Four Stockfish processes: `review` analyses each position of a game once, at full strength; `explore` answers
+Five Stockfish processes: `review` analyses each position of a game once, at full strength; `explore` answers
 the tutor's own questions; `opp` plays the opponent at its chosen strength; `quiet` answers what is asked in the
-background (an explanation being written for a card), on one thread at the lowest priority. The opponent can instead be Allie
+background (an explanation being written for a card), on one thread at the lowest priority; `free` evaluates the
+position on the freeplay board (a board with no game behind it: the last part of this file), and is started when
+that is first asked. The opponent can instead be Allie
 (`allie.py`), a model of human play in a process of its own, which then has a clock like yours, and which
 resigns and offers draws as people do. Whoever plays,
 the analysis is Stockfish's. A move can be made ahead, while the opponent is on its own (`premove`): it is played
@@ -42,6 +44,7 @@ QUIET_S = 3.0  # the longest search a background question gets, in seconds of on
 QUIET_NPS = 700_000  # what a second of that is, in positions searched: it is given the work, however long it waits for the processor
 IN_PLAY_S = 600.0  # a game that is not over and had a move this recently is being played
 SHOWN_LINES, SHOWN_PLIES = 8, 40  # the most Claude puts on the board at once: lines from a position, half-moves of one
+FREE_MS = (50, 10000)  # the shortest and the longest search of the position on the freeplay board
 _RULE_DRAWS = ("insufficient material", "fifty-move rule", "threefold repetition")
 
 
@@ -90,6 +93,7 @@ class Service:
         self.explore = Engine(path, threads=cfg.analysis_threads, hash_mb=cfg.hash_mb)
         self.opp = Engine(path, threads=2, hash_mb=64)
         self.quiet = Engine(path, threads=1, hash_mb=64, nice=True)
+        self.free = Engine(path, threads=cfg.analysis_threads, hash_mb=cfg.hash_mb)
         self.allie = Allie(cfg)
         self.lock = threading.RLock()  # one change to a game at a time
         self.changed = threading.Condition()
@@ -122,7 +126,8 @@ class Service:
         self.work.set()
         if self.explainer:
             self.explainer.close()
-        for e in (self.review, self.explore, self.opp, self.quiet, self.allie):
+        self.free.stop()
+        for e in (self.review, self.explore, self.opp, self.quiet, self.free, self.allie):
             e.close()
 
     def here(self) -> dict:
@@ -1434,3 +1439,67 @@ class Service:
                 out.append(f"{_numbered(p.fullmove, p.turn, [m['san']])}: {m['explanation']}")
         out += ["", "Current position:", describe(pos)]
         return "\n".join(out)
+
+    # ---------- the freeplay board ----------
+    # A board with no game behind it, on which the pieces of both sides are moved from any position. The page
+    # keeps what is on it: the server is asked about one position at a time, and remembers none of them.
+
+    @staticmethod
+    def _free(fen) -> Position:
+        """A position of the freeplay board (None: the one a game starts from)."""
+        try:
+            return Position.from_fen(str(fen)) if fen else Position.from_fen()
+        except ValueError as e:
+            raise GameError(str(e)) from None
+
+    def free_position(self, fen=None) -> dict:
+        """A position as the page needs it to move pieces on: whose move it is, and every legal move with its
+        SAN and the position it leads to, as a game's state has them (none: the game is over there)."""
+        pos = self._free(fen)
+        legal = {m: {"san": pos.san(m), "fen": pos.push(m).fen()} for m in pos.legal_moves()}
+        return {"fen": pos.fen(), "turn": pos.turn, "legal": legal}
+
+    def free_eval(self, fen, ms=None) -> dict:
+        """The engine's view of a position, at full strength, after ``ms`` milliseconds of search: the
+        evaluation as a game's positions have theirs, its first choice ("best") and the line it expects.
+        "over": nothing can be played there. The page asks about the position on its board again and again,
+        each time for longer, and the engine's hash table carries what one search found into the next. A
+        question ends the search of the one before it, which answers with what it had: "best" is None, with
+        no evaluation, where that was nothing yet."""
+        pos = self._free(fen)
+        out = {"fen": pos.fen(), "cp": None, "mate": None, "value": 0, "depth": 0, "best": None, "line": []}
+        if not pos.legal_moves():
+            mated = pos.in_check()
+            value = (-MATE_CP if pos.turn == "w" else MATE_CP) if mated else 0
+            return {**out, "cp": None if mated else 0, "mate": 0 if mated else None, "value": value, "over": True}
+        try:
+            ms = max(FREE_MS[0], min(int(ms or 1000), FREE_MS[1]))
+        except (TypeError, ValueError):
+            raise GameError("ms is a number of milliseconds") from None
+        self.free.stop()
+        res = self.free.search(pos.fen(), ms=ms)
+        if res.lines and res.lines[0].moves:
+            ln = res.lines[0]
+            sans = _line_sans(pos, ln.moves[:PV_PLIES])
+            out.update(cp=ln.cp, mate=ln.mate, value=ln.value, depth=res.depth, line=sans)
+            out["best"] = {"uci": ln.moves[0], "san": sans[0]}
+        return {**out, "over": False}
+
+    def free_board(self, fen, moves) -> str:
+        """The line put before a message from beside the freeplay board: the position on it, and how it was
+        reached from where the board started (``fen``; None: where a game starts) by the ``moves`` made on it."""
+        start = pos = self._free(fen)
+        sans = []
+        for m in moves if isinstance(moves, list) else []:
+            try:
+                uci = pos.parse(str(m))
+            except ValueError:
+                raise GameError(f"{m!r} is not a legal move on the board") from None
+            sans.append(pos.san(uci))
+            pos = pos.push(uci)
+        origin = "the starting position" if start.fen() == START_FEN else start.fen()
+        how = f"after {_numbered(start.fullmove, start.turn, sans)} from {origin}" if sans else f"which is {origin}"
+        if not sans and origin != "the starting position":
+            how = "which is where the board started"
+        over = "" if pos.legal_moves() else f", {'checkmate' if pos.in_check() else 'stalemate'}"
+        return f"[board: {pos.fen()}, {'White' if pos.turn == 'w' else 'Black'} to move{over}, {how}]\n"

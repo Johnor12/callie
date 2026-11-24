@@ -12,7 +12,8 @@ installed: a model with an environment of its own, beside the server.
 ## What you get
 
 - **Home page**: a form for a new game (your colour, the opponent (Stockfish or Allie) and its strength, which
-  starts at your own rating, the opening it should steer for, and the clock), then the decks to review (your
+  starts at your own rating, the opening it should steer for, and the clock), then the way to the
+  [freeplay board](#freeplay), the decks to review (your
   errors, and the heuristics), your ratings and your recent games (with the final position, result and settings, and what each did to
   your rating).
 - **Game page**:
@@ -36,6 +37,8 @@ installed: a model with an environment of its own, beside the server.
   of why the move was bad on its back, and a box there to ask Claude about the position, in a session the card
   keeps. A fourth deck, [Heuristics](#heuristics), holds rules of thumb for finding a move, each shown by
   positions to find the move in.
+- **Freeplay**: a board to move both sides' pieces on, from the start of a game or from the position of a card,
+  with the engine's evaluation of what is on it, an arrow for its first choice, and Claude beside it.
 
 ## Setting it up
 
@@ -208,9 +211,10 @@ Claude Code login the sessions use.
 
 A line written out in notation is slow to follow. So Claude is told to put the lines its answer turns on on the
 board (`show_lines`: a position, and one or more named lines from it), and to write around them. They are listed
-above the terminal, wherever you talk to Claude (a game, the back of a card), each move a button:
+above the terminal, wherever you talk to Claude (a game, the back of a card, the freeplay board), each move a button:
 
-- a click on a move puts the position after it on the board beside the pane, in place of the game or the card,
+- a click on a move puts the position after it on the board beside the pane, in place of the game, the card or
+  what was on the freeplay board,
   with the move marked; a click on a line's name puts its starting position there. The board is framed in blue
   while a line is on it, and nothing on it can be moved;
 - ◀ and ▶ under the list (or the arrow keys, Home and End) step through the line. With no line on the board, ▶
@@ -381,6 +385,33 @@ away for six months. So the server keeps a copy of each card's transcript as it 
 (`~/.local/share/callie/transcripts`), and puts it back where Claude Code looks for it before the session is
 resumed. Like the games' conversations, these are not part of the history kept in git.
 
+## Freeplay
+
+A board with no game behind it: both sides' pieces are yours to move, to try a line and see what the engine makes
+of it. **Freeplay** on the home page opens it on the starting position, and **Freeplay** on the back of a card
+opens it on the position the card asked about, seen from the side that is to move there. Any position can be put
+on it by its address: `#/freeplay/` and then a FEN with `_` for its spaces.
+
+- The bar beside the board is the engine's evaluation of the position on it, the green arrow its first choice,
+  and the line under the board the evaluation, how deep the engine has looked, and the line it expects. Each
+  position is looked at for a quarter of a second, then a second, then four, and what is shown gets better as
+  the answers come (the engine's hash table carries one search into the next). It is full-strength Stockfish
+  in a process of its own, started the first time the board is used, and a move made while it is looking ends
+  that search at once.
+- The moves made are listed under that: a click on one, ◀ ▶ under the board or the arrow keys step through
+  them, and a move made from an earlier position takes the place of what followed. Flip turns the board.
+- Nothing of it is kept by the server. The tab keeps it: load the page again and the board is as it was. Opened
+  from Home or from a card, it starts anew.
+
+The pane beside it is Claude, as in a game: your first message opens a Claude Code session in a terminal above
+the box. The freeplay board has the one session, whatever position is on it, shown whenever the board is and
+resumed the way a game's is:
+
+- each message takes with it what is on the board when it is sent: the position, as a FEN, and the moves made
+  to reach it from where the board started. So "why this move?" can be asked of the move you have just made;
+- no game is behind the board, so its tools are the ones that take any position: `position`, `analyze`, and
+  `show_lines`, whose [lines](#lines-on-the-board) are played on the freeplay board.
+
 ## The games, kept in git
 
 The games are in a database on this machine only (`~/.local/share/callie/games.db`). To keep them in the
@@ -550,19 +581,20 @@ at.
 | `src/callie/cards.py` | the flashcards of your errors: the decks, what answers a card, how long it is hidden |
 | `src/callie/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
 | `src/callie/openings.py` | the opening books |
-| `src/callie/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return |
-| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards, the lines Claude showed |
+| `src/callie/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return, and what the freeplay board asks |
+| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards, the freeplay board's session, the lines Claude showed |
 | `src/callie/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
-| `src/callie/tutor.py` | the Claude Code session of each game: how it is started, resumed and typed into |
+| `src/callie/tutor.py` | the Claude Code session of each game, of each card asked about, and of the freeplay board: how it is started, resumed and typed into |
 | `src/callie/explain.py` | the explanation of each card: Claude run once for it, in the background, behind the games |
 | `src/callie/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
 | `src/callie/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
 | `src/callie/server.py` | the page and the JSON API |
-| `src/callie/static/` | the page: `app.js` (board, clock, review, terminal, Claude's lines), `pieces.js` (the pieces, drawn here), `style.css` |
+| `src/callie/static/` | the page: `app.js` (board, clock, review, freeplay, terminal, Claude's lines), `pieces.js` (the pieces, drawn here), `style.css` |
 
 The page holds no chess rules: with each position where it is your move the server sends every legal move and
 the position it leads to, and with each where it is the opponent's the moves that can be made ahead (how your
-pieces move on an empty board: the server holds the one you make and plays it itself). Every action is a plain HTTP call, so the whole thing can be driven with `curl`.
+pieces move on an empty board: the server holds the one you make and plays it itself). The freeplay board asks
+the same of each position put on it. Every action is a plain HTTP call, so the whole thing can be driven with `curl`.
 
 ## Tests
 

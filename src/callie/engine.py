@@ -53,6 +53,7 @@ class Engine:
         self.lock = threading.Lock()
         self.proc: subprocess.Popen | None = None
         self.name = ""
+        self.busy = False  # a search is under way
         self._options: dict[str, str] = {}
 
     # ---------- the process ----------
@@ -115,6 +116,18 @@ class Engine:
                     self.proc.kill()
             self.proc = None
 
+    def stop(self) -> None:
+        """End the search under way, if there is one: it answers at once, with what it has found so far (which
+        may be nothing). For an engine asked about one position after another, where a new question makes the
+        last one moot. Not behind the lock: that is the search's."""
+        proc = self.proc
+        if self.busy and proc is not None:
+            try:
+                proc.stdin.write("stop\n")
+                proc.stdin.flush()
+            except (OSError, ValueError):
+                pass  # it has stopped by itself
+
     def version(self) -> str:
         with self.lock:
             if self.proc is None or self.proc.poll() is not None:
@@ -175,14 +188,17 @@ class Engine:
         nodes = took = 0
         started = time.monotonic()
         self._send(go)
+        self.busy = True
         while True:
             line = self.proc.stdout.readline()
             if not line:
+                self.busy = False
                 raise EngineError("the chess engine stopped")
             words = line.split()
             if not words:
                 continue
             if words[0] == "bestmove":
+                self.busy = False
                 best = words[1] if len(words) > 1 and words[1] != "(none)" else None
                 break
             if words[0] != "info" or "score" not in words:

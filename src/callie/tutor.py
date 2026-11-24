@@ -1,5 +1,5 @@
-"""Claude: one Claude Code session per game, in a real terminal that the game's page shows, and one per card
-that was asked about, on the back of the card.
+"""Claude: one Claude Code session per game, in a real terminal that the game's page shows, one per card
+that was asked about, on the back of the card, and one for the freeplay board.
 
 Nothing here runs by itself. A session is opened when the page sends it a message (or, over the API, when an
 analysis is asked for), and is told then what is expected of it and how to get at the game: the tools of `mcp.py` (the moves,
@@ -12,6 +12,9 @@ A card's session is the same thing, about one card: opened by a message from the
 that read the game the card's move was played in, and shown again whenever the back of the card is. A card comes
 back for months and Claude Code deletes a conversation nobody has used for a few weeks, so the app keeps a copy
 of a card's and puts it back when it is missing (`_keep`).
+
+The freeplay board has one session, whatever position is on it. No game is behind that board: each message
+from beside it says what is on it, and the session's tools are those that take any position.
 """
 
 from __future__ import annotations
@@ -133,8 +136,54 @@ student's games and of their other cards. Look at what you already know about th
 recurring mistakes, openings they play, what they have been working on, how they like feedback given.
 """
 
-# The part of both about `show_lines`: the board beside the terminal is a game's or a card's, and Claude's lines
-# are played on it.
+# What the freeplay board's session is told: it is asked about whatever position is on that board.
+FREE = """\
+You are the chess tutor inside Callie, a local app. The person you are talking to (the student) plays games \
+against Stockfish held to a limited strength, or against Allie, a model that plays the way people of a chosen \
+rating do, and reviews flashcards made of the moves that cost them most. This session belongs to neither a game \
+nor a card: it is the one of the app's freeplay board, beside this terminal. On that board the student moves the \
+pieces of both sides as they like, from the starting position or from the position of one of their cards, to try \
+moves and see what follows. It shows them Stockfish's evaluation of the position on it and an arrow for the \
+engine's first choice. They ask you about what they see there: why the engine wants a move, what is wrong with \
+another, what a side is playing for. The board has this one conversation, whatever is on it: what came earlier \
+in it may be about another position altogether.
+
+What reaches you
+- Every message of the student's begins with a line the app adds, [board: ...]: the position on the board when \
+they sent it, as a FEN, and the moves that were made on the board to reach it. The board changes between \
+messages: go by the last one. "This move" or "here" in their question is about that position, and most likely \
+about the last move made to reach it.
+- What follows that line is the student talking to you.
+
+Your tools (MCP server "chess"). No game is behind this board: each takes a position as a FEN, the one of the \
+[board] line or any other, optionally after extra moves.
+- analyze: full-strength Stockfish, live, on a position, optionally after extra moves ("what if ..."), \
+optionally restricted to candidate moves you want compared. It is how "why this move" and "why not that one" are \
+answered: play the move and see what the engine does to it. It takes seconds.
+- position: a position spelled out (diagram, piece lists, legal moves). Use it instead of trusting your own \
+picture of the board.
+{show}Never state a concrete line or tactic you have not verified with the engine or the legal-move list.
+
+How to answer
+- Answer what was asked, in a few sentences: what a move allows or misses, shown with the concrete line as far \
+as it makes the point. A refutation is a line, not a number.
+- Turn engine output into chess reasons. Do not recite evaluations or long lines. Use notation the student can \
+follow on the board (SAN with move numbers), and put the lines you give on the board with `show_lines`.
+- The student sees the engine's evaluation and its first choice already: say what is behind them, and where a \
+move a person would sooner find is nearly as good.
+- Pitch it to the student's level as their play and questions show it. Be direct and kind, with no filler praise.
+- Write plain text for a terminal: short paragraphs, no tables, no headers.
+
+Memory
+Every session of the app runs in this same directory, so your memory here is shared with the sessions of the \
+student's games and of their cards. Look at what you already know about their play, and keep it current: \
+recurring mistakes, openings they play, what they have been working on, how they like feedback given.
+"""
+FREE_KEY = "freeplay"  # what the freeplay board's session goes by where a game's goes by the game's id
+NO_GAME = "0"  # the game its tools are given: none
+
+# The part of each about `show_lines`: the board beside the terminal is a game's, a card's or the freeplay one,
+# and Claude's lines are played on it.
 SHOW = """\
 - show_lines: puts a position and lines from it on the student's board, beside this terminal. The lines are \
 listed there under the names you give them, each move a button, and the student plays through them on the board \
@@ -207,7 +256,7 @@ class Tutor:
     def __init__(self, cfg: Config, service):
         self.cfg, self.svc = cfg, service
         self.lock = threading.RLock()
-        self.terms: dict[str, Terminal] = {}  # by game, or by card (`_card_key`)
+        self.terms: dict[str, Terminal] = {}  # by game, by card (`_card_key`), or FREE_KEY
         self.by_id: dict[str, Terminal] = {}
         self.kept: dict[str, str] = {}  # by card: the session in its terminal, whose transcript a copy is kept of
         self.dir = cfg.home / "sessions"
@@ -229,15 +278,18 @@ class Tutor:
     # ---------- the session ----------
 
     def _files(self, key: str, game_id: str, session_id: str) -> tuple[Path, Path]:
-        """The Claude Code settings and MCP configuration of one session (a game's, or a card's: ``key``), whose
-        tools read ``game_id`` and put lines on the board beside the conversation ``session_id``."""
+        """The Claude Code settings and MCP configuration of one session (a game's, a card's, or the freeplay
+        board's: ``key``), whose tools read ``game_id`` and put lines on the board beside the conversation
+        ``session_id``."""
         settings = {
             "permissions": {"allow": ["mcp__chess"]},  # its own tools never ask
             "tui": "fullscreen",
             "wheelScrollAccelerationEnabled": False,  # the page sends one wheel event per line (see app.js)
         }
         env = {"CALLIE_URL": self.cfg.url, "CALLIE_GAME": game_id, "CALLIE_SESSION": session_id}  # `show_lines`
-        if self.svc.allie.available():
+        if key == FREE_KEY:
+            env["CALLIE_FREEPLAY"] = "1"  # the session is offered only the tools that take any position
+        elif self.svc.allie.available():
             env["CALLIE_ALLIE"] = "1"  # the session is offered `human_moves`
         mcp = {"mcpServers": {"chess": {"command": sys.executable, "args": [str(_ROOT / "mcp.py")], "env": env}}}
         s, m = self.dir / f"{key}.settings.json", self.dir / f"{key}.mcp.json"
@@ -297,7 +349,7 @@ class Tutor:
         self, key: str, table: str, row: dict, game_id: str, system: str, cols: int, rows: int, parts: list[str]
     ) -> Terminal:
         """Start a session in a terminal (resuming it if it has run before), with ``parts`` as its prompt: the
-        one that ``row`` of ``table`` ("games" or "cards") keeps, whose tools read ``game_id``."""
+        one that ``row`` of ``table`` ("games", "cards" or "freeplay") keeps, whose tools read ``game_id``."""
         session_id = row["session_id"]
         if session_id and table == "cards":
             self._keep(session_id)
@@ -335,8 +387,9 @@ class Tutor:
         return t if t is not None and t.alive else None
 
     def _changed(self, key: str) -> None:
-        """A session's terminal came or went: the pages on its game are told (a card has no page waiting on it)."""
-        if not key.startswith("card-"):
+        """A session's terminal came or went: the pages on its game are told (a card has no page waiting on it,
+        nor has the freeplay board)."""
+        if not key.startswith("card-") and key != FREE_KEY:
             self.svc._bump(key)
 
     def analyse(self, game_id: str, cols: int = 110, rows: int = 32) -> dict:
@@ -438,6 +491,40 @@ class Tutor:
                 if not self._begun(card):
                     return {"terminal": None}
                 t = self._start(key, "cards", card, self.svc.card_context(card)[0], CARD, cols, rows, [])
+        return {"terminal": t.id}
+
+    # ---------- the freeplay board's session ----------
+
+    def _free_begun(self, row: dict) -> bool:
+        """The freeplay board has a conversation to go on with."""
+        return bool(row["session_started"] and row["session_id"]) and self._has_transcript(row["session_id"])
+
+    def say_free(self, text: str, fen=None, moves=None, cols: int = 110, rows: int = 32) -> dict:
+        """A message from beside the freeplay board: typed into the board's session, which it opens, or
+        resumes, if it is not running. Before it goes what is on the board: the position it started from
+        (``fen``; None: where a game starts) and the ``moves`` made on it since."""
+        text = _clean(text)
+        if not text:
+            raise TutorError("nothing to send")
+        with self.lock:
+            text = self.svc.free_board(fen, moves) + text
+            t = self._live(FREE_KEY)
+            if t is not None:
+                self._type(t, text)
+            else:
+                t = self._start(FREE_KEY, "freeplay", self.svc.store.freeplay(), NO_GAME, FREE, cols, rows, [text])
+        return {"terminal": t.id}
+
+    def resume_free(self, cols: int = 110, rows: int = 32) -> dict:
+        """The freeplay board's session as it was left, without asking it anything: what the page shows beside
+        the board. "terminal" is None when nothing was ever asked there (or its transcript is gone)."""
+        with self.lock:
+            t = self._live(FREE_KEY)
+            if t is None:
+                row = self.svc.store.freeplay()
+                if not self._free_begun(row):
+                    return {"terminal": None}
+                t = self._start(FREE_KEY, "freeplay", row, NO_GAME, FREE, cols, rows, [])
         return {"terminal": t.id}
 
     def forget_card(self, card_id: int) -> None:

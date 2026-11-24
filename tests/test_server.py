@@ -281,4 +281,87 @@ def test_claude_puts_lines_on_the_board():
         s.close()
 
 
+def test_the_freeplay_board():
+    s = Running()
+    try:
+        need_engine(s.cfg)
+        # a position to move pieces in: where a game starts, or the one asked for, with every move and where it leads
+        code, start = s.call("GET", "/api/freeplay")
+        assert code == 200 and start["turn"] == "w" and len(start["legal"]) == 20
+        e4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        assert start["legal"]["e2e4"] == {"san": "e4", "fen": e4}
+        fen = "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
+        asked = fen.replace(" ", "%20")
+        there = s.call("GET", f"/api/freeplay?fen={asked}")[1]
+        assert there["fen"] == fen and there["turn"] == "b" and there["legal"]["g8f6"]["san"] == "Nf6"
+        assert s.call("GET", "/api/freeplay?fen=nonsense")[0] == 400
+        # the engine's view of one: the evaluation, its first choice and the line it expects
+        code, seen = s.call("GET", f"/api/freeplay/eval?fen={asked}&ms=100")
+        assert code == 200 and seen["fen"] == fen and seen["depth"] > 0 and not seen["over"]
+        assert seen["best"]["uci"] in there["legal"] and seen["line"][0] == seen["best"]["san"]
+        assert isinstance(seen["cp"], int) and seen["value"] == seen["cp"] and seen["mate"] is None
+        assert s.call("GET", "/api/freeplay/eval?ms=soon")[0] == 400
+        mated = s.call("GET", "/api/freeplay/eval?fen=7k/6Q1/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]
+        assert mated["over"] and mated["mate"] == 0 and mated["value"] > 9000 and mated["best"] is None
+        stuck = s.call("GET", "/api/freeplay/eval?fen=7k/5Q2/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]
+        assert stuck["over"] and stuck["cp"] == 0 and stuck["mate"] is None
+        assert s.call("GET", "/api/freeplay?fen=7k/6Q1/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]["legal"] == {}
+        # a position asked about ends the search of the one before it
+        long = {}
+        began = time.time()
+        first = threading.Thread(target=lambda: long.update(seen=s.call("GET", "/api/freeplay/eval?ms=10000")))
+        first.start()
+        time.sleep(0.5)
+        assert s.call("GET", f"/api/freeplay/eval?fen={asked}&ms=100")[1]["best"]
+        first.join()
+        assert time.time() - began < 6 and long["seen"][0] == 200
+        # Claude beside it: nothing until it is asked, then a session of the board's own, told what is on the board
+        assert s.call("POST", "/api/freeplay/claude/resume") == (200, {"terminal": None})
+        assert s.call("POST", "/api/freeplay/claude/say", {"text": " "})[0] == 400 and not s.tutor.terms
+        assert s.call("POST", "/api/freeplay/claude/say", {"text": "why?", "moves": ["e2e5"]})[0] == 400
+        code, r = s.call("POST", "/api/freeplay/claude/say", {"text": "why e4?", "moves": ["e2e4"], "cols": 90})
+        said = lambda term: json.loads(output(term, '"prompt"').split("\n")[0])  # noqa: E731
+        told = said(s.tutor.terminal(r["terminal"]))
+        assert code == 200 and told["mode"] == "new" and told["cwd"] == str(s.cfg.workspace) and told["mcp"]
+        assert told["prompt"] == f"[board: {e4}, Black to move, after 1. e4 from the starting position]\nwhy e4?"
+        assert s.svc.store.freeplay() == {"id": 1, "session_id": told["session"], "session_started": 1}
+        # its tools are those that take any position, and its lines go to the pane beside the board
+        env = json.loads((s.cfg.home / "sessions" / "freeplay.mcp.json").read_text())["mcpServers"]["chess"]["env"]
+        assert env == {
+            "CALLIE_URL": s.url,
+            "CALLIE_GAME": "0",
+            "CALLIE_SESSION": told["session"],
+            "CALLIE_FREEPLAY": "1",
+        }
+        os.environ.update(env)
+        tools = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]
+        assert [t["name"] for t in tools] == ["position", "analyze", "show_lines"]
+        assert all("ply" not in t["inputSchema"]["properties"] and "fen" in t["inputSchema"]["required"] for t in tools)
+        text, failed = mcp.call("show_lines", {"fen": fen, "lines": [{"name": "Two knights", "moves": ["Nf6", "Ng5"]}]})
+        assert not failed and "- Two knights: 3... Nf6 4. Ng5" in text
+        assert s.call("GET", f"/api/terminals/{r['terminal']}/lines")[1]["shown"][0]["fen"] == fen
+        assert "Legal moves (20)" in mcp.call("position", {"fen": start["fen"]})[0]
+        # the page shows that terminal, and a message from another position is typed into it, with that position
+        assert s.call("POST", "/api/freeplay/claude/resume")[1] == r
+        s.call("POST", "/api/freeplay/claude/say", {"text": "and here?", "fen": fen, "moves": ["Nf6"]})
+        heard = output(s.tutor.terminal(r["terminal"]), "and here?")
+        assert "Black to move" not in heard.split("heard:")[1] and f"after 3... Nf6 from {fen}]" in heard
+        # its terminal gone (the server was restarted, say): the same conversation, resumed
+        s.tutor.forget("freeplay")
+        code, r2 = s.call("POST", "/api/freeplay/claude/resume")
+        again = said(s.tutor.terminal(r2["terminal"]))
+        assert r2 != r and again["mode"] == "resume" and again["session"] == told["session"] and again["prompt"] == ""
+        assert len(s.call("GET", f"/api/terminals/{r2['terminal']}/lines")[1]["shown"]) == 1
+        s.tutor.forget("freeplay")
+        code, r3 = s.call("POST", "/api/freeplay/claude/say", {"text": "one more", "fen": fen})
+        more = said(s.tutor.terminal(r3["terminal"]))
+        assert more["mode"] == "resume" and more["prompt"].endswith("which is where the board started]\none more")
+        page = s.call("GET", "/")[1]
+        assert b'id="free-board"' in page and b'id="free-open"' in page and b'id="card-free"' in page
+    finally:
+        for name in ("CALLIE_URL", "CALLIE_GAME", "CALLIE_SESSION", "CALLIE_FREEPLAY"):
+            os.environ.pop(name, None)
+        s.close()
+
+
 load_tests = function_tests(globals())

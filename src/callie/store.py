@@ -1,5 +1,6 @@
 """The database: games, their moves, the engine's analysis of each position, the cards made of your errors and
-of the heuristics' positions, and the lines Claude put on the board in its conversations. SQLite, one file."""
+of the heuristics' positions, the Claude session of the freeplay board, and the lines Claude put on the board in
+its conversations. SQLite, one file."""
 
 from __future__ import annotations
 
@@ -81,9 +82,14 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   session_started INTEGER NOT NULL DEFAULT 0,  -- it was given its first prompt, so it can be resumed
   UNIQUE (position, uci)
 );
+CREATE TABLE IF NOT EXISTS freeplay (   -- the freeplay board, which keeps nothing but its conversation: one row
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  session_id TEXT,                      -- the Claude Code session asked from beside it; NULL: none yet
+  session_started INTEGER NOT NULL DEFAULT 0  -- it was given its first prompt, so it can be resumed
+);
 CREATE TABLE IF NOT EXISTS shown (      -- what Claude put on the board in a conversation: a position and lines from it
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,             -- the Claude Code session it was shown in: a game's, or a card's
+  session_id TEXT NOT NULL,             -- the Claude Code session it was shown in: a game's, a card's, or the freeplay board's
   shown_at REAL NOT NULL,
   board TEXT NOT NULL                   -- JSON: {"title", "fen", "lines": [{"name", "moves": [{"uci", "san", "fen"}]}]}
 );
@@ -229,6 +235,14 @@ class Store:
             (game_id, ply, fen, depth, value, cp, mate, json.dumps(lines)),
         )
 
+    # ---------- the freeplay board ----------
+
+    def freeplay(self) -> dict:
+        """The freeplay board's row: what it keeps of its Claude session."""
+        with self.lock:
+            self.conn.execute("INSERT OR IGNORE INTO freeplay (id) VALUES (1)")
+            return self.one("SELECT * FROM freeplay WHERE id=1")
+
     # ---------- what Claude put on the board ----------
 
     def show(self, session_id: str, board: dict, keep: int = 30) -> None:
@@ -246,7 +260,8 @@ class Store:
             )
             self.conn.execute(
                 "DELETE FROM shown WHERE session_id NOT IN (SELECT session_id FROM games) "
-                "AND session_id NOT IN (SELECT session_id FROM cards WHERE session_id IS NOT NULL)"
+                "AND session_id NOT IN (SELECT session_id FROM cards WHERE session_id IS NOT NULL) "
+                "AND session_id NOT IN (SELECT session_id FROM freeplay WHERE session_id IS NOT NULL)"
             )
 
     def shown(self, session_id: str) -> list[dict]:
@@ -255,11 +270,12 @@ class Store:
         return [{"id": r["id"], **json.loads(r["board"])} for r in rows]
 
     def conversation(self, session_id) -> bool:
-        """It is the Claude Code session of a game or of a card."""
+        """It is the Claude Code session of a game, of a card, or of the freeplay board."""
         if not isinstance(session_id, str) or not session_id:
             return False
         found = self.one(
-            "SELECT 1 AS there FROM games WHERE session_id=? UNION ALL SELECT 1 FROM cards WHERE session_id=?",
-            (session_id, session_id),
+            "SELECT 1 AS there FROM games WHERE session_id=? UNION ALL SELECT 1 FROM cards WHERE session_id=? "
+            "UNION ALL SELECT 1 FROM freeplay WHERE session_id=?",
+            (session_id, session_id, session_id),
         )
         return found is not None

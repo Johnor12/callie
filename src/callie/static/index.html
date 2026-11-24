@@ -55,6 +55,9 @@
         <span class="err" id="f-err" data-testid="new-error"></span>
       </div>
     </section>
+    <section class="decks" id="freeplay-open" data-testid="freeplay-open">
+      <button id="free-open" data-testid="free-open">Freeplay</button>
+    </section>
     <section id="review-decks" data-testid="review-decks">
       <h2>Review</h2>
       <div class="decks" id="decks" data-testid="decks"></div>
@@ -70,7 +73,7 @@
     <section id="board-pane" data-testid="board-pane">
       <div class="player" id="p-top" data-testid="player-opponent"></div>
       <div class="board-row">
-        <div id="evalbar" data-testid="evalbar" title="The engine's evaluation of the position shown"><div id="evalbar-white"></div><span id="evalbar-text"></span></div>
+        <div id="evalbar" class="evalbar" data-testid="evalbar" title="The engine's evaluation of the position shown"><div class="evalbar-white"></div><span class="evalbar-text"></span></div>
         <div id="board" class="board" data-testid="board"></div>
       </div>
       <div class="player" id="p-bottom" data-testid="player-you"></div>
@@ -144,6 +147,7 @@
           <button id="card-good" data-testid="card-good" hidden>Good<small></small></button>
           <button id="card-easy" data-testid="card-easy" hidden>Easy<small></small></button>
           <button class="primary" id="card-next" data-testid="card-next" hidden>Next</button>
+          <button class="quiet" id="card-free" data-testid="card-free">Freeplay</button>
         </div>
         <div id="card-heuristic" data-testid="card-heuristic" hidden></div>
         <div id="card-why" data-testid="card-why" hidden></div>
@@ -151,6 +155,26 @@
     </section>
     <section id="card-done" data-testid="card-done" hidden>Congratulations, you're all caught up. <a href="#/">Home</a><div id="card-wait" data-testid="card-wait"></div></section>
     <div class="err" id="card-err" data-testid="card-error"></div>
+  </main>
+
+  <main id="free" data-testid="free" hidden>
+    <section id="free-pane" data-testid="free-pane">
+      <div class="board-row">
+        <div id="free-evalbar" class="evalbar" data-testid="free-evalbar"><div class="evalbar-white"></div><span class="evalbar-text"></span></div>
+        <div id="free-board" class="board" data-testid="free-board"></div>
+      </div>
+      <div class="nav" id="free-nav" data-testid="free-nav">
+        <button id="free-first" data-testid="free-first" title="Start (Home)">⏮</button>
+        <button id="free-prev" data-testid="free-prev" title="Back (←)">◀</button>
+        <button id="free-next" data-testid="free-next" title="Forward (→)">▶</button>
+        <button id="free-last" data-testid="free-last" title="Latest (End)">⏭</button>
+        <span class="spacer"></span>
+        <button id="free-flip" class="quiet" data-testid="free-flip" title="Turn the board around">Flip</button>
+      </div>
+      <div id="free-line" data-testid="free-line"></div>
+      <div id="free-moves" data-testid="free-moves"></div>
+      <div class="err" id="free-err" data-testid="free-error"></div>
+    </section>
   </main>
 
   <script src="/static/vendor/xterm.js"></script>

@@ -11,6 +11,8 @@ const FILES = "abcdefgh";
 const FORM = "callie.form";  // read from "chess-tutor.form" until saved here (the app's old name)
 const FAST_MS = 3000;  // a card answered right this soon was easy: it is not asked how hard it was
 const GRADES = ["hard", "good", "easy"];  // what a right answer is rated: how it was to remember
+const FREE = "callie.freeplay";  // the freeplay board of this tab, kept for a page loaded again
+const FREE_MS = [250, 1000, 4000];  // how long the engine looks at a position on it: asked again, each time for longer
 
 const S = {
   meta: null,
@@ -34,6 +36,7 @@ const S = {
   line: null,      // the line on the board in place of the game or the card: { set, line, at } (at: its moves played so far)
   reopen: false,   // the game's session is to be shown again if its terminal has ended (once each time you come back)
   review: null,    // the deck being reviewed and its card on screen (see showReview)
+  free: null,      // the freeplay board on screen (see showFree)
   rating: {},      // yours in each time format, as the server last reckoned them
   // elo: the opponent's strength. It is not kept: null until you set it, and until then it follows your rating
   form: { engine: "stockfish", color: "w", elo: null, full: false, opening: "", time: "untimed" },
@@ -88,8 +91,10 @@ const GLYPH = { blunder: "??", mistake: "?", inaccuracy: "?!" };
 // ---------- routing ----------
 function route() {
   const m = /^#\/game\/([0-9a-f]+)/.exec(location.hash), deck = /^#\/review\/([a-z]+)/.exec(location.hash);
-  if (m) showGame(m[1]); else if (deck) showReview(deck[1]); else showHome();
+  const free = /^#\/freeplay(?:\/(.+))?$/.exec(location.hash);  // with a position to start from: a FEN, "_" for its spaces
+  if (m) showGame(m[1]); else if (deck) showReview(deck[1]); else if (free) showFree(free[1] ? unhash(free[1]).replace(/_/g, " ") : null); else showHome();
 }
+function unhash(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
 addEventListener("hashchange", route);
 
 async function loadMeta() {
@@ -102,8 +107,8 @@ async function loadMeta() {
 
 // ---------- home ----------
 async function showHome() {
-  leaveGame(); leaveReview();
-  $("game").hidden = true; $("review").hidden = true; $("home").hidden = false; $("crumb").textContent = "";
+  leaveGame(); leaveReview(); leaveFree();
+  $("game").hidden = true; $("review").hidden = true; $("free").hidden = true; $("home").hidden = false; $("crumb").textContent = "";
   document.title = "Callie";
   try {
     const [, rating, games, decks] = await Promise.all([loadMeta(), api("GET", "/api/rating"), api("GET", "/api/games"), api("GET", "/api/cards")]);
@@ -190,6 +195,7 @@ function renderDecks(decks) {  // each with its active cards; one with none cann
     `<button class="${d.key}" data-deck="${d.key}" data-testid="deck-${d.key}"${d.active ? "" : " disabled"}>${esc(d.name)} <b>${d.active}</b></button>`).join("");
 }
 $("decks").onclick = (ev) => { const b = ev.target.closest("button"); if (b && !b.disabled) location.hash = `#/review/${b.dataset.deck}`; };
+$("free-open").onclick = () => openFree(null);
 function renderGames(games) {
   $("game-empty").hidden = games.length > 0;
   $("game-list").innerHTML = games.map((g) => {
@@ -214,8 +220,8 @@ $("game-list").onclick = async (ev) => {
 
 // ---------- a game ----------
 function showGame(id) {
-  $("home").hidden = true; $("review").hidden = true; $("game").hidden = false;
-  leaveReview();
+  $("home").hidden = true; $("review").hidden = true; $("free").hidden = true; $("game").hidden = false;
+  leaveReview(); leaveFree();
   if (S.gid === id) return;
   leaveGame();
   Object.assign(S, { gid: id, game: null, view: 0, follow: true, flip: false, sel: null, drag: null, promo: null, pending: null, reopen: true });
@@ -254,7 +260,7 @@ function stopPoll() { if (S.poll) S.poll.abort(); S.poll = null; }
 // The wait on the game is also what runs your clock: a hidden tab stops waiting, and the clock stops with it.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { stopPoll(); if (S.term) unlisten(S.term); }
-  else { S.reopen = true; startPoll(); if (S.term) listen(S.term); if (S.review && S.review.result) cardSession(S.review); }
+  else { S.reopen = true; startPoll(); if (S.term) listen(S.term); if (S.review && S.review.result) cardSession(S.review); if (S.free) freeSession(S.free); }
 });
 
 function setGame(g) {
@@ -350,16 +356,23 @@ const flipped = () => (S.game.user_color === "b") !== S.flip;
 const canMove = () => { const g = S.game; return g && S.view === g.moves.length && !S.pending && g.status === "active" && g.turn === g.user_color; };
 // While the opponent is on its move, yours can be made ahead: the server plays it the moment the opponent has moved.
 const canPremove = () => { const g = S.game; return g && S.view === g.moves.length && !S.pending && g.status === "active" && g.turn !== g.user_color; };
-// The board in use, a game's or the card's under review: what is on it, whose pieces move and where to (`legal`:
-// none when nothing can be moved), the arrow drawn on it, how it is marked, the move made ahead on it (`pre`), and
-// what a move made on it does. With a line of Claude's on it: that position, the board turned as it was, and
-// nothing on it to move.
+// The board in use, a game's, the card's under review or the freeplay one: what is on it, whose pieces move and
+// where to (`legal`: none when nothing can be moved), the arrow drawn on it, how it is marked, the move made ahead
+// on it (`pre`), and what a move made on it does. With a line of Claude's on it: that position, the board turned
+// as it was, and nothing on it to move.
 function onBoard() {
   const b = ownBoard(), l = linePos();
   return l ? { el: b.el, fen: l.fen, last: l.last, san: l.san, color: b.color, flip: b.flip, legal: {}, arrow: null, mark: "line", send: () => {} } : b;
 }
 function ownBoard() {
-  const r = S.review;
+  const r = S.review, f = S.free;
+  if (f) {
+    // The pieces of the side to move are the ones that move, once the server has said where to; the arrow is the
+    // engine's first choice in the position, once it has one.
+    const m = f.at ? f.moves[f.at - 1] : null, fen = freeFen(f), e = f.eval;
+    return { el: $("free-board"), fen, last: m ? m.uci : null, san: m ? m.san : "", color: fen.split(" ")[1], flip: f.flip,
+      legal: f.pos ? f.pos.legal : {}, arrow: e && e.best ? e.best.uci : null, mark: "", send: freeMove };
+  }
   if (r) {
     // Until you answer, the move that led to the position is marked, as in a game. Your answer stands on the
     // board once made, unless it was wrong: then the position is back, with where you went marked on it and
@@ -419,7 +432,7 @@ function arrow(uci, flip) {
 // ---------- moving pieces: drag one, or click it and then its square ----------
 const squareAt = (x, y) => { const el = document.elementFromPoint(x, y); const s = el && el.closest && el.closest(".sq"); return s ? s.dataset.sq : null; };
 function pickUp(ev) {
-  if (S.review ? !S.review.card : !S.game) return;
+  if (S.free ? !S.free.start : S.review ? !S.review.card : !S.game) return;
   const b = onBoard();
   const promo = ev.target.closest("[data-promo]");
   if (promo) return b.send(S.promo.from + S.promo.to + promo.dataset.promo);
@@ -465,7 +478,7 @@ function endDrag(ev, cancelled) {
   } else if (d.again) S.sel = null;  // a second click on the piece puts it down
   renderBoard();
 }
-for (const el of [$("board"), $("card-board")]) {
+for (const el of [$("board"), $("card-board"), $("free-board")]) {
   el.addEventListener("pointerdown", pickUp);
   el.addEventListener("pointermove", carry);
   el.addEventListener("pointerup", (ev) => endDrag(ev, false));
@@ -506,17 +519,21 @@ async function act(fn) {
 // ---------- the engine's view ----------
 function evalAt(ply) { const g = S.game; return ply === 0 ? g.start_eval : (g.moves[ply - 1] || {}).eval; }
 function renderEval() {
-  $("evalbar").classList.toggle("flip", flipped());
-  $("evalbar").classList.toggle("off", !!linePos());
-  const pos = shown(), e = pos.ply <= S.game.moves.length ? evalAt(pos.ply) : null;
-  if (!e) { $("evalbar-text").textContent = "…"; return; }  // not analysed yet: the bar stays where it was
-  const pct = winPct(e), whiteAhead = e.value >= 0, flip = flipped();
-  $("evalbar-white").style.height = `${pct}%`;
-  const t = $("evalbar-text");
+  const pos = shown();
+  drawEval($("evalbar"), pos.ply <= S.game.moves.length ? evalAt(pos.ply) : null, flipped());
+}
+// The bar beside a board (a game's, or the freeplay one), for the evaluation of the position on it.
+function drawEval(bar, e, flip) {
+  const t = bar.querySelector(".evalbar-text");
+  bar.classList.toggle("flip", flip);
+  bar.classList.toggle("off", !!linePos());
+  if (!e) { t.textContent = "…"; return; }  // not analysed yet: the bar stays where it was
+  const whiteAhead = e.value >= 0;
+  bar.querySelector(".evalbar-white").style.height = `${winPct(e)}%`;
   t.textContent = e.mate !== null && e.mate !== undefined ? (e.mate === 0 ? "#" : `M${Math.abs(e.mate)}`) : (Math.abs(e.cp) / 100).toFixed(1);
   t.classList.toggle("onblack", !whiteAhead);
   t.classList.toggle("top", whiteAhead === flip);  // written at the end of the side that is ahead
-  $("evalbar").title = `Engine evaluation: ${showEval(e)} for White (depth ${e.depth})`;
+  bar.title = `Engine evaluation: ${showEval(e)} for White (depth ${e.depth})`;
 }
 function renderGraph() {
   const g = S.game, n = g.moves.length, w = 100, h = 40;
@@ -637,6 +654,11 @@ document.addEventListener("keydown", (ev) => {
     else if (to !== undefined) { ev.preventDefault(); stepLine(to); }
     return;
   }
+  if (S.free && !typing) {  // the freeplay board: the keys step through the moves made on it
+    const to = { ArrowLeft: S.free.at - 1, ArrowRight: S.free.at + 1, Home: 0, End: S.free.moves.length }[ev.key];
+    if (to !== undefined) { ev.preventDefault(); freeGo(to); }
+    return;
+  }
   if (!S.game || $("game").hidden) return;
   if (ev.key === "Escape") hideWhy();
   if (typing) return;
@@ -663,8 +685,8 @@ function keepReview() {
   } catch (e) { /* no storage */ }
 }
 async function showReview(deck) {
-  leaveGame(); leaveReview();
-  $("home").hidden = true; $("game").hidden = true; $("review").hidden = false;
+  leaveGame(); leaveReview(); leaveFree();
+  $("home").hidden = true; $("game").hidden = true; $("free").hidden = true; $("review").hidden = false;
   $("card-pane").hidden = true; $("card-done").hidden = true; $("card-err").textContent = "";
   $("crumb").textContent = "Review"; document.title = "Review · Callie";
   S.review = { deck, name: "", active: 0, card: null, at: 0, pending: null, result: null, tries: [], tried: null, told: 0, session: false, fast: false, timer: 0 };
@@ -749,6 +771,7 @@ async function gradeCard(grade) {
 }
 for (const g of GRADES) $(`card-${g}`).onclick = () => gradeCard(g);
 $("card-next").onclick = nextCard;
+$("card-free").onclick = () => openFree(S.review.card.fen);  // the position the card asked about, to move both sides in
 // A card that is not one to study (a move made for want of time, say) is taken out of its deck, and the next one comes.
 $("card-delete").onclick = async () => {
   const r = S.review;
@@ -796,11 +819,121 @@ function renderReview() {
   $("card-tries").innerHTML = under.join(""); $("card-tries").hidden = !under.length;
 }
 
+// ---------- freeplay: a board to move both sides' pieces on, with the engine's view of each position ----------
+// S.free: what the board was asked to start from (`from`: a FEN; null: where a game starts), that position as the
+// server gave it (`start`: null until it has), the moves made on the board since (`moves`: each its `uci`, its
+// `san` and the `fen` after it) and how many of them are played on it (`at`: stepping back keeps the rest, until
+// another move is made in their place), the position on it as the server sent it, to move pieces in (`pos`), the
+// engine's evaluation of that (`eval`), whether the board is turned (`flip`), and the wait on the server for
+// those (`wait`). The server keeps none of it. The tab does (`keepFree`): a page loaded again is on the board as
+// it was, and a board opened from a button (Home's, a card's) starts anew.
+function openFree(fen) {
+  try { sessionStorage.removeItem(FREE); } catch (e) { /* no storage */ }
+  location.hash = "#/freeplay" + (fen ? "/" + fen.replace(/ /g, "_") : "");
+}
+function keepFree() {
+  const f = S.free;
+  try { sessionStorage.setItem(FREE, JSON.stringify({ from: f.from, start: f.start, moves: f.moves, at: f.at, flip: f.flip })); } catch (e) { /* no storage */ }
+}
+function showFree(from) {
+  leaveGame(); leaveReview(); leaveFree();
+  $("home").hidden = true; $("game").hidden = true; $("review").hidden = true; $("free").hidden = false;
+  $("crumb").textContent = "Freeplay"; document.title = "Freeplay · Callie";
+  $("free-board").innerHTML = ""; $("free-line").innerHTML = ""; $("free-moves").innerHTML = ""; $("free-err").textContent = "";
+  const f = S.free = { from, start: null, moves: [], at: 0, pos: null, eval: null, flip: false, wait: null };
+  let kept = null;
+  try { kept = JSON.parse(sessionStorage.getItem(FREE) || "null"); } catch (e) { /* no storage */ }
+  if (kept && kept.from === from && kept.start) Object.assign(f, { start: kept.start, moves: kept.moves, at: kept.at, flip: kept.flip });
+  claudeIn($("free"), "Ask Claude about the position…");
+  loadMeta().catch(() => {});
+  freeSession(f);
+  freeLoad();
+}
+function leaveFree() {
+  const f = S.free;
+  if (!f) return;
+  if (f.wait) f.wait.abort();
+  closeTerminal();
+  S.free = null;
+}
+const freeFen = (f) => f.at ? f.moves[f.at - 1].fen : f.start;
+const fenPly = (fen) => { const p = fen.split(" "); return 2 * (+p[5] - 1) + (p[1] === "w" ? 1 : 2); };  // the ply of the move to be made in a position
+// The position on the board, asked of the server: what can be moved in it, then what the engine makes of it,
+// which it is asked again for as long as the position stays (FREE_MS). Another position ends the wait.
+async function freeLoad() {
+  const f = S.free;
+  if (f.wait) f.wait.abort();
+  const ctl = f.wait = new AbortController(), fen = f.start ? freeFen(f) : f.from, here = () => S.free === f && !ctl.signal.aborted;
+  f.pos = null; f.eval = null; S.sel = null; S.promo = null;
+  $("free-err").textContent = "";
+  renderFree();
+  try {
+    const pos = await api("GET", "/api/freeplay" + (fen ? `?fen=${encodeURIComponent(fen)}` : ""), null, ctl.signal);
+    if (!here()) return;
+    if (!f.start) { f.start = pos.fen; f.flip = pos.turn === "b"; }  // seen from the side that is to move in it, as a card is
+    f.pos = pos;
+    renderFree();
+    for (const ms of FREE_MS) {
+      const e = await api("GET", `/api/freeplay/eval?fen=${encodeURIComponent(pos.fen)}&ms=${ms}`, null, ctl.signal);
+      if (!here()) return;
+      if (e.best || e.over) { f.eval = e; renderFree(); }  // neither: the search was cut short by another's (a second tab)
+      if (e.over) return;
+    }
+  } catch (e) { if (here()) $("free-err").textContent = e.message; }
+}
+function freeMove(uci) {
+  const f = S.free, m = f.pos && f.pos.legal[uci];
+  if (!m) return;
+  // The move that was next on the board is stepped to; another takes the place of what followed.
+  if (!(f.moves[f.at] && f.moves[f.at].uci === uci)) f.moves = f.moves.slice(0, f.at).concat({ uci, san: m.san, fen: m.fen });
+  f.at++;
+  freeLoad();
+}
+function freeGo(at) {  // to that many of the moves played; a line of Claude's is taken off the board
+  const f = S.free;
+  at = Math.max(0, Math.min(f.moves.length, at));
+  if (!f.start || (at === f.at && !S.line)) return;
+  f.at = at; S.line = null;
+  freeLoad();
+  renderLines();
+}
+function renderFree() {
+  const f = S.free;
+  if (!f || !f.start) return;
+  keepFree();
+  renderBoard();
+  const e = f.eval;
+  drawEval($("free-evalbar"), e, f.flip);
+  // What the engine makes of the position: its evaluation, how deep it has looked, and the line it expects.
+  $("free-line").innerHTML = !e ? "" : `<b>${showEval(e)}</b>` + (e.depth ? ` · depth ${e.depth}` : "") + (e.line.length ? ` · ${esc(numbered(fenPly(freeFen(f)), e.line))}` : "");
+  const first = fenPly(f.start);
+  $("free-moves").innerHTML = f.moves.map((m, i) =>
+    `<button class="${i + 1 === f.at && !linePos() ? "on" : ""}" data-at="${i + 1}" data-testid="free-move">${(first + i) % 2 || i === 0 ? moveNo(first + i) + " " : ""}${esc(m.san)}</button>`).join("");
+  const on = $("free-moves").querySelector(".on");
+  if (on) on.scrollIntoView({ block: "nearest" });
+  $("free-first").disabled = $("free-prev").disabled = f.at === 0;
+  $("free-next").disabled = $("free-last").disabled = f.at === f.moves.length;
+}
+$("free-first").onclick = () => freeGo(0);
+$("free-prev").onclick = () => freeGo(S.free.at - 1);
+$("free-next").onclick = () => freeGo(S.free.at + 1);
+$("free-last").onclick = () => freeGo(S.free.moves.length);
+$("free-flip").onclick = () => { S.free.flip = !S.free.flip; renderFree(); };
+$("free-moves").onclick = (ev) => { const b = ev.target.closest("button"); if (b) freeGo(+b.dataset.at); };
+// The board's session, if it has one: beside the board as it was left, each time that is shown.
+async function freeSession(f) {
+  try {
+    const d = await api("POST", "/api/freeplay/claude/resume", paneSize());
+    if (S.free === f && d.terminal) showTerminal(d.terminal);
+  } catch (e) { /* no Claude Code: a message sent says so */ }
+}
+
 // ---------- Claude ----------
 // A Claude Code session in a terminal, shown with xterm.js. Nothing starts one but a message sent from the box
 // here; once a game has one, it is shown whenever the game is. A card has one of its own, asked from the back of
-// the card and shown there whenever that is. The page has the one pane, in what is on screen: the game, where it
-// is the game's session, or the side of a card, where it is the card's.
+// the card and shown there whenever that is, and the freeplay board has one, whatever position is on it. The page
+// has the one pane, in what is on screen: the game, where it is the game's session, the side of a card, where it
+// is the card's, or beside the freeplay board.
 function claudeIn(el, ask) {
   if ($("claude-pane").parentNode !== el) { el.append($("claude-pane")); $("compose-text").value = ""; }
   $("compose-text").placeholder = ask; $("claude-err").textContent = "";
@@ -812,7 +945,7 @@ function paneSize() {
   // No terminal yet: the pane holds only the box. The size is that of the terminal it grows to hold (style.css).
   const font = TOUCH.matches ? 12 : 13, width = $("claude-pane").clientWidth;
   const height = S.review ? (PHONE.matches ? innerHeight * 0.7 : Math.max($("card-board").clientHeight, 440) - $("card-side").offsetHeight)
-    : (PHONE.matches ? innerHeight * 0.78 : $("game").clientHeight - 24) - $("compose").offsetHeight;
+    : (PHONE.matches ? innerHeight * 0.78 : $(S.free ? "free" : "game").clientHeight - 24) - $("compose").offsetHeight;
   return { cols: Math.max(40, Math.floor((width - 24) / (font * 0.61))), rows: Math.max(12, Math.floor((height - 12) / (font * 1.25))) };
 }
 function showTerminal(id) {  // the terminal of that number in the pane; null: none
@@ -846,21 +979,24 @@ async function cardSession(r) {
 }
 async function claude(path, body) {
   $("claude-err").textContent = "";
-  const r = S.review, c = r && r.card;
+  const r = S.review, c = r && r.card, f = S.free;
   try {
-    const d = await api("POST", `/api/${c ? `cards/${c.id}` : `games/${S.gid}`}/claude/${path}`, { ...paneSize(), ...(body || {}) });
-    if (c) { if (S.review === r && r.card === c) showTerminal(d.terminal); }
+    const d = await api("POST", `/api/${f ? "freeplay" : c ? `cards/${c.id}` : `games/${S.gid}`}/claude/${path}`, { ...paneSize(), ...(body || {}) });
+    if (f) { if (S.free === f) showTerminal(d.terminal); }
+    else if (c) { if (S.review === r && r.card === c) showTerminal(d.terminal); }
     else if (d.terminal && S.game) { S.game.claude.terminal = d.terminal; S.game.claude.started = true; syncClaude(); }
     return d;
   } catch (e) { $("claude-err").textContent = e.message; throw e; }
 }
 async function composeSend() {
-  const text = $("compose-text").value, r = S.review;
-  if (!text.trim() || !(r ? r.result : S.gid)) return;
+  const text = $("compose-text").value, r = S.review, f = S.free;
+  if (!text.trim() || !(f ? f.start : r ? r.result : S.gid)) return;
   $("compose-text").value = "";
   // From a card, with the moves made on its board since Claude last heard: "why not this?" is about one of them.
   const tried = r ? r.tries.slice(r.told).map((t) => ({ move: t.uci, cpl: t.cpl })) : [];
   try {
+    // From beside the freeplay board, with what is on it: where it started and the moves made to the position shown.
+    if (f) return await claude("say", { text, fen: f.start, moves: f.moves.slice(0, f.at).map((m) => m.uci) });
     await claude("say", r ? { text, tried } : { text });
     if (r) r.told += tried.length;
   } catch (e) { $("compose-text").value = text; }
@@ -876,7 +1012,7 @@ $("compose-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" &
 // On a phone the pane is a screen below the board, and what is used together is to be on one screen: there the
 // list is directly under the board (a game's: under the buttons that step through its moves).
 function placeLines() {
-  const el = $("lines"), over = !PHONE.matches ? null : S.review ? $("card-board") : $("nav");
+  const el = $("lines"), over = !PHONE.matches ? null : S.free ? $("free-nav") : S.review ? $("card-board") : $("nav");
   if (over) { if (over.nextElementSibling !== el) over.after(el); }
   else if ($("claude-pane").firstElementChild !== el) $("claude-pane").prepend(el);
 }
@@ -905,7 +1041,8 @@ function lineLabels(set, line, alone) {
   return line.moves.map((m, i) => (alone || (first + i) % 2 || i === 0 ? moveNo(first + i) + " " : "") + m.san);
 }
 function redraw() {  // the board on screen, and with a game what is written around it
-  if (S.review) { if (S.review.card) renderBoard(); }
+  if (S.free) renderFree();
+  else if (S.review) { if (S.review.card) renderBoard(); }
   else if (S.game) render();
 }
 function setLine(l) {  // null: what was on the board is back
@@ -947,7 +1084,7 @@ function renderLines() {
   // The move on the board first: where the row is short (a phone), it is the name that is cut.
   $("line-at").innerHTML = l ? (S.line.at ? `<b>${esc(lineLabels(l.set, l.line, true)[S.line.at - 1])}</b> · ` : "") + esc(l.line.name) : "";
   $("line-close").hidden = !l;
-  $("line-close").title = `Back to the ${S.review ? "card" : "game"} (Esc)`;
+  $("line-close").title = `Back to the ${S.free ? "board" : S.review ? "card" : "game"} (Esc)`;
 }
 // A move put on the board from the list or its buttons is to be seen there, with the list still on screen. On a
 // phone they are under the board and either may be partly off the screen: the list is brought on, then the board

@@ -123,6 +123,17 @@ def _routes(svc: Service, tutor: Tutor):
             lambda m, b, q: tutor.say_card(int(m[1]), str(b.get("text", "")), b.get("tried"), *_size(b)),
         ),
         ("POST", r"/api/cards/(\d+)/claude/resume", lambda m, b, q: tutor.resume_card(int(m[1]), *_size(b))),
+        # the freeplay board, which the page keeps: a position to move pieces on (none given: where a game
+        # starts), and the engine's view of one after so many milliseconds
+        ("GET", r"/api/freeplay", lambda m, b, q: svc.free_position(q.get("fen"))),
+        ("GET", r"/api/freeplay/eval", lambda m, b, q: svc.free_eval(q.get("fen"), q.get("ms"))),
+        # Claude beside it: a message opens the board's own session, which is shown there from then on
+        (
+            "POST",
+            r"/api/freeplay/claude/say",
+            lambda m, b, q: tutor.say_free(str(b.get("text", "")), b.get("fen"), b.get("moves"), *_size(b)),
+        ),
+        ("POST", r"/api/freeplay/claude/resume", lambda m, b, q: tutor.resume_free(*_size(b))),
         # Claude: nothing starts unless one of these is called
         ("POST", rf"/api/games/{_ID}/claude/analyse", lambda m, b, q: tutor.analyse(m[1], *_size(b))),
         ("POST", rf"/api/games/{_ID}/claude/say", lambda m, b, q: tutor.say(m[1], str(b.get("text", "")), *_size(b))),
