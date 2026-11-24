@@ -45,6 +45,7 @@ class Config:
     claude_config_dir: Path | None = None  # CLAUDE_CONFIG_DIR of the account the tutor runs in (None: the default)
     claude_args: list[str] = field(default_factory=list)
     idle_terminal_s: float = 900.0  # a tutor terminal nobody watches is ended after this long; it resumes when reopened
+    heuristics_path: Path | None = None  # what the Heuristics deck is made of (None: the file that comes with the app)
     source: Path | None = None
 
     @property

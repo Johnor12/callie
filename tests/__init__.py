@@ -43,6 +43,8 @@ def scratch_config(**changes):
     cfg.threads, cfg.hash_mb, cfg.review_ms, cfg.opponent_ms, cfg.port = 1, 16, 60, 50, 0
     cfg.claude_bin = str(Path(__file__).with_name("fake_claude.py"))
     cfg.claude_config_dir = home / "claude"
+    cfg.heuristics_path = home / "heuristics.json"  # none: the cards of a test are the ones it makes
+    cfg.heuristics_path.write_text("[]")
     for k, v in changes.items():
         setattr(cfg, k, v)
     return cfg

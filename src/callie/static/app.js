@@ -774,6 +774,7 @@ function renderReview() {
   $("card-result").hidden = !res;
   $("card-tries").hidden = true;
   $("card-why").hidden = !res || !res.explanation; $("card-why").textContent = res && res.explanation || "";
+  $("card-heuristic").hidden = !res || !res.heuristic; $("card-heuristic").textContent = res && res.heuristic || "";  // of a heuristic's card: what its position shows
   for (const g of GRADES) {  // how it was to remember, each with how long it hides the card for
     $(`card-${g}`).hidden = !res || !res.right || r.fast;
     $(`card-${g}`).querySelector("small").textContent = res && res.next ? res.next[g] : "";
@@ -784,12 +785,12 @@ function renderReview() {
   if (!res) return;
   if (!r.session) { r.session = true; cardSession(r); }
   // One line: your answer with what it lost, once that is known (and that it is the engine's first choice, when
-  // it is), and the move of the game with what that lost. Under it: the engine's first choice, after a right
+  // it is), and the move of the game with what that lost (a heuristic's card has none). Under it: the engine's first choice, after a right
   // answer that was another move; the other moves tried after a wrong answer, each with what it would have lost.
   const p = res.played, mine = r.tries[0] || {}, best = res.best.uci === res.move.uci, lost = (cpl) => cpl === undefined ? "…" : cpl ? `−${cpl}` : "0";
   $("card-mine").className = res.right ? "right" : "wrong";
   $("card-mine").textContent = `${res.right ? "✓" : "✗"} ${res.move.san}` + (mine.cpl === undefined ? "" : ` ${lost(mine.cpl)} cp`) + (best ? " · best" : "");
-  $("card-played").innerHTML = `you played <b>${esc(p.san)}${GLYPH[p.deck] || ""}</b> −${p.cpl} cp`;
+  $("card-played").innerHTML = p ? `you played <b>${esc(p.san)}${GLYPH[p.deck] || ""}</b> −${p.cpl} cp` : "";
   const under = r.tries.slice(1).map((t) => `<span${t.uci === r.tried ? ' class="on"' : ""}><b>${esc(t.san)}</b> ${lost(t.cpl)}</span>`);
   if (res.right && !best) under.unshift(`<span>best <b>${esc(res.best.san)}</b> 0</span>`);
   $("card-tries").innerHTML = under.join(""); $("card-tries").hidden = !under.length;

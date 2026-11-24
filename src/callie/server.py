@@ -100,12 +100,12 @@ def _routes(svc: Service, tutor: Tutor):
         ("POST", rf"/api/games/{_ID}/draw", lambda m, b, q: svc.draw(m[1], bool(b.get("accept")))),
         ("POST", rf"/api/games/{_ID}/pause", lambda m, b, q: svc.pause(m[1], bool(b.get("paused", True)))),
         ("POST", rf"/api/games/{_ID}/delete", lambda m, b, q: svc.delete(m[1])),
-        # the cards of your errors: an active one of a deck, whether one a page kept is still there, your move
-        # on one, what a move on it loses, and one taken out of its deck
+        # the cards of your errors, and of the heuristics: an active one of a deck, whether one a page kept is
+        # still there, your move on one, what a move on it loses, and one taken out of its deck
         ("GET", r"/api/cards", lambda m, b, q: svc.cards.decks()),
         (
             "GET",
-            r"/api/cards/(blunder|mistake|inaccuracy)",
+            r"/api/cards/(blunder|mistake|inaccuracy|heuristic)",
             lambda m, b, q: svc.cards.draw(m[1], int(q["skip"]) if q.get("skip", "").isdigit() else None),
         ),
         ("GET", r"/api/cards/(\d+)", lambda m, b, q: {"fen": svc.cards.fen(int(m[1]))}),

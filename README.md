@@ -12,8 +12,8 @@ installed: a model with an environment of its own, beside the server.
 ## What you get
 
 - **Home page**: a form for a new game (your colour, the opponent (Stockfish or Allie) and its strength, which
-  starts at your own rating, the opening it should steer for, and the clock), then the decks of your errors to
-  review, your ratings and your recent games (with the final position, result and settings, and what each did to
+  starts at your own rating, the opening it should steer for, and the clock), then the decks to review (your
+  errors, and the heuristics), your ratings and your recent games (with the final position, result and settings, and what each did to
   your rating).
 - **Game page**:
   - the board (drag a piece, or click it and then its square), with back/forward buttons, arrow keys, and a click
@@ -34,7 +34,8 @@ installed: a model with an environment of its own, beside the server.
 - **Review**: flashcards of your own errors, made as you play: the position before a move that lost too much, to
   find the better move in, shown again after longer and longer as you get it right, with Claude's explanation
   of why the move was bad on its back, and a box there to ask Claude about the position, in a session the card
-  keeps.
+  keeps. A fourth deck, [Heuristics](#heuristics), holds rules of thumb for finding a move, each shown by
+  positions to find the move in.
 
 ## Setting it up
 
@@ -302,6 +303,29 @@ What counts as right is the engine's first choice in the position, or another of
 there that it scored within 10 centipawns of the first; never the move you played in the game. A fourth move as
 good as those is not known to the card and counts as wrong. All of this is fixed in `src/callie/cards.py`: there
 are no settings.
+
+### Heuristics
+
+The fourth deck is not made of errors. It holds heuristics: short rules for finding a decent move ("to promote
+a passed pawn, secure the promotion square first"), each shown by a few archetypal positions. A card of it is one
+of those positions, to find the move in, like any other card; on its back, over the board's verdict, are the
+heuristic and how it finds the move there. It is answered, graded and scheduled exactly as the cards of your
+errors are, has no "you played" (no game made it), and Claude can be asked about it from its back: its session is
+told the heuristic and the position, and reads the game the position is from when that game is on file.
+
+The heuristics are written down in [`src/callie/heuristics.json`](src/callie/heuristics.json), and the app makes
+none itself. The ones there are the author's own, and those distilled from the errors he repeats, shown mostly by
+positions from his games: replace them with yours. To add one, or a position to one:
+
+1. give it a `key` (what its cards are known by: leave it alone afterwards) and a `title`, and each position its
+   `fen`, the `answer` (SAN), `why` (the back of the card) and, where one led to it, the move before (`last`, UCI);
+2. `./scripts/heuristics.py` asks Stockfish for its three best lines in each new position and writes them into
+   the file. They are what answers the card, as on any card: the engine's first choice, or a line within 10
+   centipawns of it. The script says of each position whether its `answer` is among those; a position where it
+   is not shows nothing, and the server refuses the file;
+3. restart the server. It puts what the file says in the deck: a new position is a new card, active at once; a
+   card whose text or lines changed keeps its place in the schedule; one whose position is gone from the file is
+   deleted. A card deleted by hand stays out of the deck while its position is in the file.
 
 ### Why the move was bad
 
