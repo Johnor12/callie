@@ -185,6 +185,7 @@ class Engine:
         black = (fen.split()[1] == "b") != (len(moves) % 2 == 1)
         sign = -1 if black else 1
         found: dict[int, Line] = {}
+        whole: dict[int, Line] = {}  # the lines as they stood when the engine last had them all at one depth
         nodes = took = 0
         started = time.monotonic()
         self._send(go)
@@ -220,7 +221,14 @@ class Engine:
             )
             if "nodes" in words:
                 nodes = int(words[words.index("nodes") + 1])
+            if len(found) >= len(whole) and len({ln.depth for ln in found.values()}) == 1:
+                whole = dict(found)
         took = int((time.monotonic() - started) * 1000)
+        # A search that ends part of the way through a depth has its first lines from that depth and the rest from
+        # the one before, where a move that has since moved up may still be: then the same move heads two lines, and
+        # the one it displaced is in none. The lines are then those of the last depth that was finished.
+        if len({ln.moves[0] for ln in found.values() if ln.moves}) < len(found) and whole:
+            found = whole
         lines = [found[i] for i in sorted(found)]
         return Result(best=best, lines=lines, depth=max((ln.depth for ln in lines), default=0), nodes=nodes, ms=took)
 
