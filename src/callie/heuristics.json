@@ -24,7 +24,7 @@
       "fen": "r4rk1/ppqn1ppp/2pb1n2/8/6b1/2NBBN2/PPPQ1PPP/R3K2R w KQ - 0 1",
       "answer": "O-O-O",
       "source": "composed",
-      "why": "Both ways of castling are legal; look at what each side of the board holds. On the kingside Black's queen and d6 bishop are lined up on h2, the g4 bishop is ready to take the knight that guards it, and a knight is a jump away: 1. O-O Bxf3 2. gxf3 Ne5, and your king has no cover left. On the queenside nothing of Black's points at your king, and the same capture only hands you the open g-file: 1. O-O-O Bxf3 2. gxf3. Castle where your defenders outnumber their attackers.",
+      "why": "Both ways of castling are legal; look at what each side of the board holds. On the kingside Black's queen and d6 bishop are lined up on h2, the g4 bishop is ready to take the knight that guards it, and a knight is a jump away: 1. O-O Bxf3 2. gxf3 Ne5, and your king has no cover left. On the queenside nothing of Black's points at your king, and the same capture only hands you the open g-file: 1. O-O-O Bxf3 2. gxf3, and the h-pawn is not hanging: 2... Bxh2 3. f4 shuts the queen out and wins the bishop. Castle where your defenders outnumber their attackers.",
       "lines": [
         {"moves": "e1c1 d6e7 e3f4 c7a5 a2a3 g4f3 g2f3 d7e5 f4e5 a5e5", "cp": -35},
         {"moves": "f3d4 d7e5 h2h3 g4h5 d3e2 h5e2 d2e2 b7b5 e1g1 e5c4", "cp": -59},
@@ -341,6 +341,24 @@
         {"moves": "d7d5 c4d3 d5e4 d3e4 f8d6 d2d4 e5d4 e1g1 e8g8 c1g5", "cp": 2},
         {"moves": "c6a5 c4e2 d7d5 e4g3 e5e4 f3d4 c7c5 d4b3 a5c6 d2d3", "cp": 483},
         {"moves": "f8b4 c4d5 c6e7 d5b3 e7g6 c2c3 d7d5 e4g3 b4e7 d2d4", "cp": 535}
+      ]
+    }
+  ]
+},
+{
+  "key": "real-threat",
+  "title": "When a piece takes a pawn deep in your camp, don't end the line there: trace its way back out, and ask what of yours can step onto it.",
+  "positions": [
+    {
+      "fen": "r4rk1/ppqn1ppp/2p2n2/8/8/2NBBP2/PPPQ1P1b/2KR3R w - - 0 1",
+      "last": "d6h2",
+      "answer": "f4",
+      "source": "composed: the king-into-pressure position after 1. O-O-O Bxf3 2. gxf3 Bxh2, the line the student wanted to prevent with 1. Be2 (2026-11-24)",
+      "why": "Black's bishop has just taken on h2: the capture that looked worth a whole move to prevent. Don't end the line on his capture; trace the bishop's way back. It has one diagonal, h2 to c7, and that same diagonal is how the queen guards it. The pawn you know for this is g3, and the g-pawn is gone. But the square does not matter, the diagonal does: 1. f4 steps onto it one square further along. Now the rook attacks the bishop, nothing guards it, and every way out loses it: 1... Bxf4 2. Bxf4, 1... Bg3 2. fxg3, 1... Bg1 2. Rdxg1. A piece for two pawns, with the g- and h-files open for your rooks. Taking back at once misses it: 1. Rxh2 Qxh2 gives a rook for the bishop. So the capture was never a threat, and no move had to be spent on stopping it.",
+      "lines": [
+        {"moves": "f3f4 d7c5 e3c5 h2f4 c5e3 f4e3 d2e3 f8e8 e3g5 c7e5", "cp": 635},
+        {"moves": "e3g5 d7c5 f3f4 c5d3 c2d3 f6d5 h1h2 f7f6 g5h4 c7f4", "cp": 325},
+        {"moves": "d3h7 f6h7 d2d7 c7d7 d1d7 h2e5 d7b7 e5c3 b2c3 h7f6", "cp": 313}
       ]
     }
   ]
