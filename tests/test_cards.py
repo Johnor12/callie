@@ -598,9 +598,12 @@ def test_the_heuristics_on_file():
     (h,) = heuristics.load(on_file(home))
     one, two = h["positions"]
     assert one["lines"][0] == LINES[0] and one["last"] == "f1c4" and two["last"] is None
-    assert one["shown"] == [] and two["shown"] == []  # neither says how it came about
-    assert two["lines"] == [{"moves": ["h1e1"], "san": ["Re1"], "cp": None, "mate": 30, "value": 9970}]
+    assert one["shown"] == [] and two["shown"] == []  # neither says how it came about, or goes on
     wrong = lambda **change: [{**ON_FILE[0], "positions": [{**ON_FILE[0]["positions"][0], **change}]}]  # noqa: E731
+    (after,) = heuristics.load(on_file(home, wrong(then="g6 Qf3")))[0]["positions"][0]["shown"]  # only how it goes on
+    assert (after["fen"], after["lines"][0]["name"], after["lines"][0]["at"]) == (FEN, "From here", 0)
+    assert [m["san"] for m in after["lines"][0]["moves"]] == ["g6", "Qf3"]
+    assert two["lines"] == [{"moves": ["h1e1"], "san": ["Re1"], "cp": None, "mate": 30, "value": 9970}]
     for said in (
         wrong(answer="Nh6"),  # not what its lines answer it with
         wrong(why=" "),
@@ -608,6 +611,8 @@ def test_the_heuristics_on_file():
         wrong(fen="nonsense"),
         wrong(moves="e4 e5 Qh5 Nc6"),  # moves that lead to another position
         wrong(moves="e4 e5 Qh6"),  # or are not legal
+        wrong(then="Qe7 Nf3"),  # what follows starts with another move than the answer
+        wrong(then="g6 Qxf7"),  # or is not legal
         [ON_FILE[0], {**ON_FILE[0], "title": "Again."}],  # the same key twice
         [ON_FILE[0], {**ON_FILE[0], "key": "other"}],  # the same positions twice
         [{"key": "none", "title": "No positions.", "positions": []}],
@@ -717,7 +722,8 @@ def test_the_heuristics_over_http_and_claude_on_the_back_of_one():
         s.close()
 
 
-# An opening as its file has it: the same position, as one of the Openers deck, with the moves that lead to it.
+# An opening as its file has it: the same position, as one of the Openers deck, with the moves that lead to it
+# and the ones that follow from it.
 OPENER = [
     {
         "key": "wayward-queen",
@@ -726,6 +732,7 @@ OPENER = [
             {
                 **{k: v for k, v in ON_FILE[0]["positions"][0].items() if k != "last"},
                 "moves": "e4 e5 Qh5 Nc6 Bc4",
+                "then": "g6 Qf3 Nf6",
                 "why": "Mate on f7 is threatened: g6 shuts the queen out.",
             }
         ],
@@ -743,10 +750,12 @@ def test_the_openers_on_file():
         for p in o["positions"]:
             assert p["answer"].rstrip("+#") in p["why"] and len(p["why"]) < 900, (o["key"], p["fen"])
             assert int(p["fen"].split()[5]) <= 12, (o["key"], p["fen"])  # early in a game
-            (board,) = p["shown"]  # from the start of a game to the position, its last move the one that led there
+            (board,) = p["shown"]  # one line: from the start of a game to the position, and on from its answer
             (line,) = board["lines"]
-            assert board["fen"] == cards.Position.from_fen().fen() and line["moves"][-1]["uci"] == p["last"]
-            assert line["moves"][-1]["fen"].split()[:4] == p["fen"].split()[:4], (o["key"], p["fen"])
+            led, then = line["moves"][: line["at"]], line["moves"][line["at"] :]
+            assert board["fen"] == cards.Position.from_fen().fen() and led[-1]["uci"] == p["last"]
+            assert led[-1]["fen"].split()[:4] == p["fen"].split()[:4], (o["key"], p["fen"])
+            assert then[0]["san"] == p["answer"] and len(then) >= 4, (o["key"], p["fen"])
     # a position that is in both files is an error
     home, seen = scratch_config().home, set()
     heuristics.load(on_file(home), seen)
@@ -771,11 +780,13 @@ def test_an_opener_has_a_card():
     back = c.answer(cid, "g6", now=NOON)
     assert back["right"] and back["played"] is None and back["heuristic"] is None
     assert back["opener"] == "Wayward Queen Attack" and back["explanation"].startswith("Mate on f7")
-    # the moves that led to it are a line on its back, from the start of a game
+    # the moves that led to it and the ones that follow are a line on its back, from the start of a game, which
+    # says where in it the card's position is
     (board,) = back["shown"]
-    assert (board["title"], board["fen"].split()[0]) == ("Build-up", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
-    assert [m["san"] for m in board["lines"][0]["moves"]] == ["e4", "e5", "Qh5", "Nc6", "Bc4"]
-    assert board["lines"][0]["moves"][-1] == {"uci": "f1c4", "san": "Bc4", "fen": FEN}
+    (line,) = board["lines"]
+    assert (board["title"], board["fen"].split()[0]) == ("The line", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
+    assert [m["san"] for m in line["moves"]] == ["e4", "e5", "Qh5", "Nc6", "Bc4", "g6", "Qf3", "Nf6"]
+    assert line["at"] == 5 and line["moves"][4] == {"uci": "f1c4", "san": "Bc4", "fen": FEN}
     # its position said by the other file instead: the same card, where it stood, in the other deck
     c.answer(cid, "g6", "easy", now=NOON)
     hs = heuristics.load(on_file(home))
@@ -810,7 +821,9 @@ def test_the_openers_over_http_and_claude_on_the_back_of_one():
         assert (
             "The opening: Wayward Queen Attack\n" in told and back["shown"][0]["lines"][0]["name"] == "From the start"
         )
-        assert "a line on the back of the card (From the start): 1. e4 e5 2. Qh5 Nc6 3. Bc4\n" in told
+        assert "The moves that led to the position: 1. e4 e5 2. Qh5 Nc6 3. Bc4\n" in told
+        assert "How it goes on from there: 3... g6 4. Qf3 Nf6\n" in told
+        assert 'on the back of the card as one line to step through ("From the start").' in told
         assert "under the opening, is why the move is the one: Mate on f7" in told and "why not Qe7?" in told
         assert not s.svc.explainer.failed and s.svc.cards.unexplained() is None  # nothing is written for it
     finally:

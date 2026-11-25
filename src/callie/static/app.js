@@ -655,6 +655,11 @@ document.addEventListener("keydown", (ev) => {
     else if (to !== undefined) { ev.preventDefault(); stepLine(to); }
     return;
   }
+  if (S.review && !typing && ownLines().length) {  // the back of a card with a line of its own: the keys start it, from the card's position
+    const to = { ArrowLeft: lineAt() - 1, ArrowRight: lineAt() + 1 }[ev.key];
+    if (to !== undefined && to >= 0) { ev.preventDefault(); stepLine(to); }
+    return;
+  }
   if (S.free && !typing) {  // the freeplay board: the keys step through the moves made on it
     const to = { ArrowLeft: S.free.at - 1, ArrowRight: S.free.at + 1, Home: 0, End: S.free.moves.length }[ev.key];
     if (to !== undefined) { ev.preventDefault(); freeGo(to); }
@@ -1021,8 +1026,10 @@ $("compose-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" &
 // or the arrow keys, step through the line. Everything a session showed is kept, to page back through.
 // On a phone the pane is a screen below the board, and what is used together is to be on one screen: there the
 // list is directly under the board (a game's: under the buttons that step through its moves).
-// The back of a card no game made has lines of its own, with no session: the moves that led to its position
-// (`result.shown`). They are listed in the same place, before what Claude shows there.
+// The back of a card no game made has a line of its own, with no session: the moves that led to its position and
+// the ones that follow from it (`result.shown`). It is listed in the same place, before what Claude shows there.
+// Such a line says how many of its moves lead to the card's position (`at`): that move is marked in the list, and
+// stepping starts from it, onwards or back, while the board is still the card's.
 const ownLines = () => (S.review && S.review.result && S.review.result.shown || []).map((b, i) => ({ ...b, id: `card-${i}` }));
 const allLines = () => [...ownLines(), ...S.shown];
 function placeLines() {
@@ -1067,9 +1074,12 @@ function setLine(l) {  // null: what was on the board is back
   renderLines();
 }
 function stepLine(to) {  // to that many of its moves played; with no line on the board, the first one listed is started
-  const l = linePos(), set = allLines().find((b) => b.id === S.shownAt);
-  if (l) setLine({ ...S.line, at: Math.max(0, Math.min(l.line.moves.length, to)) });
-  else if (set) setLine({ set: set.id, line: 0, at: 1 });
+  const l = linePos(), set = allLines().find((b) => b.id === S.shownAt), line = l ? l.line : set && set.lines[0];
+  if (line) setLine({ ...(l ? S.line : { set: set.id, line: 0 }), at: Math.max(0, Math.min(line.moves.length, to)) });
+}
+function lineAt() {  // how many moves of the line are played: with none on the board, where the first one listed starts
+  const set = allLines().find((b) => b.id === S.shownAt);
+  return linePos() ? S.line.at : set && set.lines[0].at || 0;
 }
 function renderLines() {
   const all = allLines(), set = all.find((b) => b.id === S.shownAt) || all[all.length - 1];  // a card's own, before any is picked
@@ -1077,15 +1087,16 @@ function renderLines() {
   if (!set) return;
   S.shownAt = set.id;
   placeLines();
-  const i = all.indexOf(set), n = all.length, l = linePos(), on = l && l.set === set ? S.line : null;
+  const i = all.indexOf(set), n = all.length, l = linePos(), on = l && l.set.id === set.id ? S.line : null;
   $("lines-title").textContent = set.title;
   $("lines-pager").hidden = n < 2;
   $("lines-n").textContent = `${i + 1}/${n}`;
   $("lines-older").disabled = i === 0; $("lines-newer").disabled = i === n - 1;
   $("lines-list").innerHTML = set.lines.map((line, j) => {
-    const at = on && on.line === j ? on.at : -1;
-    return `<div class="line" data-line="${j}" data-testid="line"><button class="name${at === 0 ? " on" : ""}" data-at="0">${esc(line.name)}</button>` +
-      lineLabels(set, line).map((t, k) => `<button class="${at === k + 1 ? "on" : ""}" data-at="${k + 1}" data-testid="line-move">${esc(t)}</button>`).join("") + `</div>`;
+    const at = on && on.line === j ? on.at : -1, here = line.at === undefined ? -1 : line.at;  // `here`: the card's position
+    const cls = (k) => (at === k ? " on" : "") + (here === k ? " here" : "");
+    return `<div class="line" data-line="${j}" data-testid="line"><button class="name${cls(0)}" data-at="0">${esc(line.name)}</button>` +
+      lineLabels(set, line).map((t, k) => `<button class="${cls(k + 1).trim()}" data-at="${k + 1}" data-testid="line-move">${esc(t)}</button>`).join("") + `</div>`;
   }).join("");
   const list = $("lines-list"), moved = list.querySelector("button.on");
   if (moved) {  // kept in sight in the list, which scrolls by itself: the page stays where it is
@@ -1093,8 +1104,9 @@ function renderLines() {
     list.scrollTop += a.top < box.top ? a.top - box.top : Math.max(0, a.bottom - box.bottom);
   }
   const end = l ? l.line.moves.length : 0;
-  $("line-first").disabled = $("line-prev").disabled = !l || S.line.at === 0;
-  $("line-next").disabled = !!l && S.line.at === end;  // with none on the board, it starts the first
+  $("line-first").disabled = !l || S.line.at === 0;
+  $("line-prev").disabled = lineAt() === 0;  // with none on the board, these two start the first
+  $("line-next").disabled = !!l && S.line.at === end;
   $("line-last").disabled = !l || S.line.at === end;
   // The move on the board first: where the row is short (a phone), it is the name that is cut.
   $("line-at").innerHTML = l ? (S.line.at ? `<b>${esc(lineLabels(l.set, l.line, true)[S.line.at - 1])}</b> · ` : "") + esc(l.line.name) : "";
@@ -1123,8 +1135,8 @@ function pageLines(by) {  // what was shown before, or after: listed, and the li
 $("lines-older").onclick = () => pageLines(-1);
 $("lines-newer").onclick = () => pageLines(1);
 $("line-first").onclick = () => stepLine(0);
-$("line-prev").onclick = () => stepLine(S.line.at - 1);
-$("line-next").onclick = () => stepLine(S.line ? S.line.at + 1 : 1);
+$("line-prev").onclick = () => stepLine(lineAt() - 1);
+$("line-next").onclick = () => stepLine(lineAt() + 1);
 $("line-last").onclick = () => stepLine(linePos().line.moves.length);
 for (const b of $("line-nav").querySelectorAll("button:not(#line-close)")) b.addEventListener("click", lineInSight);
 $("line-close").onclick = () => setLine(null);

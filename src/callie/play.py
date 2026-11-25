@@ -1110,11 +1110,7 @@ class Service:
         of = deck(card)
         out = [
             f"The {'opening' if of == 'opener' else of}: {self.cards.titles[of].get(card[of], card[of])}",
-            *(
-                f"The moves that lead to the position, a line on the back of the card ({b['lines'][0]['name']}): "
-                + _numbered(1, "w", [m["san"] for m in b["lines"][0]["moves"]])
-                for b in self.cards.shown[of].get(card["position"], [])
-            ),
+            *self._line_about(card, of),
             f"The position, with {'White' if pos.turn == 'w' else 'Black'} to move, in which the student was to find "
             f"the move: {card['fen']}",
             f"The engine plays {best['san'][0]} ({show(best['cp'], best['mate'])}, for White): "
@@ -1129,6 +1125,22 @@ class Service:
                    f"(`review` with from_ply and to_ply {at['ply'] + 1} is the analysis on file for the move played in it).")  # fmt: skip
         out.append(self.brief(at["game_id"]))
         return at["game_id"], "\n".join(out)
+
+    def _line_about(self, card: dict, of: str) -> list[str]:
+        """The line on the back of a card no game made, as Claude is told of it: the moves that led to its
+        position, and the ones that follow from it."""
+        out = []
+        for board in self.cards.shown[of].get(card["position"], []):
+            (line,) = board["lines"]
+            start, at = Position.from_fen(board["fen"]), line["at"]
+            sans = [m["san"] for m in line["moves"]]
+            if at:
+                out.append(f"The moves that led to the position: {_numbered(start.fullmove, start.turn, sans[:at])}")
+            if sans[at:]:
+                pos = Position.from_fen(card["fen"])
+                out.append(f"How it goes on from there: {_numbered(pos.fullmove, pos.turn, sans[at:])}")
+            out.append(f'That is on the back of the card as one line to step through ("{line["name"]}").')
+        return out
 
     def brief(self, game_id: str) -> str:
         """The game in a paragraph: what a Claude session is told when it is opened on it."""

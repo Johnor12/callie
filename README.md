@@ -347,15 +347,19 @@ The fifth deck is not made of errors either. It holds positions from the first d
 are sharp (a trap to set off or to step around, one move that holds and others that lose) or that are often played
 wrongly, where the natural move is not the good one. None is a position you would be in only after a slip of
 your own that you could have avoided: where there is one, the card is the position before it. A card of it is such
-a position, to find the move in; on its back are the opening's name and why the move is the one, and the moves
-that lead to the position are a line there, "From the start", to step through on the board as the lines Claude
-shows are (it is listed with them, first). Everything else is as for a card of the Heuristics deck: it is
+a position, to find the move in; on its back are the opening's name and why the move is the one, and a line,
+"From the start", to step through on the board as the lines Claude shows are (it is listed with them, first): the
+moves that lead to the position, and after them how it goes on from the answer, a trap closing, say. The move
+that leads to the card's position is underlined in it, and the board stays the card's until you step: forward
+(or the right arrow key) plays the answer and what follows, back goes through how the position came about.
+Everything else is as for a card of the Heuristics deck: it is
 answered, graded and scheduled like any card, has no "you played", and Claude can be asked about it from its back.
 
 They are written down in [`src/callie/openers.json`](src/callie/openers.json), in the form of the heuristics'
 file: an entry is an opening, its `title` the opening's name, and its position has the `moves` that lead to it
-from the start of a game (SAN, in one string: they must end in its `fen`, and the last of them is its `last`) and
-`why`, the back of the card. A position of the heuristics' file can have `moves` too. The twenty there are for the author's openings, 1. d4 and 2. c4 as White (the Queen's
+from the start of a game (SAN, in one string: they must end in its `fen`, and the last of them is its `last`),
+`then`, the moves that follow from it (the same way: the first must be its `answer`), and `why`, the back of the
+card. A position of the heuristics' file can have `moves` and `then` too. The twenty there are for the author's openings, 1. d4 and 2. c4 as White (the Queen's
 Gambit Accepted and Declined, the Slav, the Marshall, the Benoni, the Albin and Budapest gambits) and 1... e5 and
 1... d5 as Black (the Italian and the Two Knights, the Four Knights, the Vienna, the Ruy Lopez, the Queen's Gambit,
 the London): replace them with yours. All are opening theory; three were also on the board in games of his, none

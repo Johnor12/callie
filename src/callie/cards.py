@@ -29,8 +29,8 @@ left to review (Anki would show it up to twenty minutes early).
 Two more decks hold cards that no game made, each written down in a file (`heuristics.py`). Heuristics: the
 positions that show a heuristic, each to find the move in, with the heuristic and how it finds the move there on
 its back. Openers: positions early in a game that are sharp, or often played wrongly, with the opening and why
-the move is the one on the back, and the moves that lead to the position there as a line to step through. They
-are answered and scheduled as the others are. Such a card has no move that was played (its ``uci`` is empty) and
+the move is the one on the back, and the moves that lead to the position and follow from it there as a line to
+step through. They are answered and scheduled as the others are. Such a card has no move that was played (its ``uci`` is empty) and
 names what it is a position of: its ``heuristic``, or its ``opener``.
 """
 
@@ -428,7 +428,7 @@ class Cards:
         line, the move the card is about, and why that was bad, if it has been written. Of a card no game made:
         its "heuristic" or its "opener" (the opening), why the move is the one, no move the card is about
         ("played" is None), and what there is to step through on its board ("shown": the moves that led to the
-        position, where they are known)."""
+        position and those that follow from it, where they are written down)."""
         now = time.time() if now is None else now
         if grade is not None and grade not in RATINGS[1:]:
             raise CardError(f"grade must be one of {', '.join(RATINGS[1:])}")
