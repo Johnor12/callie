@@ -103,6 +103,8 @@ moves, and the move is drawn from the human distribution tilted by those scores.
 R it plays moves of the quality people rated R play at the game's time control. It is offered from 800 to 2600,
 the ratings that fit covers, and has no "full strength". The ratings are Lichess's, and they are the scale
 Stockfish's strengths are given on too. Allie is told the ratings of both players, and is given its own for yours.
+A game at 1500 is the one exception: Allie is told 1501. Every Lichess account starts at 1500, and at exactly that
+rating (it reads a rating as its digits) the model plays a different, wilder player than at 1499 or 1501.
 
 **Clock.** Allie plays to the same clock as you: "10+3" gives each side ten minutes and three seconds a move, and
 its clock is on the page above the board. It is stopped by exactly what stops yours. It runs while it is Allie's

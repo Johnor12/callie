@@ -119,9 +119,10 @@ def test_allie_plays_to_the_same_clock():
         s = svc.state(gid)
         assert s["clock"]["ms"] == 603000 and s["clock"]["opponent"]["ms"] == 603000  # the increment, nothing charged
         first = asked(svc, "decide")[0]
+        # a game at 1500 is one at 1500 everywhere but in what Allie is told: to it that is a new account's rating
         assert (first["white_elo"], first["black_elo"], first["base"], first["inc"], first["speed"]) == (
-            1500,
-            1500,
+            1501,
+            1501,
             600,
             3,
             "rapid",

@@ -30,6 +30,10 @@ REPO = "yimingzhang/allie-2.1"
 SOURCE = "https://github.com/y0mingzhang/allie"
 COMMIT = "53e4de8fe256ffe8734a5ff1cb334854c4e1cdf4"
 ELO_MIN, ELO_MAX = 800, 2600  # the ratings its calibrated play was fitted on
+# The rating every Lichess account starts at. Allie reads a rating as its four digits, and at exactly this one it
+# predicts another player than at 1499 or 1501, which agree with each other: a wilder one, taken for a beginner
+# after a poor move or two (measured in a game it lost that way; presumably it has learnt the new accounts).
+NEWCOMER = 1500
 _WORKER = Path(__file__).with_name("allie_worker.py")
 
 
@@ -42,6 +46,11 @@ def speed(base_s: float, increment_s: float) -> str:
     moves would take."""
     total = base_s + 40 * increment_s
     return "bullet" if total < 180 else "blitz" if total < 480 else "rapid" if total < 1500 else "classical"
+
+
+def told(elo: int) -> int:
+    """The rating Allie is given for a player rated ``elo``: that rating, but never the one new accounts have."""
+    return elo + 1 if elo == NEWCOMER else elo
 
 
 def weights(cfg: Config) -> Path | None:
@@ -235,7 +244,7 @@ class Allie:
         the game up instead of playing it; ``offer_draw``: it offers a draw with it. ``clocks``: each mover's
         seconds left after each move; ``clock``: Allie's own now; ``base``, ``inc``: None when untimed."""
         return self.call(
-            "decide", game=game_id, moves=moves, clocks=clocks, white_elo=white_elo, black_elo=black_elo,
+            "decide", game=game_id, moves=moves, clocks=clocks, white_elo=told(white_elo), black_elo=told(black_elo),
             base=base, inc=inc, speed="classical" if base is None else speed(base, inc or 0), clock=clock,
         )  # fmt: skip
 
@@ -243,7 +252,7 @@ class Allie:
                 base: int | None, inc: int | None, clock: float | None, white: bool) -> bool:  # fmt: skip
         """Allie (White, or not) has just moved: does it resign on seeing the position, as a person might?"""
         return bool(self.call(
-            "concede", game=game_id, moves=moves, clocks=clocks, white_elo=white_elo, black_elo=black_elo,
+            "concede", game=game_id, moves=moves, clocks=clocks, white_elo=told(white_elo), black_elo=told(black_elo),
             base=base, inc=inc, speed="classical" if base is None else speed(base, inc or 0), clock=clock, white=white,
         )["resign"])  # fmt: skip
 
@@ -255,8 +264,8 @@ class Allie:
             "predict",
             moves=moves,
             clocks=clocks,
-            white_elo=white_elo,
-            black_elo=black_elo,
+            white_elo=told(white_elo),
+            black_elo=told(black_elo),
             base=base,
             inc=inc,
             top=top,
