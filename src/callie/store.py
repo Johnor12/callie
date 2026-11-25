@@ -103,6 +103,12 @@ CREATE TABLE IF NOT EXISTS explored (   -- a line of your own, tried on a board 
   explored_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS explored_board ON explored (board);
+CREATE TABLE IF NOT EXISTS looked (     -- the engine's analysis of a position of a line that is listed on a board (a
+                                        -- card's own, one Claude showed, one you tried): made once, in the background
+  fen TEXT PRIMARY KEY,
+  eval TEXT NOT NULL,                   -- JSON: {"cp", "mate", "value", "depth", "best": {"uci", "san"}, "line": [SAN]}
+  looked_at REAL NOT NULL
+);
 """
 # Columns added since the first release: a database made before them gets them here.
 ADDED = {
@@ -320,6 +326,37 @@ class Store:
                 "DELETE FROM explored WHERE board=? AND id NOT IN (SELECT id FROM explored WHERE board=? ORDER BY id DESC LIMIT ?)",
                 (board, board, keep),
             )
+
+    def lines_kept(self) -> list[dict]:
+        """Every position with lines from it that is kept for a board, Claude's and yours: each its "fen" and
+        the "moves" of one line from it."""
+        out = self.all("SELECT fen, moves FROM explored")
+        for r in out:
+            r["moves"] = json.loads(r["moves"])
+        for r in self.all("SELECT board FROM shown"):
+            board = json.loads(r["board"])
+            out += [{"fen": board["fen"], "moves": line["moves"]} for line in board["lines"]]
+        return out
+
+    # ---------- the engine's analysis of their positions ----------
+
+    def looked(self, fens: list[str] | None = None) -> dict[str, dict]:
+        """The analysis on file of those positions (None: of every one that has any), by FEN."""
+        if fens is None:
+            rows = self.all("SELECT fen, eval FROM looked")
+        else:
+            rows = []
+            for i in range(0, len(fens), 500):
+                some = fens[i : i + 500]
+                rows += self.all(
+                    f"SELECT fen, eval FROM looked WHERE fen IN ({', '.join('?' * len(some))})", tuple(some)
+                )
+        return {r["fen"]: json.loads(r["eval"]) for r in rows}
+
+    def look(self, fen: str, found: dict) -> None:
+        self.run(
+            "INSERT OR REPLACE INTO looked (fen, eval, looked_at) VALUES (?,?,?)", (fen, json.dumps(found), time.time())
+        )
 
     def unexplore(self, board: str) -> None:
         """The board is gone (a card that was deleted with its game): so is what was tried on it."""

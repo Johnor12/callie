@@ -1,7 +1,8 @@
 """Games: making moves, the opponent's replies, the clocks, and the engine's analysis of every position (from
 which the cards of your errors are made: `cards.py`).
 
-Five Stockfish processes: `review` analyses each position of a game once, at full strength; `explore` answers
+Five Stockfish processes: `review` analyses each position of a game once, at full strength, and, while no game is being played, each
+position of the lines that are listed on a board (a card's own, Claude's, yours: `_look`); `explore` answers
 the tutor's own questions; `opp` plays the opponent at its chosen strength; `quiet` answers what is asked in the
 background (an explanation being written for a card), on one thread at the lowest priority; `live` evaluates the
 position on a board that is not being played (the back of a card, a game that is over: the last part of this
@@ -74,6 +75,23 @@ def card_board(card_id: int) -> str:
     return f"card-{card_id}"
 
 
+def _lines(board: dict) -> list[dict]:
+    """A position and the lines from it, as they are put on a board: each line with the position it starts from."""
+    return [{"fen": board["fen"], "moves": line["moves"]} for line in board["lines"]]
+
+
+def _view(pos: Position, res) -> dict:
+    """What a search made of a position, as the page is given it: the evaluation as a game's positions have
+    theirs, the engine's first choice ("best": None where the search found nothing) and the line it expects."""
+    out = {"cp": None, "mate": None, "value": 0, "depth": 0, "best": None, "line": []}
+    if res.lines and res.lines[0].moves:
+        ln = res.lines[0]
+        sans = _line_sans(pos, ln.moves[:PV_PLIES])
+        out.update(cp=ln.cp, mate=ln.mate, value=ln.value, depth=res.depth, line=sans)
+        out["best"] = {"uci": ln.moves[0], "san": sans[0]}
+    return out
+
+
 def _line_sans(pos: Position, moves: list[str]) -> list[str]:
     """An engine line as SAN; cut where it stops being legal (the tail of a line can be stale)."""
     out = []
@@ -121,6 +139,8 @@ class Service:
         ] = {}  # the move you made ahead in a game, to be played when the opponent has moved
         self.queue: deque[tuple[str, int]] = deque()
         self.queued: set[tuple[str, int]] = set()
+        self.lines: deque[str] = deque()  # positions of the lines listed on a board, to be analysed once (see `_look`)
+        self.lined: set[str] = set()
         self.work = threading.Event()
         self.stop = threading.Event()
         self.tutor = None  # set by the server: callie.tutor.Tutor
@@ -944,8 +964,21 @@ class Service:
             self._cards_on_file()
         except Exception:  # noqa: BLE001
             traceback.print_exc(file=sys.stderr)
+        try:
+            self._lines_on_file()
+        except Exception:  # noqa: BLE001
+            traceback.print_exc(file=sys.stderr)
         while not self.stop.is_set():
             if not self.queue:
+                if self.lines and not self.in_play():  # the games come first, and a game being played has the machine
+                    try:
+                        self._look(self.lines[0])
+                    except Exception:  # noqa: BLE001
+                        if not self.stop.is_set():
+                            traceback.print_exc(file=sys.stderr)
+                            time.sleep(1)
+                    self.lined.discard(self.lines.popleft())
+                    continue
                 self.work.clear()
                 self.work.wait(5)
                 continue
@@ -1001,6 +1034,41 @@ class Service:
             self.store.put_eval(game_id, ply, fen, depth, value, cp, mate, lines)
             self._cards(row, now, self._evals(row, now), (ply, ply + 1))  # the moves either side of this position
         self._bump(game_id)
+
+    # ---------- the lines listed on a board ----------
+    # A card's own line, the lines Claude put on a board, the ones you tried there: their positions do not change,
+    # so each is analysed once, as a game's positions are, and the analysis is kept. It is what the page colours
+    # their moves from, and what it shows of one that is on the board.
+
+    def _line_up(self, fens) -> None:
+        """Those positions are of lines that are listed: the ones with no analysis on file are to have one."""
+        fens = list(dict.fromkeys(fens))
+        have = self.store.looked(fens)
+        for fen in fens:
+            if fen not in have and fen not in self.lined:
+                self.lined.add(fen)
+                self.lines.append(fen)
+        self.work.set()
+
+    def _lines_on_file(self) -> None:
+        """The positions of every line there is when the server starts: each card's own position, the lines of
+        the cards no game made, and what is kept of Claude's lines and of yours."""
+        fens = [r["fen"] for r in self.store.all("SELECT fen FROM cards WHERE state != 'removed'")]
+        kept = [
+            ln for boards in self.cards.shown.values() for shown in boards.values() for b in shown for ln in _lines(b)
+        ]
+        for line in kept + self.store.lines_kept():
+            fens += [line["fen"], *(m["fen"] for m in line["moves"])]
+        self._line_up(fens)
+
+    def _look(self, fen: str) -> None:
+        """Analyse a position of a line and keep what is found: one search, as long as a game's positions get."""
+        pos = Position.from_fen(fen)
+        if not pos.legal_moves() or self.store.looked([fen]):
+            return  # nothing to search: the game is over there
+        found = _view(pos, self.review.search(fen, ms=self.cfg.review_ms))
+        if found["best"]:
+            self.store.look(fen, found)
 
     # ---------- what Claude is given ----------
 
@@ -1293,6 +1361,7 @@ class Service:
             said.append(f"- {name}: {_numbered(pos.fullmove, pos.turn, [m['san'] for m in played])}")
         title = " ".join(str(title or "").split())[:120] or f"{label[0].upper()}{label[1:]}"
         self.store.show(session, {"title": title, "fen": pos.fen(), "lines": shown})
+        self._line_up([pos.fen(), *(m["fen"] for line in shown for m in line["moves"])])
         if self.tutor:
             self.tutor.shown(session)
         return "\n".join(
@@ -1502,36 +1571,44 @@ class Service:
         legal = {m: {"san": pos.san(m), "fen": pos.push(m).fen()} for m in pos.legal_moves()}
         return {"fen": pos.fen(), "turn": pos.turn, "legal": legal}
 
+    @staticmethod
+    def _over(pos: Position) -> dict | None:
+        """The evaluation of a position in which nothing can be played (None: something can)."""
+        if pos.legal_moves():
+            return None
+        mated = pos.in_check()
+        value = (-MATE_CP if pos.turn == "w" else MATE_CP) if mated else 0
+        out = {"cp": None if mated else 0, "mate": 0 if mated else None, "value": value, "depth": 0}
+        return {**out, "best": None, "line": [], "over": True, "kept": True}
+
     def position_eval(self, fen, ms=None) -> dict:
-        """The engine's view of a position, at full strength, after ``ms`` milliseconds of search: the
-        evaluation as a game's positions have theirs, its first choice ("best") and the line it expects.
-        "over": nothing can be played there. The page asks about the position on its board again and again,
-        each time for longer, and the engine's hash table carries what one search found into the next. A
-        question ends the search of the one before it, which answers with what it had: "best" is None, with
-        no evaluation, where that was nothing yet. What a search that ran its time found is kept: asked again
-        for no longer than that, the position is not searched again."""
+        """The engine's view of a position, at full strength: the evaluation as a game's positions have theirs,
+        its first choice ("best") and the line it expects. "over": nothing can be played there. "kept": it is
+        the analysis on file of a position of a line that is listed on a board (`_look`), which does not change:
+        such a position is not searched here. Any other is searched for ``ms`` milliseconds. The page asks
+        about the position on its board again and again, each time for longer, and the engine's hash table
+        carries what one search found into the next. A question ends the search of the one before it, which
+        answers with what it had: "best" is None, with no evaluation, where that was nothing yet. What a search
+        that ran its time found is remembered while the server runs: asked again for no longer than that, the
+        position is not searched again."""
         pos = self._placed(fen)
-        out = {"fen": pos.fen(), "cp": None, "mate": None, "value": 0, "depth": 0, "best": None, "line": []}
-        if not pos.legal_moves():
-            mated = pos.in_check()
-            value = (-MATE_CP if pos.turn == "w" else MATE_CP) if mated else 0
-            return {**out, "cp": None if mated else 0, "mate": 0 if mated else None, "value": value, "over": True}
+        over = self._over(pos)
+        if over:
+            return {"fen": pos.fen(), **over}
         try:
             ms = max(LOOK_MS[0], min(int(ms or 1000), LOOK_MS[1]))
         except (TypeError, ValueError):
             raise GameError("ms is a number of milliseconds") from None
+        on_file = self.store.looked([pos.fen()]).get(pos.fen())
+        if on_file:
+            return {"fen": pos.fen(), **on_file, "over": False, "kept": True}
         with self.changed:  # any lock will do: it is held for a moment
             kept = self.seen.get(pos.fen())
         if kept and kept[0] >= ms:
             return kept[1]
         self.live.stop()
         res = self.live.search(pos.fen(), ms=ms)
-        if res.lines and res.lines[0].moves:
-            ln = res.lines[0]
-            sans = _line_sans(pos, ln.moves[:PV_PLIES])
-            out.update(cp=ln.cp, mate=ln.mate, value=ln.value, depth=res.depth, line=sans)
-            out["best"] = {"uci": ln.moves[0], "san": sans[0]}
-        out["over"] = False
+        out = {"fen": pos.fen(), **_view(pos, res), "over": False, "kept": False}
         if out["best"] and res.ms >= 0.9 * ms:  # not cut short by the next question
             with self.changed:
                 self.seen[pos.fen()] = (ms, out)
@@ -1539,6 +1616,27 @@ class Service:
                 while len(self.seen) > SEEN:
                     self.seen.popitem(last=False)
         return out
+
+    def position_evals(self, fens) -> dict:
+        """The analysis on file of those positions, by FEN as each was given: of the ones that have it (and of
+        those in which nothing can be played). None is searched: what a page asks for the lines it lists, in
+        one question, before it asks about the rest one at a time."""
+        if not isinstance(fens, list) or len(fens) > 2000:
+            raise GameError("give a list of up to 2000 FENs")
+        placed = {}
+        for fen in fens:
+            try:
+                placed[fen] = Position.from_fen(str(fen))
+            except ValueError:
+                continue  # not a position: there is nothing on file for it
+        on_file = self.store.looked([pos.fen() for pos in placed.values()])
+        out = {}
+        for fen, pos in placed.items():
+            if pos.fen() in on_file:
+                out[fen] = {"fen": pos.fen(), **on_file[pos.fen()], "over": False, "kept": True}
+            elif (over := self._over(pos)) is not None:
+                out[fen] = {"fen": pos.fen(), **over}
+        return {"evals": out}
 
     def _board(self, board: str) -> None:
         """A board that lines of your own are kept for (``board``: a game's id, or a card's `card_board`): a
@@ -1579,6 +1677,7 @@ class Service:
             san, pos = pos.san(uci), pos.push(uci)
             played.append({"uci": uci, "san": san, "fen": pos.fen()})
         self.store.explore(board, tree, root, played)
+        self._line_up([root, *(m["fen"] for m in played)])
         return {"explored": self.store.explored(board)}
 
     def board_line(self, board, known: dict[str, str] | None = None) -> str:

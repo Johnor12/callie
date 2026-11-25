@@ -1224,18 +1224,20 @@ for (const b of $("line-nav").querySelectorAll("button:not(#line-close)")) b.add
 $("line-close").onclick = () => setLine(null);
 
 // ---------- the engine on a board that is not being played ----------
-// It is asked about the position on the board, for the bar under it, the arrow and the line it expects: again and
-// again while the position stays, each time for longer (LOOK_MS), and what is shown gets better as the answers
-// come. Between the second look and the last it is asked, briefly, about every other position of the lines that
-// are listed, which is what colours their moves. One question at a time: the server's engine drops a search for
-// the next one asked. A position of the game itself has its analysis already, and is not asked about. What can
-// be moved in the position on the board is asked for first.
+// The positions of the lines that are listed do not change, so the server analyses each once, in the background,
+// and keeps that (`kept`): the page asks for what there is of them in one question, and it is what colours their
+// moves and what is shown of one that is on the board, the same every time. A position that has none yet (a move
+// just made, a line just shown) is asked about live meanwhile: the one on the board for the bar under it, the
+// arrow and the line it expects, again and again while it stays, each time for longer (LOOK_MS), and, between
+// the second look and the last, every other one of the lines listed, briefly. One question at a time: the
+// server's engine drops a search for the next one asked. A position of the game itself has its analysis
+// already, and is not asked about. What can be moved in the position on the board is asked for first.
 let looking = null;  // the AbortController of the questions under way
 async function seen(fen, ms, signal) {  // the engine's view of a position after a look that long: the longest look of each is kept
   const have = S.evals.get(fen);
   if (have && (have.over || have.ms >= ms)) return;
   const e = await api("GET", `/api/position/eval?fen=${encodeURIComponent(fen)}&ms=${ms}`, null, signal);
-  if (e.best || e.over) S.evals.set(fen, { ...e, ms });  // neither: the search was cut short by another's (a second tab)
+  if (e.best || e.over) S.evals.set(fen, { ...e, ms: e.kept ? Infinity : ms });  // neither: the search was cut short by another's (a second tab)
 }
 function look() {
   if (looking) looking.abort();
@@ -1251,10 +1253,16 @@ function look() {
         S.legal.set(fen, p.legal);
         if (here()) renderBoard();
       }
-      for (const ms of own ? [] : LOOK_MS.slice(0, 2)) { await seen(fen, ms, ctl.signal); drawn(); }
       const set = allLines().find((b) => b.id === S.shownAt), rest = set ? [set.fen] : [];
       const walk = (kids) => { for (const m of kids) { rest.push(m.fen); walk(m.kids); } };
       for (const line of set ? set.lines : []) walk(line.root.kids);
+      const fens = [...new Set(own ? rest : [fen, ...rest])].filter((f) => (S.evals.get(f) || {}).ms !== Infinity);  // a live look gives way to the analysis, once that is made
+      if (fens.length) {
+        const d = await api("POST", "/api/position/evals", { fens }, ctl.signal);
+        for (const [f, e] of Object.entries(d.evals)) S.evals.set(f, { ...e, ms: Infinity });
+        drawn();
+      }
+      for (const ms of own ? [] : LOOK_MS.slice(0, 2)) { await seen(fen, ms, ctl.signal); drawn(); }
       for (const f of rest) if (!S.evals.has(f)) { await seen(f, LOOK_MS[0], ctl.signal); drawn(); }
       if (!own) { await seen(fen, LOOK_MS[2], ctl.signal); drawn(); }
     } catch (e) { if (here()) $(S.review ? "card-err" : "game-err").textContent = e.message; }

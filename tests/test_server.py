@@ -407,4 +407,64 @@ def test_lines_of_your_own_are_kept_with_the_board():
         s.close()
 
 
+def test_the_positions_of_lines_are_analysed_once_and_kept():
+    s = Running()
+    try:
+        need_engine(s.cfg)
+        _, g = s.call("POST", "/api/games", {"color": "w", "elo": 1320})
+        gid, start = g["id"], g["start_fen"]
+        s.call("POST", f"/api/games/{gid}/resign")
+        on_file = lambda fens: s.call("POST", "/api/position/evals", {"fens": fens})[1]["evals"]  # noqa: E731
+
+        def analysed(fens):
+            deadline = time.time() + 20
+            while len(on_file(fens)) < len(fens):
+                assert time.time() < deadline, on_file(fens)
+                time.sleep(0.1)
+            return on_file(fens)
+
+        # a position of no line has nothing on file, and asking for what is on file searches for nothing
+        assert s.call("POST", "/api/position/evals", {"fens": [start, "nonsense"]}) == (200, {"evals": {}})
+        assert s.call("POST", "/api/position/evals", {"fens": "all"})[0] == 400
+        # a line of your own: each of its positions is analysed in the background, where it starts too
+        _, kept = s.call("POST", f"/api/games/{gid}/explored", {"fen": start, "moves": ["d4", "d5"]})
+        fens = [start, *(m["fen"] for m in kept["explored"][0]["moves"])]
+        evals = analysed(fens)
+        for fen in fens:
+            e = evals[fen]
+            assert e["kept"] and not e["over"] and e["depth"] > 0 and e["line"][0] == e["best"]["san"], e
+            assert e["fen"] == fen and isinstance(e["cp"], int) and e["value"] == e["cp"]
+        # asked about by itself, such a position has that analysis however long is asked for: it is not searched
+        searches = []
+        search = s.svc.live.search
+        s.svc.live.search = lambda *a, **k: searches.append(k["ms"]) or search(*a, **k)
+        asked = start.replace(" ", "%20")
+        assert s.call("GET", f"/api/position/eval?fen={asked}&ms=4000")[1] == evals[start] and searches == []
+        assert s.call("GET", f"/api/position/eval?fen={asked}&ms=100")[1] == evals[start] and searches == []
+        # one in which nothing can be played needs no analysis
+        mate = "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1"
+        assert on_file([mate])[mate]["over"] and on_file([mate])[mate]["mate"] == 0 and on_file([mate])[mate]["kept"]
+        # what Claude puts on a board is analysed the same way
+        _, r = s.call("POST", f"/api/games/{gid}/claude/say", {"text": "hello"})
+        session = json.loads(output(s.tutor.terminal(r["terminal"]), '"prompt"').split("\n")[0])["session"]
+        fen = "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
+        shown = {"fen": fen, "lines": [{"name": "Two knights", "moves": ["Nf6", "Ng5"]}]}
+        s.call("POST", f"/api/games/{gid}/tool", {"name": "show_lines", "session": session, "arguments": shown})
+        (board,) = s.call("GET", f"/api/terminals/{r['terminal']}/lines")[1]["shown"]
+        assert len(analysed([fen, *(m["fen"] for m in board["lines"][0]["moves"])])) == 3
+        # while a game is being played the machine is the game's: the lines wait until it is over
+        _, playing = s.call("POST", "/api/games", {"color": "w", "elo": 1320})
+        _, kept = s.call("POST", f"/api/games/{gid}/explored", {"fen": start, "moves": ["e4"]})
+        e4 = kept["explored"][-1]["moves"][0]["fen"]
+        time.sleep(1)
+        assert on_file([e4]) == {}
+        s.call("POST", f"/api/games/{playing['id']}/resign")
+        assert analysed([e4])[e4]["kept"]
+        # it is kept in the database: a server started on it has it, and looks at nothing again
+        looked = s.svc.store.looked()
+        assert set(looked) >= {*fens, fen, e4} and "fen" not in looked[start] and "kept" not in looked[start]
+    finally:
+        s.close()
+
+
 load_tests = function_tests(globals())

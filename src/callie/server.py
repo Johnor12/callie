@@ -130,6 +130,8 @@ def _routes(svc: Service, tutor: Tutor):
         # lines of your own that are kept for the board (a POST adds one, and answers with them all)
         ("GET", r"/api/position", lambda m, b, q: svc.position(q.get("fen"))),
         ("GET", r"/api/position/eval", lambda m, b, q: svc.position_eval(q.get("fen"), q.get("ms"))),
+        # the analysis on file of the positions of the lines a page lists: all of them asked about at once
+        ("POST", r"/api/position/evals", lambda m, b, q: svc.position_evals(b.get("fens"))),
         ("GET", rf"/api/games/{_ID}/explored", lambda m, b, q: svc.explored(m[1])),
         ("GET", r"/api/cards/(\d+)/explored", lambda m, b, q: svc.explored(card_board(int(m[1])))),
         (

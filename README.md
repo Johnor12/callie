@@ -439,19 +439,25 @@ to, Claude's or the card's own. There is no separate board for this, and nothing
   Moves tried from a position of the board's own (a move of the game, the card's position) are listed as lines
   from that position, before what Claude showed, and `‹ ›` page through them all.
 - **The engine.** The bar under the board is its evaluation of the position on it, the green arrow its first
-  choice, and the text with it the evaluation, how deep it has looked, and the line it expects. Each position is
-  looked at for a quarter of a second, then a second, then four, and what is shown gets better as the answers
-  come. It is full-strength Stockfish in a process of its own, started the first time a board needs it; a
-  position asked about ends the search of the one before, and what a finished search found is kept for the next
-  time the position is on a board (until the server restarts). A position of the game itself is not searched
-  again: it has the analysis made as the game was played.
+  choice, and the text with it the evaluation, how deep it has looked, and the line it expects.
 - **What each move lost.** Every move of the lines listed is coloured by the centipawns it lost: deep green for
-  none, through yellow at about a pawn, to deep red at three pawns or more. The engine is asked about each of
-  their positions for that, briefly, after its first looks at the one on the board, so the colours arrive over a
-  few seconds. The move on the board has its loss as a number beside the buttons that step through the line, and
-  every other move has it as a tooltip. It is reckoned as a game's moves are (the evaluation before against the
-  one after, inside ten pawns either way), from looks of different lengths, so it settles as the engine looks
-  longer. A move made in a card's own position has the loss the card reckons, as the answer has.
+  none, through yellow at about a pawn, to deep red at three pawns or more. The move on the board has its loss as
+  a number beside the buttons that step through the line, and every other move has it as a tooltip. It is
+  reckoned as a game's moves are: the evaluation before against the one after, inside ten pawns either way. A
+  move made in a card's own position has the loss the card reckons, as the answer has.
+- **Analysed once.** The positions of a line do not change, so each is analysed once and the analysis is kept in
+  the database: every card's own position, the lines of the heuristics' and the openers' cards, the lines Claude
+  put on a board, and every move you have tried. It is one search of full-strength Stockfish for as long as a
+  game's positions get (`[engine] review_ms`, 1.5 seconds), made in the background as the line appears, and
+  for everything already on file when the server starts. So the bar, the arrow, the colours and the losses are
+  there at once when a line is listed, and are the same every time. The games come first: while one is being
+  played (not over, and with a move in the last ten minutes) the lines wait.
+- **Until then, live.** A move you have just made has no analysis yet, and is searched as you look: the position
+  on the board for a quarter of a second, then a second, then four, each answer better than the last, and the
+  other new positions of the lines listed briefly in between. That is Stockfish in a process of its own, started
+  the first time a board needs it, and a position asked about ends the search of the one before. The kept
+  analysis takes its place once it is made. A position of the game itself is never searched for this: it has
+  the analysis made as the game was played.
 - **What is kept.** The lines you try are kept by the server with the board they were tried on, the last 200 of
   each, and are there whenever the board is: another day, another browser, the next time the card comes back.
   They go with the game when it is deleted (a card's with the card), and those that grew from a line of Claude's
@@ -633,7 +639,7 @@ at.
 | `src/callie/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
 | `src/callie/openings.py` | the opening books |
 | `src/callie/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return, and what a board that is not being played asks |
-| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards, the lines Claude showed, the lines you tried |
+| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards, the lines Claude showed, the lines you tried, the analysis of their positions |
 | `src/callie/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
 | `src/callie/tutor.py` | the Claude Code session of each game and of each card asked about: how it is started, resumed and typed into |
 | `src/callie/explain.py` | the explanation of each card: Claude run once for it, in the background, behind the games |
