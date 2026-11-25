@@ -2,7 +2,7 @@
   --bg: #16181d; --panel: #1e2128; --panel2: #252932; --line: #2f3440; --text: #d7dae0; --dim: #8b93a1;
   --accent: #5b9dd9; --good: #7fc36b; --warn: #e0b34f; --bad: #e0683c; --worst: #d9453d;
   --light: #dde3e8; --dark: #8298a8; --sel: rgba(255, 213, 79, .55); --last: rgba(155, 199, 0, .42); --pre: rgba(74, 128, 212, .6);
-  --board: min(calc(100dvh - 205px), 44vw, 780px);
+  --board: min(calc(100dvh - 227px), 44vw, 780px);
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -69,16 +69,14 @@ textarea { resize: none; width: 100%; }
 
 /* ---------- a game ---------- */
 #game { flex: 1; min-height: 0; display: grid; gap: 14px; padding: 12px 16px; grid-template-columns: auto 250px minmax(340px, 1fr); grid-template-rows: minmax(0, 1fr); }
-#board-pane { display: flex; flex-direction: column; gap: 6px; width: calc(var(--board) + 26px); min-width: 0; }
-.board-row { display: flex; gap: 8px; }
-.evalbar { width: 18px; flex: none; height: var(--board); background: #33373f; border-radius: 4px; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
-.evalbar.flip { justify-content: flex-start; }
-.evalbar-white { background: #eceff1; height: 50%; transition: height .5s ease; }
-.evalbar-text { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center; font-size: 9.5px; font-weight: 700; color: #20242b; letter-spacing: -.03em; }
-.evalbar-text.top { bottom: auto; top: 3px; }
-.evalbar-text.onblack { color: #e8eaed; }
-.evalbar.off { opacity: .3; }  /* the board shows a line of Claude's: the evaluation is not of that */
-.evalbar::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid rgba(224, 104, 60, .7); }
+#board-pane { display: flex; flex-direction: column; gap: 6px; width: var(--board); min-width: 0; }
+/* the engine's evaluation, under the board it is of: White's share from the left, the number at the end of the side that is ahead */
+.evalbar { width: var(--board); height: 16px; flex: none; background: #33373f; border-radius: 4px; position: relative; overflow: hidden; }
+.evalbar-white { background: #eceff1; height: 100%; width: 50%; transition: width .5s ease; }
+.evalbar-text { position: absolute; top: 0; left: 6px; line-height: 16px; font-size: 10.5px; font-weight: 700; color: #20242b; font-variant-numeric: tabular-nums; }
+.evalbar-text.onblack { left: auto; right: 6px; color: #e8eaed; }
+.evalbar.off { opacity: .3; }  /* the board shows a line while the game is being played: the evaluation is not of that */
+.evalbar::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px solid rgba(224, 104, 60, .7); }
 .board { width: var(--board); height: var(--board); position: relative; display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); border-radius: 4px; overflow: hidden; user-select: none; touch-action: none; flex: none; }
 .sq { position: relative; background: var(--light); }
 .sq.dk { background: var(--dark); }
@@ -111,7 +109,7 @@ textarea { resize: none; width: 100%; }
 .board.right .sq.last::before { background: rgba(127, 195, 107, .62); }
 .board.wrong .sq.last::before { background: rgba(217, 69, 61, .6); }
 .board.wrong { box-shadow: 0 0 0 3px var(--worst); }
-.player { display: flex; align-items: center; gap: 10px; min-height: 30px; padding-left: 26px; }
+.player { display: flex; align-items: center; gap: 10px; min-height: 30px; }
 .player .name { font-weight: 600; }
 .player .thinking { color: var(--accent); font-size: 13px; }
 .player .offer { color: var(--warn); font-size: 13px; }
@@ -122,11 +120,11 @@ textarea { resize: none; width: 100%; }
 .clock.low .time { background: var(--worst); color: #fff; border-color: var(--worst); }
 .clock.paused .time { color: var(--warn); }
 .clock button { padding: 4px 10px; font-size: 13px; }
-.nav { display: flex; gap: 6px; padding-left: 26px; align-items: center; }
+.nav { display: flex; gap: 6px; align-items: center; }
 .nav button { min-width: 44px; font-size: 15px; padding: 5px 0; }
 .nav button.quiet { font-size: 13px; padding: 5px 10px; }
-#insight, #free-line { padding-left: 26px; min-height: 40px; font-size: 13px; color: var(--dim); }
-#insight b, #free-line b { color: var(--text); }
+#insight { min-height: 40px; font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#insight b, #card-engine b { color: var(--text); }
 
 #moves-pane { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 #result { padding: 10px 12px; font-weight: 600; border-bottom: 1px solid var(--line); background: var(--panel2); display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
@@ -164,9 +162,10 @@ textarea { resize: none; width: 100%; }
 #keys { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
 #keys button { padding: 6px 12px; font-size: 13px; flex: none; }
 #claude-err:not(:empty) { padding: 8px 10px 0; }
-/* What Claude put on the board in the session, above its terminal (on a phone, under the board: see there): a
-   position's lines, each move a button that puts it on the board, and under them the buttons that step through
-   the one that is on it. */
+/* What Claude put on the board in the session, and what you tried there, above its terminal (on a phone, under
+   the board: see there): a position's lines, each move a button that puts it on the board, and under them the
+   buttons that step through the one that is on it. A move is coloured by what it lost (app.js). Where more than
+   one move was made in a position, each has a row of its own under it, set in from the row they leave. */
 #lines { flex: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .lines-head { display: flex; align-items: baseline; gap: 8px; }
 #lines-title { flex: 1; min-width: 0; font-weight: 600; }
@@ -177,18 +176,26 @@ textarea { resize: none; width: 100%; }
 #lines .line button { border: 0; background: none; padding: 2px 5px; border-radius: 5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 #lines .line button.name { color: var(--dim); font-weight: 400; text-align: left; margin-right: 3px; }
 #lines .line button:hover { background: var(--panel2); }
-#lines .line button.on { background: #33415a; color: #fff; }
+#lines .line button.on { background: #3d4f70; color: #fff; }
 #lines .line button.here { box-shadow: inset 0 -2px var(--accent); }  /* in a card's own line: the move that leads to the card's position */
+#lines .line button.mine { font-style: italic; }  /* a move of your own, among the line's */
+#lines .fork { flex-basis: 100%; display: grid; gap: 2px; margin: 1px 0 1px 7px; padding-left: 6px; border-left: 2px solid var(--line); }
+#lines .sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px; }
 #line-nav { display: flex; align-items: center; gap: 6px; }
 #line-nav button { min-width: 38px; padding: 3px 0; }
-#line-at { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+#line-at { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 5px; white-space: nowrap; color: var(--dim); font-variant-numeric: tabular-nums; }
 #line-at b { color: var(--text); }
+#line-at b, #line-at .lost { flex: none; }  /* the move on the board and what it lost */
+#line-at .of { min-width: 0; overflow: hidden; text-overflow: ellipsis; }  /* the line's name: what is cut where the row is short */
 #compose { display: flex; gap: 8px; padding: 8px; flex: none; align-items: flex-end; }
 #compose button { height: 34px; }
 
 /* ---------- review: a card's board, and beside it what came of your answer ---------- */
-#review { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; --board: min(calc(100dvh - 75px), calc(100vw - 402px), 780px); }
+#review { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; --board: min(calc(100dvh - 125px), calc(100vw - 402px), 780px); }
 #card-pane { display: flex; justify-content: center; align-items: flex-start; gap: 14px; }
+/* the board, and under it, once the card is answered, the engine's view of what is on it: the bar, and the line it expects */
+#card-col { display: flex; flex-direction: column; gap: 6px; flex: none; width: var(--board); min-width: 0; }
+#card-engine { height: 20px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }  /* it changes as the engine looks: nothing under it moves */
 #card-side { flex: 1; min-width: 340px; max-width: 600px; display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }  /* as wide as the board leaves it, for the terminal it may come to hold */
 #card-side:not(:has(> :not([hidden]))) { visibility: hidden; }  /* nothing in it until the card is answered; it keeps its place beside the board */
 #card-count { font-weight: 600; font-variant-numeric: tabular-nums; }  /* in the bar at the top, after the deck's name */
@@ -198,15 +205,10 @@ textarea { resize: none; width: 100%; }
 #card-mine.wrong { background: var(--worst); color: #fff; padding: 1px 6px; border-radius: 5px; }
 #card-played { font-size: 13px; color: var(--dim); }
 #card-played b { color: var(--text); }
-#card-tries { display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }  /* other moves tried after a wrong answer */
-#card-tries span { border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; }
-#card-tries span.on { border-color: var(--dim); }  /* the one marked on the board */
-#card-tries b { color: var(--text); font-weight: 600; }
 #card-heuristic { font-size: 14.5px; font-weight: 650; line-height: 1.35; }  /* what a heuristic's card shows (an opener's: its opening), over how it finds the move */
 #card-heuristic:not([hidden]) + #card-why { border-left-color: var(--accent); }
 #card-why { font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; padding-left: 10px; border-left: 2px solid var(--warn); }
 #card-grade button { flex: 1; padding: 6px 4px; }
-#card-grade #card-free { flex: none; padding: 6px 10px; }  /* not an answer: to the card's position on the freeplay board */
 #card-grade button small { margin-left: 6px; color: var(--dim); font-size: 11.5px; font-variant-numeric: tabular-nums; }  /* how long that answer hides the card for */
 /* Claude on the back of a card: the pane is the last part of the card's side, with no panel of its own. With a
    terminal in it the side is as tall as the board, and the terminal has what the rest leaves of that. */
@@ -220,53 +222,37 @@ textarea { resize: none; width: 100%; }
 #card-done a { color: var(--accent); margin-left: 8px; }
 #card-err:not(:empty) { text-align: center; margin-top: 12px; }
 
-/* ---------- freeplay: a board to move both sides on with the engine's view of it, and Claude beside ---------- */
-#free { flex: 1; min-height: 0; display: grid; gap: 14px; padding: 12px 16px; grid-template-columns: auto minmax(340px, 1fr); grid-template-rows: minmax(0, 1fr); --board: min(calc(100dvh - 205px), calc(100vw - 426px), 780px); }
-#free-pane { display: flex; flex-direction: column; gap: 6px; width: calc(var(--board) + 26px); min-width: 0; min-height: 0; }
-#free-line { height: 40px; overflow: hidden; font-variant-numeric: tabular-nums; }  /* the evaluation changes as the engine looks: nothing under it moves */
-/* the moves made on the board, each a button that puts the position after it there: what the board leaves of the height, scrolled past that */
-#free-moves { flex: 0 1 auto; min-height: 26px; overflow-y: auto; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 1px; padding-left: 21px; font-size: 13px; }
-#free-moves button { border: 0; background: none; padding: 2px 5px; border-radius: 5px; font-weight: 600; font-variant-numeric: tabular-nums; }
-#free-moves button:hover { background: var(--panel2); }
-#free-moves button.on { background: #33415a; color: #fff; }
-#free-err { padding-left: 26px; }
-
 /* two columns: the board with the moves under it, Claude beside */
 @media (max-width: 1240px) {
-  :root { --board: min(calc(100dvh - 380px), 46vw, 640px); }
+  :root { --board: min(calc(100dvh - 402px), 46vw, 640px); }
   #game { grid-template-columns: auto minmax(320px, 1fr); grid-template-rows: auto minmax(150px, 1fr); }
   #board-pane { grid-column: 1; grid-row: 1; }
   #moves-pane { grid-column: 1; grid-row: 2; }
   #claude-pane { grid-column: 2; grid-row: 1 / span 2; }
-  #free #claude-pane { grid-row: 1; }
 }
 /* one column: a phone */
 @media (max-width: 760px) {
-  :root { --board: calc(100vw - 46px); }
+  :root { --board: calc(100vw - 20px); }
   body { height: auto; min-height: 100%; }
   #game { display: flex; flex-direction: column; padding: 8px 10px 16px; }
   #board-pane { width: 100%; }
-  #board, #card-board, #free-board { scroll-margin: 6px; }  /* a click on a move in a list brings the board back on screen: not flush with the edge */
+  #board, #card-board { scroll-margin: 6px; }  /* a click on a move in a list brings the board back on screen: not flush with the edge */
   /* Claude's lines are directly under the board they are played on (app.js puts them there), a panel of their
      own, so that the two are on one screen: the list is as tall as the screen leaves under the board and what
      is between them, and scrolls by itself past that. */
-  #board-pane > #lines, #card-pane > #lines, #free-pane > #lines { align-self: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-  #lines-list { max-height: clamp(48px, calc(100dvh - var(--board) - 106px), 148px); }
-  #board-pane #lines-list { max-height: clamp(48px, calc(100dvh - var(--board) - 184px), 148px); }  /* your name and the game's buttons are between */
-  #free-pane #lines-list { max-height: clamp(48px, calc(100dvh - var(--board) - 150px), 148px); }  /* the board's buttons are between */
+  #board-pane > #lines, #card-col > #lines { align-self: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  #lines-list { max-height: clamp(48px, calc(100dvh - var(--board) - 160px), 148px); }  /* the bar and what the engine expects are between */
+  #board-pane #lines-list { max-height: clamp(48px, calc(100dvh - var(--board) - 206px), 148px); }  /* the bar, your name and the game's buttons are between */
   #line-nav button { min-width: 46px; padding: 7px 0; }
   #moves-pane { max-height: 300px; }
   #claude-pane { flex: none; align-self: stretch; }
   #claude-pane:has(#terminal:not([hidden])) { height: 78dvh; }
   .field { grid-template-columns: 1fr; }
   .field .hint { grid-column: 1; }
-  .player, .nav, #insight, #free-line, #free-moves, #free-err { padding-left: 0; }
   .engine { display: none; }
-  #free { display: flex; flex-direction: column; padding: 8px 10px 16px; --board: calc(100vw - 46px); }
-  #free-pane { width: 100%; }
-  #free-moves { max-height: 96px; }
   #review { --board: calc(100vw - 20px); padding: 8px 10px 16px; }
   #card-pane { flex-direction: column; gap: 8px; }
+  #card-col { gap: 8px; }
   #card-side { flex: none; width: 100%; min-width: 0; max-width: none; gap: 8px; padding: 10px 12px; }  /* tight: the explanation is to start as high on the screen as it can */
   #card-side:has(#terminal:not([hidden])) { height: auto; }
   #card-side #claude-pane, #card-side:has(#terminal:not([hidden])) #claude-pane { flex: none; height: auto; }

@@ -28,7 +28,7 @@ from .cards import CardError
 from .config import Config
 from .engine import EngineError
 from .explain import Explainer
-from .play import GameError, Service
+from .play import GameError, Service, card_board
 from .tutor import Tutor, TutorError
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -120,23 +120,35 @@ def _routes(svc: Service, tutor: Tutor):
         (
             "POST",
             r"/api/cards/(\d+)/claude/say",
-            lambda m, b, q: tutor.say_card(int(m[1]), str(b.get("text", "")), b.get("tried"), *_size(b)),
+            lambda m, b, q: tutor.say_card(
+                int(m[1]), str(b.get("text", "")), b.get("tried"), *_size(b), board=b.get("board")
+            ),
         ),
         ("POST", r"/api/cards/(\d+)/claude/resume", lambda m, b, q: tutor.resume_card(int(m[1]), *_size(b))),
-        # the freeplay board, which the page keeps: a position to move pieces on (none given: where a game
-        # starts), and the engine's view of one after so many milliseconds
-        ("GET", r"/api/freeplay", lambda m, b, q: svc.free_position(q.get("fen"))),
-        ("GET", r"/api/freeplay/eval", lambda m, b, q: svc.free_eval(q.get("fen"), q.get("ms"))),
-        # Claude beside it: a message opens the board's own session, which is shown there from then on
+        # a board that is not being played (the back of a card, a game that is over): a position to move pieces
+        # on (none given: where a game starts), the engine's view of one after so many milliseconds, and the
+        # lines of your own that are kept for the board (a POST adds one, and answers with them all)
+        ("GET", r"/api/position", lambda m, b, q: svc.position(q.get("fen"))),
+        ("GET", r"/api/position/eval", lambda m, b, q: svc.position_eval(q.get("fen"), q.get("ms"))),
+        ("GET", rf"/api/games/{_ID}/explored", lambda m, b, q: svc.explored(m[1])),
+        ("GET", r"/api/cards/(\d+)/explored", lambda m, b, q: svc.explored(card_board(int(m[1])))),
         (
             "POST",
-            r"/api/freeplay/claude/say",
-            lambda m, b, q: tutor.say_free(str(b.get("text", "")), b.get("fen"), b.get("moves"), *_size(b)),
+            rf"/api/games/{_ID}/explored",
+            lambda m, b, q: svc.keep_line(m[1], b.get("tree"), b.get("fen"), b.get("moves")),
         ),
-        ("POST", r"/api/freeplay/claude/resume", lambda m, b, q: tutor.resume_free(*_size(b))),
+        (
+            "POST",
+            r"/api/cards/(\d+)/explored",
+            lambda m, b, q: svc.keep_line(card_board(int(m[1])), b.get("tree"), b.get("fen"), b.get("moves")),
+        ),
         # Claude: nothing starts unless one of these is called
         ("POST", rf"/api/games/{_ID}/claude/analyse", lambda m, b, q: tutor.analyse(m[1], *_size(b))),
-        ("POST", rf"/api/games/{_ID}/claude/say", lambda m, b, q: tutor.say(m[1], str(b.get("text", "")), *_size(b))),
+        (
+            "POST",
+            rf"/api/games/{_ID}/claude/say",
+            lambda m, b, q: tutor.say(m[1], str(b.get("text", "")), *_size(b), board=b.get("board")),
+        ),
         ("POST", rf"/api/games/{_ID}/claude/resume", lambda m, b, q: tutor.resume(m[1], *_size(b))),
         ("POST", rf"/api/games/{_ID}/claude/close", lambda m, b, q: tutor.close_terminal(m[1])),
         ("POST", rf"/api/games/{_ID}/claude/reset", lambda m, b, q: tutor.reset(m[1])),

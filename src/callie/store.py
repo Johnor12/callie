@@ -1,5 +1,5 @@
 """The database: games, their moves, the engine's analysis of each position, the cards made of your errors and
-of the heuristics' and the openings' positions, the Claude session of the freeplay board, and the lines Claude put
+of the heuristics' and the openings' positions, the lines of your own tried on a board, and the lines Claude put
 on the board in its conversations. SQLite, one file."""
 
 from __future__ import annotations
@@ -85,17 +85,24 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   session_started INTEGER NOT NULL DEFAULT 0,  -- it was given its first prompt, so it can be resumed
   UNIQUE (position, uci)
 );
-CREATE TABLE IF NOT EXISTS freeplay (   -- the freeplay board, which keeps nothing but its conversation: one row
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  session_id TEXT,                      -- the Claude Code session asked from beside it; NULL: none yet
-  session_started INTEGER NOT NULL DEFAULT 0  -- it was given its first prompt, so it can be resumed
-);
 CREATE TABLE IF NOT EXISTS shown (      -- what Claude put on the board in a conversation: a position and lines from it
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,             -- the Claude Code session it was shown in: a game's, a card's, or the freeplay board's
+  session_id TEXT NOT NULL,             -- the Claude Code session it was shown in: a game's or a card's
   shown_at REAL NOT NULL,
   board TEXT NOT NULL                   -- JSON: {"title", "fen", "lines": [{"name", "moves": [{"uci", "san", "fen"}]}]}
 );
+CREATE TABLE IF NOT EXISTS explored (   -- a line of your own, tried on a board that is not being played: the back of a
+                                        -- card, a game that is over
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board TEXT NOT NULL,                  -- whose board: a game's id, or "card-" and a card's
+  tree TEXT NOT NULL,                   -- what it grew from: "own" (a position of the board's own), or "s" and the id
+                                        -- of what Claude showed there
+  fen TEXT NOT NULL,                    -- the position that starts from
+  moves TEXT NOT NULL,                  -- JSON: [{"uci", "san", "fen"}], from that position: where it follows a line
+                                        -- that was there before it leaves it, those moves too
+  explored_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS explored_board ON explored (board);
 """
 # Columns added since the first release: a database made before them gets them here.
 ADDED = {
@@ -131,6 +138,7 @@ class Store:
         with self.lock:
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.executescript(SCHEMA)
+            self.conn.execute("DROP TABLE IF EXISTS freeplay")  # the session of a board the app no longer has
             for table, columns in ADDED.items():
                 have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
                 for name, kind in columns.items():
@@ -200,7 +208,7 @@ class Store:
 
     def delete_game(self, game_id: str) -> None:
         with self.lock:
-            for table, col in (("evals", "game_id"), ("moves", "game_id"), ("games", "id")):
+            for table, col in (("evals", "game_id"), ("moves", "game_id"), ("games", "id"), ("explored", "board")):
                 self.conn.execute(f"DELETE FROM {table} WHERE {col}=?", (game_id,))
 
     # ---------- moves ----------
@@ -239,14 +247,6 @@ class Store:
             (game_id, ply, fen, depth, value, cp, mate, json.dumps(lines)),
         )
 
-    # ---------- the freeplay board ----------
-
-    def freeplay(self) -> dict:
-        """The freeplay board's row: what it keeps of its Claude session."""
-        with self.lock:
-            self.conn.execute("INSERT OR IGNORE INTO freeplay (id) VALUES (1)")
-            return self.one("SELECT * FROM freeplay WHERE id=1")
-
     # ---------- what Claude put on the board ----------
 
     def show(self, session_id: str, board: dict, keep: int = 30) -> None:
@@ -264,8 +264,11 @@ class Store:
             )
             self.conn.execute(
                 "DELETE FROM shown WHERE session_id NOT IN (SELECT session_id FROM games) "
-                "AND session_id NOT IN (SELECT session_id FROM cards WHERE session_id IS NOT NULL) "
-                "AND session_id NOT IN (SELECT session_id FROM freeplay WHERE session_id IS NOT NULL)"
+                "AND session_id NOT IN (SELECT session_id FROM cards WHERE session_id IS NOT NULL)"
+            )
+            # and what you tried from a line of one that is no longer kept goes with it
+            self.conn.execute(
+                "DELETE FROM explored WHERE tree != 'own' AND CAST(substr(tree, 2) AS INTEGER) NOT IN (SELECT id FROM shown)"
             )
 
     def shown(self, session_id: str) -> list[dict]:
@@ -274,12 +277,50 @@ class Store:
         return [{"id": r["id"], **json.loads(r["board"])} for r in rows]
 
     def conversation(self, session_id) -> bool:
-        """It is the Claude Code session of a game, of a card, or of the freeplay board."""
+        """It is the Claude Code session of a game or of a card."""
         if not isinstance(session_id, str) or not session_id:
             return False
         found = self.one(
-            "SELECT 1 AS there FROM games WHERE session_id=? UNION ALL SELECT 1 FROM cards WHERE session_id=? "
-            "UNION ALL SELECT 1 FROM freeplay WHERE session_id=?",
-            (session_id, session_id, session_id),
+            "SELECT 1 AS there FROM games WHERE session_id=? UNION ALL SELECT 1 FROM cards WHERE session_id=?",
+            (session_id, session_id),
         )
         return found is not None
+
+    # ---------- the lines of your own ----------
+
+    def explored(self, board: str) -> list[dict]:
+        """What you tried on a board, the oldest first: each the tree it grew from, where that starts, and its
+        moves from there."""
+        rows = self.all("SELECT tree, fen, moves FROM explored WHERE board=? ORDER BY id", (board,))
+        return [{"tree": r["tree"], "fen": r["fen"], "moves": json.loads(r["moves"])} for r in rows]
+
+    def explore(self, board: str, tree: str, fen: str, moves: list[dict], keep: int = 200) -> None:
+        """Keep a line you tried on a board. One that goes on from a line kept before takes its place, where
+        that stood among the others; one that is the start of a line kept before adds nothing. The last ``keep``
+        of a board are kept."""
+        ucis = [m["uci"] for m in moves]
+        with self.lock:
+            rows = self.all("SELECT id, moves FROM explored WHERE board=? AND tree=? AND fen=?", (board, tree, fen))
+            for r in rows:
+                r["ucis"] = [m["uci"] for m in json.loads(r["moves"])]
+            if any(r["ucis"][: len(ucis)] == ucis for r in rows):
+                return
+            start = next((r for r in rows if ucis[: len(r["ucis"])] == r["ucis"]), None)
+            if start:
+                self.conn.execute(
+                    "UPDATE explored SET moves=?, explored_at=? WHERE id=?",
+                    (json.dumps(moves), time.time(), start["id"]),
+                )
+                return
+            self.conn.execute(
+                "INSERT INTO explored (board, tree, fen, moves, explored_at) VALUES (?,?,?,?,?)",
+                (board, tree, fen, json.dumps(moves), time.time()),
+            )
+            self.conn.execute(
+                "DELETE FROM explored WHERE board=? AND id NOT IN (SELECT id FROM explored WHERE board=? ORDER BY id DESC LIMIT ?)",
+                (board, board, keep),
+            )
+
+    def unexplore(self, board: str) -> None:
+        """The board is gone (a card that was deleted with its game): so is what was tried on it."""
+        self.run("DELETE FROM explored WHERE board=?", (board,))

@@ -3,8 +3,7 @@
 It holds no chess of its own. Each tool call is passed to the running Callie server (CALLIE_URL) for the
 game this session belongs to (CALLIE_GAME), which owns the game and the engines. `human_moves` is offered
 only where Allie is installed (CALLIE_ALLIE), and `show_lines` only to a session the student talks to, in a pane
-beside a board (CALLIE_SESSION: which one, so that the lines go to its pane). The session of the freeplay board
-(CALLIE_FREEPLAY) has no game: it is offered the tools that take any position, as a FEN. A session that works in the
+beside a board (CALLIE_SESSION: which one, so that the lines go to its pane). A session that works in the
 background (CALLIE_QUIET: one that explains a card) says so with each call, and the server answers it with what
 the games can spare. Standard library only, and run as a file, so it needs nothing from the environment Claude
 Code starts it in.
@@ -122,7 +121,9 @@ SHOW_LINES = {
     "are listed there by name, each move a button, and the student plays through them on the board while reading "
     "what you write. Use it whenever your answer turns on a concrete line: a line read in notation is hard to "
     "follow, one seen on the board is not. One call for each position you discuss, with every line from that "
-    "position in it; what you showed earlier in the conversation stays there to go back to. It returns the lines "
+    "position in it; what you showed earlier in the conversation stays there to go back to. Once the game is over, "
+    "or on the back of a card, the student can also play moves of their own from any point of a line: the board "
+    "keeps those beside yours. It returns the lines "
     "as they are listed (in SAN, with move numbers), or says which move of which line is not legal.",
     "inputSchema": {
         "type": "object",
@@ -158,19 +159,7 @@ SHOW_LINES = {
 }
 
 
-def _of_a_fen(tool: dict) -> dict:
-    """A tool as a session with no game is offered it: about a position given as a FEN, never a point in a game."""
-    schema = tool["inputSchema"]
-    props = {k: v for k, v in schema["properties"].items() if k != "ply"}
-    props["fen"] = {"type": "string", "description": "The position, as a FEN."}
-    required = ["fen", *schema.get("required", [])]
-    return {**tool, "inputSchema": {**schema, "properties": props, "required": required}}
-
-
 def tools() -> list[dict]:
-    if os.environ.get("CALLIE_FREEPLAY") == "1":
-        by_name = {t["name"]: t for t in (*TOOLS, SHOW_LINES)}
-        return [_of_a_fen(by_name[name]) for name in ("position", "analyze", "show_lines")]
     return (
         TOOLS
         + ([SHOW_LINES] if os.environ.get("CALLIE_SESSION") else [])

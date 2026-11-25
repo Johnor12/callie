@@ -12,8 +12,7 @@ installed: a model with an environment of its own, beside the server.
 ## What you get
 
 - **Home page**: a form for a new game (your colour, the opponent (Stockfish or Allie) and its strength, which
-  starts at your own rating, the opening it should steer for, and the clock), then the way to the
-  [freeplay board](#freeplay), the decks to review (your
+  starts at your own rating, the opening it should steer for, and the clock), then the decks to review (your
   errors, the heuristics and the openers), your ratings and your recent games (with the final position, result and settings, and what each did to
   your rating).
 - **Game page**:
@@ -23,11 +22,12 @@ installed: a model with an environment of its own, beside the server.
     played the moment the opponent has moved, at no cost to your clock, if it is legal then; if it is not, or the
     opponent offers a draw with its move, it is dropped and the move is yours to make. Another premove takes its
     place, and a click anywhere on the board takes it back;
-  - the advantage bar beside the board and a graph of the game's swings above the move list;
+  - the advantage bar under the board and a graph of the game's swings above the move list;
   - the move list, with the centipawns each move lost and its grade (`?!` inaccuracy, `?` mistake, `??` blunder);
     a move of yours in a yellow box has an explanation of what was wrong with it, shown by a click on it;
     once the game is over, what the engine preferred to the move on screen and the line it expected, and
     with the result what the game did to your rating and where that leaves it;
+  - once the game is over, a board to [try moves on](#trying-moves-on-the-board), from any move of the game;
   - your clock, with a pause button, and Allie's when it is the opponent;
   - a Claude pane: a box to type to Claude, and, from your first message, a real Claude Code session in a
     terminal above it, with the lines Claude talks about listed over it, to click through on the board.
@@ -38,9 +38,10 @@ installed: a model with an environment of its own, beside the server.
   keeps. A fourth deck, [Heuristics](#heuristics), holds rules of thumb for finding a move, each shown by
   positions to find the move in, and a fifth, [Openers](#openers), positions from the first moves of a game
   that are sharp or often played wrongly.
-- **Freeplay**: a board to move both sides' pieces on, from the start of a game, from the position of a card or
-  from the one on a game's board,
-  with the engine's evaluation of what is on it, an arrow for its first choice, and Claude beside it.
+- **[Trying moves](#trying-moves-on-the-board)**: on a board that is not being played (a game that is over, the
+  back of a card) both sides' pieces are yours to move, from its position or from any move of a line that is on
+  it, with the engine's evaluation of what is on it, an arrow for its first choice, and what each move lost.
+  What you try is kept with the board, beside the line it left.
 
 ## Setting it up
 
@@ -218,12 +219,12 @@ Claude Code login the sessions use.
 
 A line written out in notation is slow to follow. So Claude is told to put the lines its answer turns on on the
 board (`show_lines`: a position, and one or more named lines from it), and to write around them. They are listed
-above the terminal, wherever you talk to Claude (a game, the back of a card, the freeplay board), each move a button:
+above the terminal, wherever you talk to Claude (a game, the back of a card), each move a button:
 
-- a click on a move puts the position after it on the board beside the pane, in place of the game, the card or
-  what was on the freeplay board,
+- a click on a move puts the position after it on the board beside the pane, in place of the game or the card,
   with the move marked; a click on a line's name puts its starting position there. The board is framed in blue
-  while a line is on it, and nothing on it can be moved;
+  while a line is on it. While the game is being played nothing on it can be moved; once it is over, and on the
+  back of a card, a move can be made from any position of a line ([trying moves](#trying-moves-on-the-board));
 - ◀ and ▶ under the list (or the arrow keys, Home and End) step through the line. With no line on the board, ▶
   starts the first one;
 - ✕, Esc, or a click on a move of the game puts the game or the card back. Nothing of the game changes
@@ -264,16 +265,18 @@ them, drawn at random from the active ones, with the opponent's last move marked
 - **Wrong**: the board is marked, with where you went in red and an arrow for the right move, and beside it, on
   one line, are your move with what it lost in centipawns (against the engine's first choice; a move the card has
   no line for is searched then, for as long as a game's positions are) and the move you played in the game with
-  what that lost. The card is hidden for a few minutes and then comes back. The position stays open: any other
-  move you make on it is listed under that line with what it would have lost, and changes nothing of the card.
-  Next moves on.
+  what that lost. The card is hidden for a few minutes and then comes back. Next moves on.
 - **Right**: your move is shown with what it lost (a move as good as the engine's first choice to within 10
   centipawns is right too; the first choice is then named, at 0). You say how it was to remember, Hard, Good or
   Easy, and each button says how long it hides the card for. An answer made within 3 seconds counts as Easy
   without the question: the card stays up until Next.
 
+Either way the back of the card is a board to [try moves on](#trying-moves-on-the-board): from the card's
+position, from your answer where it was right, or from any move of a line listed there. Your answer is the first
+of the lines kept with the card, and none of it changes anything of the card's schedule.
+
 The card you are on stays until you move on: load the page again, or leave the deck and come back in the same
-tab, and it is there as you left it, answered or not, with the moves you tried.
+tab, and it is there as you left it, answered or not.
 
 Delete card, at the right of the bar at the top, takes the card on screen out of its deck for good, answered or
 not: for an error that is not one to study, a move made for want of time, say. The game it is of does not make it
@@ -408,8 +411,9 @@ terminal above the box, and later ones are typed into it. The session is the car
 - its tools are those of a game's session, and read the game the move was played in. With that game no longer on
   file, `position` and `analyze` work from the card's position. The [lines it shows](#lines-on-the-board) are
   played on the card's board;
-- a message takes with it the moves you have made on the card's board since the last one, each with what it
-  lost, so that "why not this?" can be asked of a move you have just tried;
+- a message takes with it the moves you have made in the card's position since the last one, each with what it
+  lost, and, when a line is on the board, the position it has got to and the moves that reach it, so that "why
+  not this?" can be asked of a move you have just tried;
 - it is kept with the card. Whenever the back of the card is on screen (the card answered again, days or months
   later; the page loaded again), its terminal is there with the conversation as you left it, resumed the way a
   game's is. A card that a later game makes new again keeps it too.
@@ -419,34 +423,45 @@ away for six months. So the server keeps a copy of each card's transcript as it 
 (`~/.local/share/callie/transcripts`), and puts it back where Claude Code looks for it before the session is
 resumed. Like the games' conversations, these are not part of the history kept in git.
 
-## Freeplay
+## Trying moves on the board
 
-A board with no game behind it: both sides' pieces are yours to move, to try a line and see what the engine makes
-of it. **Freeplay** on the home page opens it on the starting position, **Freeplay** on the back of a card
-opens it on the position the card asked about, seen from the side that is to move there, and **Freeplay** under
-a game's moves opens it on the position on the game's board (the move you have stepped to, or where a line of
-Claude's has got to), turned as that board is. The browser's back button returns to the game. Any position can be
-put on it by its address: `#/freeplay/` and then a FEN with `_` for its spaces.
+A board that is not being played is one to try moves on: the board of a game that is over, and the back of a
+card. Both sides' pieces are yours to move there, from the position on it: a move of the game you have stepped
+to, the card's position (or your answer, where it was right), or wherever a [line](#lines-on-the-board) has got
+to, Claude's or the card's own. There is no separate board for this, and nothing to open.
 
-- The bar beside the board is the engine's evaluation of the position on it, the green arrow its first choice,
-  and the line under the board the evaluation, how deep the engine has looked, and the line it expects. Each
-  position is looked at for a quarter of a second, then a second, then four, and what is shown gets better as
-  the answers come (the engine's hash table carries one search into the next). It is full-strength Stockfish
-  in a process of its own, started the first time the board is used, and a move made while it is looking ends
-  that search at once.
-- The moves made are listed under that: a click on one, ◀ ▶ under the board or the arrow keys step through
-  them, and a move made from an earlier position takes the place of what followed. Flip turns the board.
-- Nothing of it is kept by the server. The tab keeps it: load the page again and the board is as it was. Opened
-  from Home, from a card or from a game, it starts anew.
+- **What a move does.** The next move of the line it is made on, or of the game, is stepped to, and so is one
+  you tried there before. Any other starts a line of your own from that position, and the line it left stays as
+  it was: in the list the row ends at that position, and under it is a row for each move made there, the line's
+  own first, then yours. Step back to that position and on again (▶, or the right arrow) and it is the line's own
+  move that is played, as before you tried anything. A click on a move of yours puts it on the board.
+- **Where they are listed.** With the lines they grew from, above the terminal (on a phone, under the board).
+  Moves tried from a position of the board's own (a move of the game, the card's position) are listed as lines
+  from that position, before what Claude showed, and `‹ ›` page through them all.
+- **The engine.** The bar under the board is its evaluation of the position on it, the green arrow its first
+  choice, and the text with it the evaluation, how deep it has looked, and the line it expects. Each position is
+  looked at for a quarter of a second, then a second, then four, and what is shown gets better as the answers
+  come. It is full-strength Stockfish in a process of its own, started the first time a board needs it; a
+  position asked about ends the search of the one before, and what a finished search found is kept for the next
+  time the position is on a board (until the server restarts). A position of the game itself is not searched
+  again: it has the analysis made as the game was played.
+- **What each move lost.** Every move of the lines listed is coloured by the centipawns it lost: deep green for
+  none, through yellow at about a pawn, to deep red at three pawns or more. The engine is asked about each of
+  their positions for that, briefly, after its first looks at the one on the board, so the colours arrive over a
+  few seconds. The move on the board has its loss as a number beside the buttons that step through the line, and
+  every other move has it as a tooltip. It is reckoned as a game's moves are (the evaluation before against the
+  one after, inside ten pawns either way), from looks of different lengths, so it settles as the engine looks
+  longer. A move made in a card's own position has the loss the card reckons, as the answer has.
+- **What is kept.** The lines you try are kept by the server with the board they were tried on, the last 200 of
+  each, and are there whenever the board is: another day, another browser, the next time the card comes back.
+  They go with the game when it is deleted (a card's with the card), and those that grew from a line of Claude's
+  go with that line. Like the conversations, they are not part of the history kept in git.
+- **Claude.** A message sent while a line is on the board takes with it the position it has got to, as a FEN,
+  and the moves that reach it from where the line starts, so "why is this bad?" can be asked of the move you
+  have just made.
 
-The pane beside it is Claude, as in a game: your first message opens a Claude Code session in a terminal above
-the box. The freeplay board has the one session, whatever position is on it, shown whenever the board is and
-resumed the way a game's is:
-
-- each message takes with it what is on the board when it is sent: the position, as a FEN, and the moves made
-  to reach it from where the board started. So "why this move?" can be asked of the move you have just made;
-- no game is behind the board, so its tools are the ones that take any position: `position`, `analyze`, and
-  `show_lines`, whose [lines](#lines-on-the-board) are played on the freeplay board.
+While a game is being played none of this is on: nothing but your own move can be made on its board, a line of
+Claude's is only stepped through, and the bar says nothing of a line.
 
 ## The games, kept in git
 
@@ -617,19 +632,19 @@ at.
 | `src/callie/cards.py` | the flashcards of your errors: the decks, what answers a card, how long it is hidden |
 | `src/callie/allie.py`, `allie_worker.py` | Allie: the process that holds the model (run in Allie's own environment), and the server's end of it |
 | `src/callie/openings.py` | the opening books |
-| `src/callie/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return, and what the freeplay board asks |
-| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards, the freeplay board's session, the lines Claude showed |
+| `src/callie/play.py` | games: moves, replies, the clocks, the analysis queue (which makes the cards), what the Claude tools return, and what a board that is not being played asks |
+| `src/callie/store.py` | the SQLite database: games, moves, the analysis of each position, the cards, the lines Claude showed, the lines you tried |
 | `src/callie/history.py` | the games and cards as files under `history/`: written, read back, committed and pushed |
-| `src/callie/tutor.py` | the Claude Code session of each game, of each card asked about, and of the freeplay board: how it is started, resumed and typed into |
+| `src/callie/tutor.py` | the Claude Code session of each game and of each card asked about: how it is started, resumed and typed into |
 | `src/callie/explain.py` | the explanation of each card: Claude run once for it, in the background, behind the games |
 | `src/callie/terminals.py`, `ptyexec.py` | programs on pseudo-terminals, streamed to the page |
 | `src/callie/mcp.py` | the tools a session is given (an MCP server on stdio that calls back into the server) |
 | `src/callie/server.py` | the page and the JSON API |
-| `src/callie/static/` | the page: `app.js` (board, clock, review, freeplay, terminal, Claude's lines), `pieces.js` (the pieces, drawn here), `style.css` |
+| `src/callie/static/` | the page: `app.js` (board, clock, review, terminal, Claude's lines and yours, the engine on a board that is not being played), `pieces.js` (the pieces, drawn here), `style.css` |
 
 The page holds no chess rules: with each position where it is your move the server sends every legal move and
 the position it leads to, and with each where it is the opponent's the moves that can be made ahead (how your
-pieces move on an empty board: the server holds the one you make and plays it itself). The freeplay board asks
+pieces move on an empty board: the server holds the one you make and plays it itself). A board that is not being played asks
 the same of each position put on it. Every action is a plain HTTP call, so the whole thing can be driven with `curl`.
 
 ## Tests

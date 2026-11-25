@@ -281,91 +281,129 @@ def test_claude_puts_lines_on_the_board():
         s.close()
 
 
-def test_the_freeplay_board():
+def test_a_position_and_the_engine_on_it():
     s = Running()
     try:
         need_engine(s.cfg)
         # a position to move pieces in: where a game starts, or the one asked for, with every move and where it leads
-        code, start = s.call("GET", "/api/freeplay")
+        code, start = s.call("GET", "/api/position")
         assert code == 200 and start["turn"] == "w" and len(start["legal"]) == 20
         e4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
         assert start["legal"]["e2e4"] == {"san": "e4", "fen": e4}
         fen = "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
         asked = fen.replace(" ", "%20")
-        there = s.call("GET", f"/api/freeplay?fen={asked}")[1]
+        there = s.call("GET", f"/api/position?fen={asked}")[1]
         assert there["fen"] == fen and there["turn"] == "b" and there["legal"]["g8f6"]["san"] == "Nf6"
-        assert s.call("GET", "/api/freeplay?fen=nonsense")[0] == 400
+        assert s.call("GET", "/api/position?fen=nonsense")[0] == 400
         # the engine's view of one: the evaluation, its first choice and the line it expects
-        code, seen = s.call("GET", f"/api/freeplay/eval?fen={asked}&ms=100")
+        code, seen = s.call("GET", f"/api/position/eval?fen={asked}&ms=100")
         assert code == 200 and seen["fen"] == fen and seen["depth"] > 0 and not seen["over"]
         assert seen["best"]["uci"] in there["legal"] and seen["line"][0] == seen["best"]["san"]
         assert isinstance(seen["cp"], int) and seen["value"] == seen["cp"] and seen["mate"] is None
-        assert s.call("GET", "/api/freeplay/eval?ms=soon")[0] == 400
-        mated = s.call("GET", "/api/freeplay/eval?fen=7k/6Q1/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]
+        assert s.call("GET", "/api/position/eval?ms=soon")[0] == 400
+        mated = s.call("GET", "/api/position/eval?fen=7k/6Q1/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]
         assert mated["over"] and mated["mate"] == 0 and mated["value"] > 9000 and mated["best"] is None
-        stuck = s.call("GET", "/api/freeplay/eval?fen=7k/5Q2/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]
+        stuck = s.call("GET", "/api/position/eval?fen=7k/5Q2/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]
         assert stuck["over"] and stuck["cp"] == 0 and stuck["mate"] is None
-        assert s.call("GET", "/api/freeplay?fen=7k/6Q1/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]["legal"] == {}
-        # a position asked about ends the search of the one before it
+        assert s.call("GET", "/api/position?fen=7k/6Q1/6K1/8/8/8/8/8%20b%20-%20-%200%201")[1]["legal"] == {}
+        # what a search found is kept: asked again for no longer, the position is not searched again
+        searches = []
+        search = s.svc.live.search
+        s.svc.live.search = lambda *a, **k: searches.append(k["ms"]) or search(*a, **k)
+        assert s.call("GET", f"/api/position/eval?fen={asked}&ms=100")[1] == seen
+        assert s.call("GET", f"/api/position/eval?fen={asked}&ms=60")[1] == seen and searches == []
+        assert s.call("GET", f"/api/position/eval?fen={asked}&ms=200")[1]["best"] and searches == [200]
+        # a position asked about ends the search of the one before it, and what was cut short is not kept
         long = {}
         began = time.time()
-        first = threading.Thread(target=lambda: long.update(seen=s.call("GET", "/api/freeplay/eval?ms=10000")))
+        first = threading.Thread(target=lambda: long.update(seen=s.call("GET", "/api/position/eval?ms=10000")))
         first.start()
         time.sleep(0.5)
-        assert s.call("GET", f"/api/freeplay/eval?fen={asked}&ms=100")[1]["best"]
+        assert s.call("GET", f"/api/position/eval?fen={asked}&ms=300")[1]["best"]
         first.join()
-        assert time.time() - began < 6 and long["seen"][0] == 200
-        # Claude beside it: nothing until it is asked, then a session of the board's own, told what is on the board
-        assert s.call("POST", "/api/freeplay/claude/resume") == (200, {"terminal": None})
-        assert s.call("POST", "/api/freeplay/claude/say", {"text": " "})[0] == 400 and not s.tutor.terms
-        assert s.call("POST", "/api/freeplay/claude/say", {"text": "why?", "moves": ["e2e5"]})[0] == 400
-        code, r = s.call("POST", "/api/freeplay/claude/say", {"text": "why e4?", "moves": ["e2e4"], "cols": 90})
-        said = lambda term: json.loads(output(term, '"prompt"').split("\n")[0])  # noqa: E731
-        told = said(s.tutor.terminal(r["terminal"]))
-        assert code == 200 and told["mode"] == "new" and told["cwd"] == str(s.cfg.workspace) and told["mcp"]
-        assert told["prompt"] == f"[board: {e4}, Black to move, after 1. e4 from the starting position]\nwhy e4?"
-        assert s.svc.store.freeplay() == {"id": 1, "session_id": told["session"], "session_started": 1}
-        # its tools are those that take any position, and its lines go to the pane beside the board
-        env = json.loads((s.cfg.home / "sessions" / "freeplay.mcp.json").read_text())["mcpServers"]["chess"]["env"]
-        assert env == {
-            "CALLIE_URL": s.url,
-            "CALLIE_GAME": "0",
-            "CALLIE_SESSION": told["session"],
-            "CALLIE_FREEPLAY": "1",
-        }
-        os.environ.update(env)
-        tools = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]
-        assert [t["name"] for t in tools] == ["position", "analyze", "show_lines"]
-        assert all("ply" not in t["inputSchema"]["properties"] and "fen" in t["inputSchema"]["required"] for t in tools)
-        text, failed = mcp.call("show_lines", {"fen": fen, "lines": [{"name": "Two knights", "moves": ["Nf6", "Ng5"]}]})
-        assert not failed and "- Two knights: 3... Nf6 4. Ng5" in text
-        assert s.call("GET", f"/api/terminals/{r['terminal']}/lines")[1]["shown"][0]["fen"] == fen
-        assert "Legal moves (20)" in mcp.call("position", {"fen": start["fen"]})[0]
-        # the page shows that terminal, and a message from another position is typed into it, with that position
-        assert s.call("POST", "/api/freeplay/claude/resume")[1] == r
-        s.call("POST", "/api/freeplay/claude/say", {"text": "and here?", "fen": fen, "moves": ["Nf6"]})
-        heard = output(s.tutor.terminal(r["terminal"]), "and here?")
-        assert "Black to move" not in heard.split("heard:")[1] and f"after 3... Nf6 from {fen}]" in heard
-        # its terminal gone (the server was restarted, say): the same conversation, resumed
-        s.tutor.forget("freeplay")
-        code, r2 = s.call("POST", "/api/freeplay/claude/resume")
-        again = said(s.tutor.terminal(r2["terminal"]))
-        assert r2 != r and again["mode"] == "resume" and again["session"] == told["session"] and again["prompt"] == ""
-        assert len(s.call("GET", f"/api/terminals/{r2['terminal']}/lines")[1]["shown"]) == 1
-        s.tutor.forget("freeplay")
-        code, r3 = s.call("POST", "/api/freeplay/claude/say", {"text": "one more", "fen": fen})
-        more = said(s.tutor.terminal(r3["terminal"]))
-        assert more["mode"] == "resume" and more["prompt"].endswith("which is where the board started]\none more")
+        assert time.time() - began < 6 and long["seen"][0] == 200 and start["fen"] not in s.svc.seen
+        # the page has no board of its own for this any more
         page = s.call("GET", "/")[1]
-        assert (
-            b'id="free-board"' in page
-            and b'id="free-open"' in page
-            and b'id="card-free"' in page
-            and b'id="act-free"' in page
-        )
+        assert b"free" not in page and b'id="card-evalbar"' in page and b'id="evalbar"' in page
+        assert s.call("GET", "/api/freeplay")[0] == 404
     finally:
-        for name in ("CALLIE_URL", "CALLIE_GAME", "CALLIE_SESSION", "CALLIE_FREEPLAY"):
-            os.environ.pop(name, None)
+        s.close()
+
+
+def test_lines_of_your_own_are_kept_with_the_board():
+    s = Running()
+    try:
+        need_engine(s.cfg)
+        _, g = s.call("POST", "/api/games", {"color": "w", "elo": 1320, "opening": "french"})
+        gid = g["id"]
+        s.call("POST", f"/api/games/{gid}/move", {"move": "e4"})
+        # nothing is tried on the board of a game that is being played
+        assert s.call("GET", f"/api/games/{gid}/explored")[0] == 400
+        assert s.call("POST", f"/api/games/{gid}/explored", {"fen": g["start_fen"], "moves": ["d4"]})[0] == 400
+        s.call("POST", f"/api/games/{gid}/resign")
+        assert s.call("GET", f"/api/games/{gid}/explored") == (200, {"explored": []})
+        # a line from a position of the board's own: each move with the position after it, as Claude's lines have them
+        code, kept = s.call("POST", f"/api/games/{gid}/explored", {"fen": g["start_fen"], "moves": ["d4", "d7d5"]})
+        (line,) = kept["explored"]
+        assert code == 200 and (line["tree"], line["fen"]) == ("own", g["start_fen"])
+        assert [m["san"] for m in line["moves"]] == ["d4", "d5"] and line["moves"][0]["uci"] == "d2d4"
+        assert line["moves"][1]["fen"] == "rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2"
+        explore = lambda moves, **more: s.call(  # noqa: E731
+            "POST", f"/api/games/{gid}/explored", {"fen": g["start_fen"], "moves": moves, **more}
+        )
+        sans = lambda kept: [" ".join(m["san"] for m in ln["moves"]) for ln in kept["explored"]]  # noqa: E731
+        # one that goes on from it takes its place; its start again adds nothing; another move is another line
+        assert sans(explore(["d4", "d5", "c4"])[1]) == ["d4 d5 c4"]
+        assert sans(explore(["d4"])[1]) == ["d4 d5 c4"]
+        assert sans(explore(["d4", "Nf6"])[1]) == ["d4 d5 c4", "d4 Nf6"]
+        assert sans(explore(["d4", "d5", "c4", "e6"])[1]) == ["d4 d5 c4 e6", "d4 Nf6"]
+        assert explore(["d4", "d4"])[0] == 400 and explore([])[0] == 400 and explore(["d4"], fen="nonsense")[0] == 400
+        assert explore(["d4"], tree="s1")[0] == 400 and explore(["d4"], tree="mine")[0] == 400  # nothing Claude showed
+        # from a line Claude put on the board: kept as that line's, from where it starts
+        _, r = s.call("POST", f"/api/games/{gid}/claude/say", {"text": "hello"})
+        term = s.tutor.terminal(r["terminal"])
+        session = json.loads(output(term, '"prompt"').split("\n")[0])["session"]
+        fen = "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
+        shown = {"fen": fen, "lines": [{"name": "Two knights", "moves": ["Nf6", "Ng5", "d5"]}]}
+        s.call("POST", f"/api/games/{gid}/tool", {"name": "show_lines", "session": session, "arguments": shown})
+        (board,) = s.call("GET", f"/api/terminals/{term.id}/lines")[1]["shown"]
+        tree = f"s{board['id']}"
+        code, kept = explore(["Nf6", "Ng5", "Bc5"], tree=tree, fen=fen)
+        assert code == 200 and kept["explored"][-1]["tree"] == tree and sans(kept)[-1] == "Nf6 Ng5 Bc5"
+        assert explore(["Nf6"], tree=tree)[0] == 400  # not where those lines start
+        # a message sent with a line on the board says what is on it, and where it started
+        s.call("POST", f"/api/games/{gid}/claude/say", {"text": "why?", "board": {"fen": fen, "moves": ["Nf6", "Ng5"]}})
+        heard = output(term, "why?")
+        assert "[board: r1bqkb1r/pppp1ppp/2n2n2/4p1N1/2B1P3/8/PPPP1PPP/RNBQK2R b KQkq - 5 4, Black to move, " in heard
+        assert f"after 3... Nf6 4. Ng5 from {fen}]" in heard
+        at = s.call("GET", f"/api/games/{gid}")[1]["moves"][0]["fen"]
+        s.call("POST", f"/api/games/{gid}/claude/say", {"text": "and now?", "board": {"fen": at, "moves": []}})
+        assert "which is the position after ply 1 of the game]" in output(term, "and now?")
+        assert (
+            s.call("POST", f"/api/games/{gid}/claude/say", {"text": "x", "board": {"fen": fen, "moves": ["Ke6"]}})[0]
+            == 400
+        )
+        # what Claude showed is forgotten with its conversation, and what grew from it goes too; the rest stays
+        s.call("POST", f"/api/games/{gid}/claude/reset")
+        _, r = s.call("POST", f"/api/games/{gid}/claude/say", {"text": "again"})
+        session = json.loads(output(s.tutor.terminal(r["terminal"]), '"prompt"').split("\n")[0])["session"]
+        s.call("POST", f"/api/games/{gid}/tool", {"name": "show_lines", "session": session, "arguments": shown})
+        assert sans(s.call("GET", f"/api/games/{gid}/explored")[1]) == ["d4 d5 c4 e6", "d4 Nf6"]
+        # a card's board has its own, and they go with the game
+        best = [{"moves": ["f8c5"], "san": ["Bc5"], "cp": 20, "mate": None, "value": 20}]
+        s.svc.cards.note(fen, "g8f6", "Nf6", 990, best, time.time())
+        cid = s.svc.store.one("SELECT id FROM cards")["id"]
+        assert s.call("GET", f"/api/cards/{cid}/explored") == (200, {"explored": []})
+        code, kept = s.call("POST", f"/api/cards/{cid}/explored", {"fen": fen, "moves": ["Bc5"]})
+        assert code == 200 and sans(kept) == ["Bc5"] and s.call("GET", f"/api/cards/{cid}/explored")[1] == kept
+        assert s.call("GET", "/api/cards/999/explored")[0] == 400
+        best = [{"moves": ["e2e4"], "san": ["e4"], "cp": 20, "mate": None, "value": 20}]
+        s.svc.cards.note(g["start_fen"], "a2a3", "a3", 990, best, time.time(), game=gid)  # a card of this game's
+        mine = s.svc.store.one("SELECT id FROM cards WHERE game_id=?", (gid,))["id"]
+        assert s.call("POST", f"/api/cards/{mine}/explored", {"fen": g["start_fen"], "moves": ["e4"]})[0] == 200
+        s.call("POST", f"/api/games/{gid}/delete")
+        assert [r["board"] for r in s.svc.store.all("SELECT board FROM explored")] == [f"card-{cid}"]
+    finally:
         s.close()
 
 
