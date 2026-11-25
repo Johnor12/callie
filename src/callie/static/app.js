@@ -49,7 +49,8 @@ async function api(method, path, body, signal) {
   const opt = { method, signal };
   if (method === "POST") { opt.headers = { "Content-Type": "application/json" }; opt.body = JSON.stringify(body || {}); }
   const r = await fetch(path, opt);
-  const data = await r.json().catch(() => ({}));
+  // A request given up while its answer was being read has no answer: it fails, as one given up before that does.
+  const data = await r.json().catch((e) => { if (signal && signal.aborted) throw e; return {}; });
   if (!r.ok) throw new Error(data.error || `the server answered ${r.status}`);
   return data;
 }
