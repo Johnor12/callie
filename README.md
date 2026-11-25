@@ -37,7 +37,8 @@ installed: a model with an environment of its own, beside the server.
   of why the move was bad on its back, and a box there to ask Claude about the position, in a session the card
   keeps. A fourth deck, [Heuristics](#heuristics), holds rules of thumb for finding a move, each shown by
   positions to find the move in.
-- **Freeplay**: a board to move both sides' pieces on, from the start of a game or from the position of a card,
+- **Freeplay**: a board to move both sides' pieces on, from the start of a game, from the position of a card or
+  from the one on a game's board,
   with the engine's evaluation of what is on it, an arrow for its first choice, and Claude beside it.
 
 ## Setting it up
@@ -393,9 +394,11 @@ resumed. Like the games' conversations, these are not part of the history kept i
 ## Freeplay
 
 A board with no game behind it: both sides' pieces are yours to move, to try a line and see what the engine makes
-of it. **Freeplay** on the home page opens it on the starting position, and **Freeplay** on the back of a card
-opens it on the position the card asked about, seen from the side that is to move there. Any position can be put
-on it by its address: `#/freeplay/` and then a FEN with `_` for its spaces.
+of it. **Freeplay** on the home page opens it on the starting position, **Freeplay** on the back of a card
+opens it on the position the card asked about, seen from the side that is to move there, and **Freeplay** under
+a game's moves opens it on the position on the game's board (the move you have stepped to, or where a line of
+Claude's has got to), turned as that board is. The browser's back button returns to the game. Any position can be
+put on it by its address: `#/freeplay/` and then a FEN with `_` for its spaces.
 
 - The bar beside the board is the engine's evaluation of the position on it, the green arrow its first choice,
   and the line under the board the evaluation, how deep the engine has looked, and the line it expects. Each
@@ -406,7 +409,7 @@ on it by its address: `#/freeplay/` and then a FEN with `_` for its spaces.
 - The moves made are listed under that: a click on one, ◀ ▶ under the board or the arrow keys step through
   them, and a move made from an earlier position takes the place of what followed. Flip turns the board.
 - Nothing of it is kept by the server. The tab keeps it: load the page again and the board is as it was. Opened
-  from Home or from a card, it starts anew.
+  from Home, from a card or from a game, it starts anew.
 
 The pane beside it is Claude, as in a game: your first message opens a Claude Code session in a terminal above
 the box. The freeplay board has the one session, whatever position is on it, shown whenever the board is and

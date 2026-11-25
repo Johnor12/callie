@@ -357,7 +357,12 @@ def test_the_freeplay_board():
         more = said(s.tutor.terminal(r3["terminal"]))
         assert more["mode"] == "resume" and more["prompt"].endswith("which is where the board started]\none more")
         page = s.call("GET", "/")[1]
-        assert b'id="free-board"' in page and b'id="free-open"' in page and b'id="card-free"' in page
+        assert (
+            b'id="free-board"' in page
+            and b'id="free-open"' in page
+            and b'id="card-free"' in page
+            and b'id="act-free"' in page
+        )
     finally:
         for name in ("CALLIE_URL", "CALLIE_GAME", "CALLIE_SESSION", "CALLIE_FREEPLAY"):
             os.environ.pop(name, None)

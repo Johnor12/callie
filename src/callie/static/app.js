@@ -636,6 +636,7 @@ $("nav-last").onclick = () => setView(S.game.moves.length);
 $("act-flip").onclick = () => { S.flip = !S.flip; render(); };
 $("act-takeback").onclick = () => act(() => api("POST", `/api/games/${S.gid}/takeback`));
 $("act-resign").onclick = () => { if (confirm("Resign this game?")) act(() => api("POST", `/api/games/${S.gid}/resign`)); };
+$("act-free").onclick = () => { if (S.game) openFree(onBoard().fen, flipped()); };  // the position on the board (a move of the game, or of a line of Claude's), to move both sides in
 $("act-pgn").onclick = async () => {
   const text = S.game.pgn;
   try { await navigator.clipboard.writeText(text); }
@@ -826,9 +827,12 @@ function renderReview() {
 // another move is made in their place), the position on it as the server sent it, to move pieces in (`pos`), the
 // engine's evaluation of that (`eval`), whether the board is turned (`flip`), and the wait on the server for
 // those (`wait`). The server keeps none of it. The tab does (`keepFree`): a page loaded again is on the board as
-// it was, and a board opened from a button (Home's, a card's) starts anew.
-function openFree(fen) {
+// it was, and a board opened from a button (Home's, a card's, a game's) starts anew. Opened from a game, it is
+// turned as the game's board is (`turned`); otherwise it is seen from the side that is to move.
+let freeTurned = null;  // how the board that is being opened is to be turned (null: for the side to move)
+function openFree(fen, turned = null) {
   try { sessionStorage.removeItem(FREE); } catch (e) { /* no storage */ }
+  freeTurned = turned;
   location.hash = "#/freeplay" + (fen ? "/" + fen.replace(/ /g, "_") : "");
 }
 function keepFree() {
@@ -840,7 +844,8 @@ function showFree(from) {
   $("home").hidden = true; $("game").hidden = true; $("review").hidden = true; $("free").hidden = false;
   $("crumb").textContent = "Freeplay"; document.title = "Freeplay · Callie";
   $("free-board").innerHTML = ""; $("free-line").innerHTML = ""; $("free-moves").innerHTML = ""; $("free-err").textContent = "";
-  const f = S.free = { from, start: null, moves: [], at: 0, pos: null, eval: null, flip: false, wait: null };
+  const f = S.free = { from, start: null, moves: [], at: 0, pos: null, eval: null, flip: false, turned: freeTurned, wait: null };
+  freeTurned = null;
   let kept = null;
   try { kept = JSON.parse(sessionStorage.getItem(FREE) || "null"); } catch (e) { /* no storage */ }
   if (kept && kept.from === from && kept.start) Object.assign(f, { start: kept.start, moves: kept.moves, at: kept.at, flip: kept.flip });
@@ -870,7 +875,7 @@ async function freeLoad() {
   try {
     const pos = await api("GET", "/api/freeplay" + (fen ? `?fen=${encodeURIComponent(fen)}` : ""), null, ctl.signal);
     if (!here()) return;
-    if (!f.start) { f.start = pos.fen; f.flip = pos.turn === "b"; }  // seen from the side that is to move in it, as a card is
+    if (!f.start) { f.start = pos.fen; f.flip = f.turned === null ? pos.turn === "b" : f.turned; }  // seen from the side that is to move in it, as a card is, unless a game's board said how
     f.pos = pos;
     renderFree();
     for (const ms of FREE_MS) {
