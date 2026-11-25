@@ -311,6 +311,13 @@ class Service:
             if row["status"] == "active":
                 for m in annotated:  # what the engine would have played is for after the game (and for Claude)
                     m.pop("best", None)
+            if users_turn and annotated:
+                # What the opponent's move did to the game is not told until it is answered: a swing there says
+                # there is something to find. The page keeps the evaluation of the position your own move left.
+                held = annotated[-1]
+                for k in ("eval", "cpl", "verdict"):
+                    held.pop(k, None)
+                held["held"] = True
             start = evals.get(0)
             acpl = {}
             for who in ("user", "opponent"):

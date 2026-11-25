@@ -519,8 +519,8 @@ async function act(fn) {
 // ---------- the engine's view ----------
 function evalAt(ply) { const g = S.game; return ply === 0 ? g.start_eval : (g.moves[ply - 1] || {}).eval; }
 function renderEval() {
-  const pos = shown();
-  drawEval($("evalbar"), pos.ply <= S.game.moves.length ? evalAt(pos.ply) : null, flipped());
+  const pos = shown(), held = pos.move && pos.move.held;  // the opponent's move, not answered yet: the bar stays on the position before it
+  drawEval($("evalbar"), pos.ply <= S.game.moves.length ? evalAt(held ? pos.ply - 1 : pos.ply) : null, flipped());
 }
 // The bar beside a board (a game's, or the freeplay one), for the evaluation of the position on it.
 function drawEval(bar, e, flip) {
@@ -561,9 +561,9 @@ function renderMoves(scroll) {
   g.moves.forEach((m, i) => {
     if (i % 2 === 0) html += `<div class="num">${i / 2 + 1}.</div>`;
     const book = m.source === "book", graded = m.verdict !== undefined;
-    const loss = book ? "book" : graded ? (m.verdict === "best" ? "0" : m.cpl) : "…";
+    const loss = book ? "book" : graded ? (m.verdict === "best" ? "0" : m.cpl) : m.held ? "" : "…";
     html += `<div class="mv${m.source === "user" ? " mine" : ""}${m.ply === cur ? " on" : ""}${m.explanation ? " explained" : ""} v-${book ? "book" : m.verdict || "wait"}" data-ply="${m.ply}" data-testid="move"
-      title="${graded ? `${m.verdict}: lost ${m.cpl} centipawns` + (m.best && m.best.uci !== m.uci ? `; the engine preferred ${esc(m.best.san)}` : "") : "being analysed"}">
+      title="${graded ? `${m.verdict}: lost ${m.cpl} centipawns` + (m.best && m.best.uci !== m.uci ? `; the engine preferred ${esc(m.best.san)}` : "") : m.held ? "" : "being analysed"}">
       <span class="san">${esc(m.san)}${book ? "" : GLYPH[m.verdict] || ""}</span><span class="loss">${loss}</span></div>`;
   });
   const el = $("moves"), atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
@@ -621,7 +621,7 @@ function renderInsight() {
   if (!m) { $("insight").innerHTML = g.moves.length ? "The starting position." : (g.turn === g.user_color ? "Your move." : ""); return; }
   const who = m.source === "user" ? "You played" : m.source === "book" ? "Opponent (opening book)" : "Opponent played";
   let html = `${who} <b>${moveNo(m.ply)} ${esc(m.san)}${GLYPH[m.verdict] || ""}</b>`;
-  if (m.verdict === undefined) html += " · the engine is looking at it…";
+  if (m.verdict === undefined) html += m.held ? "" : " · the engine is looking at it…";  // held: told with your reply
   else {
     html += ` · ${m.verdict}` + (m.cpl ? ` · lost ${m.cpl} cp` : "") + ` · ${showEval(evalAt(m.ply - 1))} → ${showEval(m.eval)}`;
     if (m.best && m.best.uci !== m.uci) html += `<br>Engine preferred <b>${esc(m.best.san)}</b> (${showEval(m.best)}): ${esc(numbered(m.ply, m.best.line))}`;

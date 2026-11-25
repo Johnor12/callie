@@ -173,6 +173,9 @@ on half the machine's threads, three lines), in the background, as the position 
   chance is an inaccuracy, 10 a mistake, 15 a blunder.
 - The **advantage bar** shows White's winning chances in the position on screen; the graph shows them over the
   game, with your mistakes and blunders marked.
+- The opponent's latest move has no evaluation, loss or grade on the page until you have answered it, and the
+  bar and the graph stay where your own last move left them: a swing there would say that there is something to
+  find. (Claude's tools are not held back: ask it about the position and it can see the lot.)
 - What the engine preferred to a move (a green arrow on the board, and its line under it, while the move is on
   screen) is shown only once the game is over. While it is on you see what each move cost and its grade, not
   what should have been played.

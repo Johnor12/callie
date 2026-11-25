@@ -37,8 +37,10 @@ def until(svc, game_id, test, timeout=60):
     raise AssertionError(f"timed out; last state: plies={state['plies']} status={state['status']}")
 
 
-def analysed(state):
-    return state["start_eval"] and all("verdict" in m for m in state["moves"])
+def analysed(svc, game_id):
+    """A test for `until`: every position of the game has its analysis on file (the page is not shown all of it
+    while the game is on: the opponent's last move waits for your reply)."""
+    return lambda state: len(svc.store.evals(game_id)) == state["plies"] + 1
 
 
 def test_score_arithmetic():
@@ -79,8 +81,11 @@ def test_a_game_with_a_book_opponent():
         svc.move(g["id"], "e4")  # SAN is taken too
         s = until(svc, g["id"], lambda s: s["plies"] == 2)
         assert [m["san"] for m in s["moves"]] == ["e4", "e6"] and s["moves"][1]["source"] == "book"
-        s = until(svc, g["id"], analysed)
+        s = until(svc, g["id"], analysed(svc, g["id"]))
         assert s["moves"][0]["cpl"] >= 0 and s["moves"][0]["verdict"] and s["acpl"]["user"] is not None
+        # the opponent's move is not evaluated on the page until it is answered
+        assert s["moves"][1]["held"] and not {"eval", "cpl", "verdict"} & set(s["moves"][1])
+        assert s["moves"][0]["eval"] and s["acpl"]["opponent"] is None
         assert not any("best" in m for m in s["moves"])  # what the engine preferred is not shown while the game is on
         assert '[White "You"]' in s["pgn"] and "1. e4 e6 *" in s["pgn"]
         # the tools a Claude session is given
@@ -112,10 +117,14 @@ def test_playing_black_and_being_mated():
         g = svc.create("b", None, None, None)
         until(svc, g["id"], lambda s: s["plies"] == 1)
         for mine in ("e5", "Nc6", "Nf6"):
-            n = svc.state(g["id"])["plies"]
+            s = until(svc, g["id"], analysed(svc, g["id"]))
+            n = s["plies"]
+            assert s["moves"][-1]["held"] and "eval" not in s["moves"][-1]  # the move to answer: not evaluated yet
+            assert all("eval" in m and "held" not in m for m in s["moves"][:-1])  # those answered are
             svc.move(g["id"], mine)
             until(svc, g["id"], lambda s: s["plies"] == n + 2)
-        s = until(svc, g["id"], analysed)
+        s = until(svc, g["id"], analysed(svc, g["id"]))
+        assert not any("held" in m for m in s["moves"])  # over: nothing is kept back
         assert s["status"] == "finished" and s["result"] == "1-0" and s["reason"] == "checkmate" and s["legal"] == {}
         assert (
             s["moves"][-1]["san"] == "Qxf7#"
