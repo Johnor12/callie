@@ -12,6 +12,10 @@ of it. `scripts/heuristics.py` writes them for the positions that have none.
 
 Nothing here is made by the app: a heuristic is added, or reworded, by editing the file, and the server puts
 what the file says in the deck when it starts (`Cards.teach`).
+
+The Openers deck is written down the same way, in `openers.json`: positions early in a game that are sharp, or
+often played wrongly. Each entry there is an opening, its ``title`` the opening's name and what the position is
+of it, as said on the back of its cards; ``why`` says why the move is the one. A position is in one file only.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from .chess import Position
 from .engine import Line
 
 FILE = Path(__file__).with_name("heuristics.json")
+OPENERS = Path(__file__).with_name("openers.json")
 
 
 class HeuristicError(Exception):
@@ -39,11 +44,13 @@ def line(fen: str, moves: str, cp: int | None = None, mate: int | None = None) -
     return {"moves": ucis, "san": sans, "cp": cp, "mate": mate, "value": Line(ucis, cp, mate).value}
 
 
-def load(path: Path = FILE) -> list[dict]:
-    """The heuristics on file, each with its positions as `Cards.teach` takes them: "fen", "last" (None: none),
-    "why", "answer" and "lines" (as a card's). One the file says wrongly (a move that is not legal, a position
-    there twice, an answer its lines do not make right) is an error, with where it is."""
-    out, keys, seen = [], set(), set()
+def load(path: Path = FILE, seen: set[str] | None = None) -> list[dict]:
+    """The heuristics on file (or the openings of the other one), each with its positions as `Cards.teach` takes
+    them: "fen", "last" (None: none), "why", "answer" and "lines" (as a card's). One the file says wrongly (a move
+    that is not legal, a position there twice, an answer its lines do not make right) is an error, with where it
+    is. ``seen`` is the positions of a file read before, which this one's are added to: one in both is an error
+    too."""
+    out, keys, seen = [], set(), set() if seen is None else seen
     for h in json.loads(path.read_text()):
         key = h.get("key")
         try:
@@ -70,5 +77,5 @@ def load(path: Path = FILE) -> list[dict]:
                 )
             out.append({"key": key, "title": h["title"], "positions": positions})
         except (KeyError, TypeError, ValueError, AttributeError) as e:
-            raise HeuristicError(f"{path.name}, heuristic {key!r}: {e}") from None
+            raise HeuristicError(f"{path.name}, at {key!r}: {e}") from None
     return out

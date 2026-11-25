@@ -798,7 +798,8 @@ function renderReview() {
   $("card-result").hidden = !res;
   $("card-tries").hidden = true;
   $("card-why").hidden = !res || !res.explanation; $("card-why").textContent = res && res.explanation || "";
-  $("card-heuristic").hidden = !res || !res.heuristic; $("card-heuristic").textContent = res && res.heuristic || "";  // of a heuristic's card: what its position shows
+  const shows = res && (res.heuristic || res.opener) || "";  // of a card no game made: the heuristic its position shows, or the opening it is of
+  $("card-heuristic").hidden = !shows; $("card-heuristic").textContent = shows;
   for (const g of GRADES) {  // how it was to remember, each with how long it hides the card for
     $(`card-${g}`).hidden = !res || !res.right || r.fast;
     $(`card-${g}`).querySelector("small").textContent = res && res.next ? res.next[g] : "";
@@ -809,8 +810,8 @@ function renderReview() {
   if (!res) return;
   if (!r.session) { r.session = true; cardSession(r); }
   // One line: your answer with what it lost, once that is known (and that it is the engine's first choice, when
-  // it is), and the move of the game with what that lost (a heuristic's card has none). Under it: the engine's first choice, after a right
-  // answer that was another move; the other moves tried after a wrong answer, each with what it would have lost.
+  // it is), and the move of the game with what that lost (a heuristic's card has none, nor an opener's). Under it:
+  // the engine's first choice, after a right answer that was another move; the other moves tried after a wrong answer, each with what it would have lost.
   const p = res.played, mine = r.tries[0] || {}, best = res.best.uci === res.move.uci, lost = (cpl) => cpl === undefined ? "…" : cpl ? `−${cpl}` : "0";
   $("card-mine").className = res.right ? "right" : "wrong";
   $("card-mine").textContent = `${res.right ? "✓" : "✗"} ${res.move.san}` + (mine.cpl === undefined ? "" : ` ${lost(mine.cpl)} cp`) + (best ? " · best" : "");

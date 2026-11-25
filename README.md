@@ -14,7 +14,7 @@ installed: a model with an environment of its own, beside the server.
 - **Home page**: a form for a new game (your colour, the opponent (Stockfish or Allie) and its strength, which
   starts at your own rating, the opening it should steer for, and the clock), then the way to the
   [freeplay board](#freeplay), the decks to review (your
-  errors, and the heuristics), your ratings and your recent games (with the final position, result and settings, and what each did to
+  errors, the heuristics and the openers), your ratings and your recent games (with the final position, result and settings, and what each did to
   your rating).
 - **Game page**:
   - the board (drag a piece, or click it and then its square), with back/forward buttons, arrow keys, and a click
@@ -36,7 +36,8 @@ installed: a model with an environment of its own, beside the server.
   find the better move in, shown again after longer and longer as you get it right, with Claude's explanation
   of why the move was bad on its back, and a box there to ask Claude about the position, in a session the card
   keeps. A fourth deck, [Heuristics](#heuristics), holds rules of thumb for finding a move, each shown by
-  positions to find the move in.
+  positions to find the move in, and a fifth, [Openers](#openers), positions from the first moves of a game
+  that are sharp or often played wrongly.
 - **Freeplay**: a board to move both sides' pieces on, from the start of a game, from the position of a card or
   from the one on a game's board,
   with the engine's evaluation of what is on it, an arrow for its first choice, and Claude beside it.
@@ -339,6 +340,25 @@ theory, and two are from [Lichess's puzzle database](https://database.lichess.or
 3. restart the server. It puts what the file says in the deck: a new position is a new card, active at once; a
    card whose text or lines changed keeps its place in the schedule; one whose position is gone from the file is
    deleted. A card deleted by hand stays out of the deck while its position is in the file.
+
+### Openers
+
+The fifth deck is not made of errors either. It holds positions from the first dozen moves of a game: ones that
+are sharp (a trap to set off or to step around, one move that holds and others that lose) or that are often played
+wrongly, where the natural move is not the good one. A card of it is such a position, to find the move in; on its
+back are the opening, with the moves that lead to the position, and why the move is the one. Everything else is as
+for a card of the Heuristics deck: it is answered, graded and scheduled like any card, has no "you played", and
+Claude can be asked about it from its back.
+
+They are written down in [`src/callie/openers.json`](src/callie/openers.json), in the form of the heuristics'
+file: an entry is an opening, its `title` the opening's name and the moves to the position, and its position's
+`why` the back of the card. The twenty there are for the author's openings, 1. d4 and 2. c4 as White (the Queen's
+Gambit Accepted and Declined, the Slav, the Marshall, the Benoni, the Albin and Budapest gambits) and 1... e5 and
+1... d5 as Black (the Italian and the Two Knights, the Four Knights, the Vienna, the Ruy Lopez, the Queen's Gambit,
+the London): replace them with yours. All are opening theory; three were also on the board in games of his, none
+of them a card of another deck (each position's `source` says which). A position is in one of the two files only.
+One is added as a heuristic's position is, with `./scripts/heuristics.py --file src/callie/openers.json` for its
+lines.
 
 ### Why the move was bad
 

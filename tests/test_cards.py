@@ -1,5 +1,6 @@
 """The cards made of your errors: which deck, what answers one, how long it is hidden, and that games make them.
-And the cards of the heuristics: that their file makes them, and that they are answered as the others are."""
+And the cards of the heuristics, and of the openings: that their file makes them, and that they are answered as
+the others are."""
 
 import json
 import time
@@ -124,7 +125,7 @@ def test_a_card_is_made_once_and_reviewed():
     c = scratch()
     c.note(FEN, "g8f6", "Nf6", 30, LINES, NOON)  # lost too little
     c.note(FEN, "g7g6", "g6", 250, LINES, NOON)  # the engine's own choice
-    assert [d["cards"] for d in c.decks(NOON)] == [0, 0, 0, 0]
+    assert [d["cards"] for d in c.decks(NOON)] == [0, 0, 0, 0, 0]
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON)
     c.note(FEN, "g8h6", "Nh6", 75, LINES, NOON, "f1c4")
     assert (
@@ -141,6 +142,7 @@ def test_a_card_is_made_once_and_reviewed():
         ("mistake", 0, 0),
         ("inaccuracy", 1, 1),
         ("heuristic", 0, 0),
+        ("opener", 0, 0),
     ]
     assert c.draw("mistake", now=NOON) == {
         "deck": "mistake",
@@ -383,7 +385,7 @@ def test_the_cards_over_http():
     s = Running()
     try:
         s.svc.cards.note(FEN, "g8f6", "Nf6", 990, LINES, NOON - 30 * DAY)
-        assert [d["active"] for d in s.call("GET", "/api/cards")[1]] == [1, 0, 0, 0]
+        assert [d["active"] for d in s.call("GET", "/api/cards")[1]] == [1, 0, 0, 0, 0]
         assert s.call("GET", "/api/cards/nonsense")[0] == 404
         _, drawn = s.call("GET", "/api/cards/blunder")
         cid = drawn["card"]["id"]
@@ -410,8 +412,9 @@ def test_the_cards_over_http():
         assert (
             done["right"]
             and done["active"] == 0
-            and set(done) == {"right", "active", "move", "best", "played", "heuristic", "explanation", "next"}
+            and set(done) == {"right", "active", "move", "best", "played", "heuristic", "opener", "explanation", "next"}
             and done["heuristic"] is None
+            and done["opener"] is None
         )
         assert s.svc.store.one("SELECT state, interval FROM cards")["state"] == "review"
         assert s.call("GET", "/api/cards/blunder")[1] | {"deck": 0, "name": 0} == {
@@ -424,7 +427,7 @@ def test_the_cards_over_http():
         # taken out of its deck: gone for the page, and not to be taken out twice
         assert s.call("POST", f"/api/cards/{cid}/delete") == (200, {"ok": True})
         assert s.call("GET", f"/api/cards/{cid}")[1] == {"fen": None}
-        assert [d["cards"] for d in s.call("GET", "/api/cards")[1]] == [0, 0, 0, 0]
+        assert [d["cards"] for d in s.call("GET", "/api/cards")[1]] == [0, 0, 0, 0, 0]
         assert s.call("POST", f"/api/cards/{cid}/delete")[0] == 400
         assert s.call("POST", f"/api/cards/{cid}/answer", {"move": "g6"})[0] == 400
         page = s.call("GET", "/")[1]
@@ -576,8 +579,8 @@ ON_FILE = [
 ]
 
 
-def on_file(home, said=ON_FILE):
-    path = home / "heuristics.json"
+def on_file(home, said=ON_FILE, name="heuristics.json"):
+    path = home / name
     path.write_text(json.dumps(said))
     return path
 
@@ -608,18 +611,18 @@ def test_the_heuristics_on_file():
             heuristics.load(on_file(home, said))
             raise AssertionError(f"read {said}")
         except heuristics.HeuristicError as e:
-            assert "heuristics.json, heuristic " in str(e)
+            assert "heuristics.json, at " in str(e)
 
 
 def test_a_heuristic_has_cards():
     c = scratch()
     hs = heuristics.load(on_file(scratch_config().home))
-    assert c.teach(hs, NOON) == [] and c.teach(hs, NOON + 5) == []  # told twice: the same two cards
+    assert c.teach("heuristic", hs, NOON) == [] and c.teach("heuristic", hs, NOON + 5) == []  # twice: the same two
     assert [(d["key"], d["cards"], d["active"]) for d in c.decks(NOON)][3] == ("heuristic", 2, 2)
     assert c.draw("heuristic", now=NOON)["name"] == "Heuristics"
     c.note(FEN, "g8f6", "Nf6", 990, LINES, NOON, game="aaaa")  # an error in the same position is a card of its own
     c.explain(c.store.one("SELECT * FROM cards WHERE uci='g8f6'"), "Qxf7 is mate.")
-    assert [(d["cards"], d["active"]) for d in c.decks(NOON)] == [(1, 1), (0, 0), (0, 0), (2, 2)]
+    assert [(d["cards"], d["active"]) for d in c.decks(NOON)] == [(1, 1), (0, 0), (0, 0), (2, 2), (0, 0)]
     assert c.explained() == {
         (c.store.one("SELECT position FROM cards WHERE uci='g8f6'")["position"], "g8f6"): "Qxf7 is mate."
     }
@@ -661,7 +664,7 @@ def test_a_heuristic_has_cards():
         },
     ]
     again[1]["positions"][0].update(answer="Rf1+", lines=[{"moves": "g1f1", "cp": 300}])
-    assert c.teach(heuristics.load(on_file(scratch_config().home, again)), NOON + 90) == [ending]
+    assert c.teach("heuristic", heuristics.load(on_file(scratch_config().home, again)), NOON + 90) == [ending]
     kept = c.store.one("SELECT * FROM cards WHERE id=?", (opening,))
     assert (kept["state"], kept["fen"], kept["heuristic"], kept["explanation"]) == (
         "learning",
@@ -674,10 +677,11 @@ def test_a_heuristic_has_cards():
     # taken out of the deck, it stays out whatever the file says; and a game that is deleted takes none with it
     new = c.draw("heuristic", skip=opening, now=NOON + 90)["card"]["id"]
     c.remove(new)
-    assert c.teach(heuristics.load(on_file(scratch_config().home, again)), NOON + 95) == []
-    assert [d["cards"] for d in c.decks(NOON + 95)] == [1, 0, 0, 1]
-    assert [r["uci"] for r in c.drop("aaaa")] == ["g8f6"] and [d["cards"] for d in c.decks(NOON + 95)] == [0, 0, 0, 1]
-    assert c.teach([], NOON + 99) == sorted([opening, new]) and c.store.all("SELECT id FROM cards") == []
+    assert c.teach("heuristic", heuristics.load(on_file(scratch_config().home, again)), NOON + 95) == []
+    assert [d["cards"] for d in c.decks(NOON + 95)] == [1, 0, 0, 1, 0]
+    assert [r["uci"] for r in c.drop("aaaa")] == ["g8f6"]
+    assert [d["cards"] for d in c.decks(NOON + 95)] == [0, 0, 0, 1, 0]
+    assert c.teach("heuristic", [], NOON + 99) == sorted([opening, new]) and c.store.all("SELECT id FROM cards") == []
 
 
 def test_the_heuristics_over_http_and_claude_on_the_back_of_one():
@@ -703,6 +707,87 @@ def test_the_heuristics_over_http_and_claude_on_the_back_of_one():
             and "It is from no game on file" in told
         )
         assert told.endswith("[tried on the card: Nh6 (loses 75)]\nwhy not Nh6?")
+        assert not s.svc.explainer.failed and s.svc.cards.unexplained() is None  # nothing is written for it
+    finally:
+        s.close()
+
+
+# An opening as its file has it: the same position, as one of the Openers deck.
+OPENER = [
+    {
+        "key": "wayward-queen",
+        "title": "Wayward Queen Attack: 1. e4 e5 2. Qh5 Nc6 3. Bc4",
+        "positions": [{**ON_FILE[0]["positions"][0], "why": "Mate on f7 is threatened: g6 shuts the queen out."}],
+    }
+]
+
+
+def test_the_openers_on_file():
+    seen: set[str] = set()
+    theirs = sum(len(h["positions"]) for h in heuristics.load(seen=seen))
+    openers = heuristics.load(heuristics.OPENERS, seen)  # with the app, and none of them a position of a heuristic
+    assert 10 <= len(seen) - theirs == sum(len(o["positions"]) for o in openers) <= 20
+    for o in openers:
+        assert ":" in o["title"] and "1. " in o["title"], o["key"]  # the opening, and the moves that lead there
+        for p in o["positions"]:
+            assert p["answer"].rstrip("+#") in p["why"] and len(p["why"]) < 900, (o["key"], p["fen"])
+            assert int(p["fen"].split()[5]) <= 12 and p["last"], (o["key"], p["fen"])  # early in a game
+    # a position that is in both files is an error
+    home, seen = scratch_config().home, set()
+    heuristics.load(on_file(home), seen)
+    try:
+        heuristics.load(on_file(home, OPENER, "openers.json"), seen)
+        raise AssertionError("read a position of both files")
+    except heuristics.HeuristicError as e:
+        assert "openers.json, at 'wayward-queen'" in str(e) and "is there twice" in str(e)
+
+
+def test_an_opener_has_a_card():
+    c = scratch()
+    home = scratch_config().home
+    assert c.teach("opener", heuristics.load(on_file(home, OPENER, "openers.json")), NOON) == []
+    assert [(d["key"], d["name"], d["cards"], d["active"]) for d in c.decks(NOON)][3:] == [
+        ("heuristic", "Heuristics", 0, 0),
+        ("opener", "Openers", 1, 1),
+    ]
+    drawn = c.draw("opener", now=NOON)
+    assert drawn["name"] == "Openers" and drawn["card"]["last"] == "f1c4" and c.unexplained() is None
+    cid = drawn["card"]["id"]
+    back = c.answer(cid, "g6", now=NOON)
+    assert back["right"] and back["played"] is None and back["heuristic"] is None
+    assert back["opener"] == OPENER[0]["title"] and back["explanation"].startswith("Mate on f7")
+    # its position said by the other file instead: the same card, where it stood, in the other deck
+    c.answer(cid, "g6", "easy", now=NOON)
+    hs = heuristics.load(on_file(home))
+    assert c.teach("heuristic", hs, NOON + 5) == [] and c.teach("opener", [], NOON + 5) == []
+    moved = c.store.one("SELECT * FROM cards WHERE id=?", (cid,))
+    assert (moved["heuristic"], moved["opener"], moved["state"], moved["interval"]) == ("f7", None, "review", 4)
+    assert [d["cards"] for d in c.decks(NOON + 5)] == [0, 0, 0, 2, 0]
+    try:
+        c.teach("blunder", [], NOON)
+        raise AssertionError("taught a deck of errors")
+    except CardError:
+        pass
+
+
+def test_the_openers_over_http_and_claude_on_the_back_of_one():
+    home = scratch_config().home
+    s = Running(openers_path=on_file(home, OPENER, "openers.json"))
+    try:
+        assert [(d["key"], d["active"]) for d in s.call("GET", "/api/cards")[1]][3:] == [
+            ("heuristic", 0),
+            ("opener", 1),
+        ]
+        drawn = s.call("GET", "/api/cards/opener")[1]
+        cid = drawn["card"]["id"]
+        assert drawn["name"] == "Openers" and drawn["card"]["fen"] == FEN
+        back = s.call("POST", f"/api/cards/{cid}/answer", {"move": "Nf6"})[1]
+        assert not back["right"] and back["opener"].startswith("Wayward Queen Attack") and back["heuristic"] is None
+        r = s.call("POST", f"/api/cards/{cid}/claude/say", {"text": "why not Qe7?"})[1]
+        told = json.loads(output(s.tutor.terminal(r["terminal"]), '"prompt"').split("\n")[0])["prompt"]
+        assert told.startswith("[card] The student is on the back of a card of the Openers deck")
+        assert "The opening: Wayward Queen Attack: 1. e4 e5 2. Qh5 Nc6 3. Bc4" in told
+        assert "under the opening, is why the move is the one: Mate on f7" in told and "why not Qe7?" in told
         assert not s.svc.explainer.failed and s.svc.cards.unexplained() is None  # nothing is written for it
     finally:
         s.close()

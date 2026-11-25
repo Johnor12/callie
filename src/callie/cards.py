@@ -26,9 +26,11 @@ Two things are not Anki's defaults: no interval is longer than LONGEST (Anki: a 
 known card still comes back; and a card in a step is hidden until the step is over even when nothing else is
 left to review (Anki would show it up to twenty minutes early).
 
-A fourth deck holds cards that no game made: the positions that show a heuristic (`heuristics.py`), each to find
-the move in, with the heuristic and how it finds the move there on its back. They are answered and scheduled as
-the others are. Such a card has no move that was played (its ``uci`` is empty) and names its ``heuristic``.
+Two more decks hold cards that no game made, each written down in a file (`heuristics.py`). Heuristics: the
+positions that show a heuristic, each to find the move in, with the heuristic and how it finds the move there on
+its back. Openers: positions early in a game that are sharp, or often played wrongly, with the opening and why
+the move is the one on the back. They are answered and scheduled as the others are. Such a card has no move that
+was played (its ``uci`` is empty) and names what it is a position of: its ``heuristic``, or its ``opener``.
 """
 
 from __future__ import annotations
@@ -50,8 +52,10 @@ DECKS = (
     ("mistake", "Mistakes", 100),
     ("inaccuracy", "Inaccuracies", 50),
 )  # centipawns lost, at least
-HEURISTICS = ("heuristic", "Heuristics")  # the deck of the positions that show a heuristic: a key and a name, as above
-NAMES = {**{key: name for key, name, _ in DECKS}, HEURISTICS[0]: HEURISTICS[1]}
+# The decks no game made, each a key and a name, as above: the positions that show a heuristic, and those of the
+# openings. The key is also the column of a card that names what its position is one of.
+TAUGHT = (("heuristic", "Heuristics"), ("opener", "Openers"))
+NAMES = {**{key: name for key, name, _ in DECKS}, **dict(TAUGHT)}
 NEAR = 10  # another of the engine's lines within this many centipawns of its first is a right answer too
 RATINGS = ("again", "hard", "good", "easy")
 LEARN_STEPS = (60, 600)  # seconds: the steps of a new card
@@ -83,8 +87,8 @@ def deck_of(cpl: int) -> str | None:
 
 
 def deck(card: dict) -> str | None:
-    """The deck a card is in: its heuristic's, or the one of what its move lost."""
-    return HEURISTICS[0] if card["heuristic"] else deck_of(card["cpl"])
+    """The deck a card is in: the heuristics' or the openers', or the one of what its move lost."""
+    return next((key for key, _ in TAUGHT if card[key]), None) or deck_of(card["cpl"])
 
 
 def day_of(when: float) -> int:
@@ -196,7 +200,8 @@ class Cards:
         self.rng = random.Random()
         self.luck = self.rng.random  # what picks a day from around an interval (None from it: the interval itself)
         self.made = threading.Event()  # set when a card is made: what writes their explanations waits on it
-        self.titles: dict[str, str] = {}  # the heuristics that have cards, as said on the back of one (`teach`)
+        # what the cards no game made are positions of, as said on the back of one (`teach`): by deck, then key
+        self.titles: dict[str, dict[str, str]] = {key: {} for key, _ in TAUGHT}
 
     def note(
         self,
@@ -251,30 +256,34 @@ class Cards:
             self.store.run("DELETE FROM cards WHERE game_id=?", (game_id,))
         return rows
 
-    def teach(self, heuristics: list[dict], now: float | None = None) -> list[int]:
-        """Make the deck of heuristics what ``heuristics`` says (as `heuristics.load` gives them): a card for
-        each position, new and active at once. A card that is there already stands where it stood in its
-        schedule (removed, if it was) and takes what is said of its position now; one whose position is no
-        longer among them is deleted. Returns the numbers of those that were deleted."""
+    def teach(self, of: str, said: list[dict], now: float | None = None) -> list[int]:
+        """Make a deck no game made (``of``: "heuristic" or "opener") what ``said`` says (as `heuristics.load`
+        gives a file): a card for each position, new and active at once. A card that is there already stands
+        where it stood in its schedule (removed, if it was) and takes what is said of its position now, the
+        deck it is in too; one of the deck whose position is no longer among them is deleted. Returns the
+        numbers of those that were deleted."""
+        if of not in dict(TAUGHT):
+            raise CardError(f"no deck {of!r} to be written down")
         now = time.time() if now is None else now
-        self.titles = {h["key"]: h["title"] for h in heuristics}
+        self.titles[of] = {h["key"]: h["title"] for h in said}
+        others = ", ".join(f"{key}=NULL" for key, _ in TAUGHT if key != of)
         with self.store.lock:
-            gone = {r["id"] for r in self.store.all("SELECT id FROM cards WHERE heuristic IS NOT NULL")}
-            for h in heuristics:
+            gone = {r["id"] for r in self.store.all(f"SELECT id FROM cards WHERE {of} IS NOT NULL")}
+            for h in said:
                 for p in h["positions"]:
                     position = Position.from_fen(p["fen"]).key()
-                    said = (h["key"], p["fen"], p["last"], json.dumps(p["lines"]), p["why"])
+                    what = (h["key"], p["fen"], p["last"], json.dumps(p["lines"]), p["why"])
                     have = self.store.one("SELECT id FROM cards WHERE position=? AND uci=''", (position,))
                     if have is None:
                         self.store.run(
-                            "INSERT INTO cards (position, uci, san, cpl, erred_at, due, heuristic, fen, prev, lines, "
+                            f"INSERT INTO cards (position, uci, san, cpl, erred_at, due, {of}, fen, prev, lines, "
                             "explanation) VALUES (?,'','',0,?,?,?,?,?,?,?)",
-                            (position, now, now, *said),
+                            (position, now, now, *what),
                         )
                     else:
                         self.store.run(
-                            "UPDATE cards SET heuristic=?, fen=?, prev=?, lines=?, explanation=? WHERE id=?",
-                            (*said, have["id"]),
+                            f"UPDATE cards SET {others}, {of}=?, fen=?, prev=?, lines=?, explanation=? WHERE id=?",
+                            (*what, have["id"]),
                         )
                         gone.discard(have["id"])
             for card_id in gone:
@@ -324,7 +333,7 @@ class Cards:
     def explained(self) -> dict[tuple[str, str], str]:
         """The explanation of each move that has one, by its position (a `Position.key`) and the move."""
         rows = self.store.all(
-            "SELECT position, uci, explanation FROM cards WHERE explanation IS NOT NULL AND heuristic IS NULL"
+            "SELECT position, uci, explanation FROM cards WHERE explanation IS NOT NULL AND uci != ''"
         )
         return {(r["position"], r["uci"]): r["explanation"] for r in rows}
 
@@ -347,7 +356,7 @@ class Cards:
     def decks(self, now: float | None = None) -> list[dict]:
         """Each deck with how many cards it holds and how many of them are active."""
         now = time.time() if now is None else now
-        rows = self.store.all("SELECT cpl, heuristic, due FROM cards WHERE state != 'removed'")
+        rows = self.store.all("SELECT cpl, heuristic, opener, due FROM cards WHERE state != 'removed'")
         return [
             {
                 "key": key,
@@ -374,7 +383,8 @@ class Cards:
         }
         if not rows:
             stepping = self.store.all(
-                "SELECT cpl, heuristic, due FROM cards WHERE state IN ('learning', 'relearning') AND due > ?", (now,)
+                "SELECT cpl, heuristic, opener, due FROM cards WHERE state IN ('learning', 'relearning') AND due > ?",
+                (now,),
             )
             out["wait"] = min((r["due"] - now for r in stepping if deck(r) == of), default=None)
         if rows:
@@ -410,8 +420,9 @@ class Cards:
         """Your move on a card. Wrong: the card is rated "again". Right, and with a ``grade`` ("hard", "good"
         or "easy", how it was to remember): it is rated that. Right with none: nothing changes, and "next"
         says how long each grade would hide it for. Either way the answer is given: the engine's choice and its
-        line, the move the card is about, and why that was bad, if it has been written. Of a heuristic's card:
-        the heuristic, how it finds the move, and no move the card is about ("played" is None)."""
+        line, the move the card is about, and why that was bad, if it has been written. Of a card no game made:
+        its "heuristic" or its "opener" (the opening), why the move is the one, and no move the card is about
+        ("played" is None)."""
         now = time.time() if now is None else now
         if grade is not None and grade not in RATINGS[1:]:
             raise CardError(f"grade must be one of {', '.join(RATINGS[1:])}")
@@ -438,7 +449,7 @@ class Cards:
                     "mate": best["mate"],
                 },
                 "played": {"uci": row["uci"], "san": row["san"], "cpl": row["cpl"], "deck": of} if row["uci"] else None,
-                "heuristic": self.titles.get(row["heuristic"]),
+                **{key: self.titles[key].get(row[key]) for key, _ in TAUGHT},
                 "explanation": row["explanation"],
                 "next": waits(row, now) if right and grade is None and row["due"] <= now else None,
                 "active": next(d["active"] for d in self.decks(now) if d["key"] == of),

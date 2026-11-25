@@ -1,0 +1,360 @@
+[
+{
+  "key": "qga-b5",
+  "title": "Queen's Gambit Accepted: 1. d4 d5 2. c4 dxc4 3. e3 b5",
+  "positions": [
+    {
+      "fen": "rnbqkbnr/p1p1pppp/8/1p6/2pP4/4P3/PP3PPP/RNBQKBNR w KQkq b6 0 4",
+      "last": "b7b5",
+      "answer": "a4",
+      "source": "opening theory",
+      "why": "The pawn on b5 is all that holds c4, and it cannot be held up itself. 4. a4 attacks it at once, and every answer loses something: 4... c6 5. axb5 cxb5 6. Qf3 wins a piece on the long diagonal; 4... a6 5. axb5, and the a-pawn is pinned to its rook (5... axb5 6. Rxa8); 4... bxa4 5. Qxa4+ and 4... b4 5. Bxc4 give the pawn back with Black's queenside wrecked. A quiet move such as 4. Nf3 gives Black time to shore the chain up with ...c6, and most of your advantage is gone. In the Queen's Gambit Accepted, undermine the b5 pawn before you develop.",
+      "lines": [
+        {"moves": "a2a4 b5b4 d1f3 c7c6 f1c4 e7e6 g1e2 c8b7 a4a5 a7a6", "cp": 84},
+        {"moves": "g1f3 c7c6 a2a4 e7e6 a4b5 c6b5 b2b3 g8f6 b3c4 b5c4", "cp": 32},
+        {"moves": "b2b3 c4b3 f1b5 c7c6 b5e2 b3a2 a1a2 e7e6 g1f3 g8f6", "cp": 8}
+      ]
+    }
+  ]
+},
+{
+  "key": "qga-b5-c6",
+  "title": "Queen's Gambit Accepted: 1. d4 d5 2. c4 dxc4 3. e3 b5 4. a4 c6 5. axb5 cxb5",
+  "positions": [
+    {
+      "fen": "rnbqkbnr/p3pppp/8/1p6/2pP4/4P3/1P3PPP/RNBQKBNR w KQkq - 0 6",
+      "last": "c6b5",
+      "answer": "Qf3",
+      "source": "opening theory",
+      "why": "The c-pawn has left the long diagonal, and the rook on a8 stands at the end of it with nothing defended to put in between. 6. Qf3 attacks it, and Black must give up a piece to save it: 6... Nc6 7. Qxc6+ Bd7 8. Qa6, or 6... Bb7 7. Qxb7. This is the point of 4. a4: once the pawns on b5 and c6 have been traded off, the diagonal is open. When a pawn chain is taken apart, look at the lines its pawns were closing.",
+      "lines": [
+        {"moves": "d1f3 b8c6 f3c6 c8d7 c6a6 h7h5 g1f3 h8h6 a6a2 h6b6", "cp": 569},
+        {"moves": "b2b3 c8b7 b3c4 b5c4 f1c4 e7e6 g1f3 f8d6 b1d2 g8f6", "cp": 44},
+        {"moves": "b1c3 d8b6 b2b3 e7e6 b3c4 b5c4 a1b1 b6a5 c1d2 f8b4", "cp": 43}
+      ]
+    }
+  ]
+},
+{
+  "key": "qga-e4-e5",
+  "title": "Queen's Gambit Accepted, Central Variation: 1. d4 d5 2. c4 dxc4 3. e4 e5 4. Nf3 exd4",
+  "positions": [
+    {
+      "fen": "rnbqkbnr/ppp2ppp/8/8/2ppP3/5N2/PP3PPP/RNBQKB1R w KQkq - 0 5",
+      "last": "e5d4",
+      "answer": "Bxc4",
+      "source": "opening theory",
+      "why": "Nothing has to be taken back on d4 yet. 5. Qxd4 Qxd4 6. Nxd4 trades the queens, and your lead in development with them; 5. Nxd4 lets Black develop with tempo by ...Bc5. 5. Bxc4 wins back the pawn that matters, brings a piece out and aims at f7: after 5... Nc6 6. O-O or 5... Bb4+ 6. Nbd2 Nc6 7. O-O you are ready for e5 and Nb3, and the d4 pawn falls in the end. Holding on to it is punished at once: 5... c5 6. Ne5 Be6 7. Bxe6 fxe6 8. Qh5+. When you are ahead in development, develop again before you recapture.",
+      "lines": [
+        {"moves": "f1c4 b8c6 e1g1 c8e6 c4e6 f7e6 d1b3 d8d7 b3b7 a8b8", "cp": 37},
+        {"moves": "d1d4 d8d4 f3d4 f8c5 c1e3 g8f6 b1c3 f6g4 c3d5 g4e3", "cp": -24}
+      ]
+    }
+  ]
+},
+{
+  "key": "qga-e4-nf6",
+  "title": "Queen's Gambit Accepted, Central Variation: 1. d4 d5 2. c4 dxc4 3. e4 Nf6",
+  "positions": [
+    {
+      "fen": "rnbqkb1r/ppp1pppp/5n2/8/2pPP3/8/PP3PPP/RNBQKBNR w KQkq - 1 4",
+      "last": "g8f6",
+      "answer": "e5",
+      "source": "opening theory",
+      "why": "The knight attacks e4, and the move that defends it is the wrong one: 4. Nc3 lets Black hit back in the centre with 4... e5, and the game is level. Push past instead: 4. e5 Nd5 5. Bxc4 wins the pawn back with a threat to the knight (5... Nb6 6. Bd3), and you keep a pawn on e5 that takes f6 from Black's pieces. A centre pawn that is attacked and can advance with tempo usually should.",
+      "lines": [
+        {"moves": "e4e5 f6d5 f1c4 c8f5 g1e2 e7e6 e1g1 d5b6 c4b3 b8c6", "cp": 37},
+        {"moves": "b1d2 b7b5 a2a4 c7c6 g1f3 e7e6 a4b5 c6b5 b2b3 c4c3", "cp": -4},
+        {"moves": "b1c3 e7e5 g1f3 e5d4 d1d4 d8d4 f3d4 f8c5 d4b5 b8a6", "cp": -17}
+      ]
+    }
+  ]
+},
+{
+  "key": "qga-nc6",
+  "title": "Queen's Gambit Accepted: 1. d4 d5 2. c4 dxc4 3. Nc3 Nc6",
+  "positions": [
+    {
+      "fen": "r1bqkbnr/ppp1pppp/2n5/8/2pP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 2 4",
+      "last": "b8c6",
+      "answer": "d5",
+      "source": "the author's game ea29c721 (he played 4. e3: no card); the Chigorin Defence reaches it by 2... Nc6 3. Nc3 dxc4",
+      "why": "The knight on c6 has no good square to go to, so chase it: 4. d5. On a5 it is lost to 5. Qa4+ c6 6. b4; on e5 it is hit again by 5. f4, and e4 follows with a broad centre; going home to b8 costs Black two moves. You had this position in a game and played 4. e3: that wins the pawn back, but lets Black free the game with ...e5. When a piece stands in front of your pawn with nowhere good to go, push the pawn before you develop.",
+      "lines": [
+        {"moves": "d4d5 c6b8 e2e4 e7e5 g1f3 b8d7 c1e3 a7a6 a2a4 b7b6", "cp": 88},
+        {"moves": "g1f3 g8f6 d4d5 c6a5 d1a4 c7c6 b2b4 b7b5 a4a5 d8a5", "cp": 67},
+        {"moves": "e2e3 g8f6 g1f3 e7e5 d4d5 e5e4 d5c6 d8d1 e1d1 e4f3", "cp": 37}
+      ]
+    }
+  ]
+},
+{
+  "key": "slav-bf5",
+  "title": "Slav Defence, an early ...Bf5: 1. d4 d5 2. c4 c6 3. Nc3 Bf5",
+  "positions": [
+    {
+      "fen": "rn1qkbnr/pp2pppp/2p5/3p1b2/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 2 4",
+      "last": "c8f5",
+      "answer": "Qb3",
+      "source": "opening theory",
+      "why": "The bishop has left b7 without a defender, and d5 is under fire as well: 4. Qb3 hits both, and Black cannot hold both. 4... Qb6 5. Qxb6 axb6 6. cxd5 wins a pawn, since 6... cxd5 runs into 7. Nxd5, with a fork on c7 and the b6 pawn hanging; 4... dxc4 5. Qxb7; and 4... b6 or 4... Qc7 costs at least a pawn after 5. cxd5. This is why the Slav bishop waits for ...Nf6 and ...dxc4 before it comes out. Whenever the c8 bishop leaves home early in a d4 opening, look at Qb3 first.",
+      "lines": [
+        {"moves": "d1b3 g8f6 b3b7 b8d7 g1f3 a8c8 c4d5 c6d5 c1f4 e7e5", "cp": 149},
+        {"moves": "c4d5 c6d5 d1b3 b8c6 g1f3 g8f6 b3b7 f5d7 c1f4 a8c8", "cp": 84},
+        {"moves": "g1f3 e7e6 d1b3 d8c7 c1f4 d5c4 e2e4 c4b3 f4c7 f5g6", "cp": 60}
+      ]
+    }
+  ]
+},
+{
+  "key": "marshall",
+  "title": "Queen's Gambit, Marshall Defence: 1. d4 d5 2. c4 Nf6",
+  "positions": [
+    {
+      "fen": "rnbqkb1r/ppp1pppp/5n2/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 1 3",
+      "last": "g8f6",
+      "answer": "cxd5",
+      "source": "opening theory; the author's game efb9bf83 from the other side (he played 2... Nf6 as Black, and met 3. Nc3)",
+      "why": "A knight does not hold d5 the way a pawn does. Take: 3. cxd5. After 3... Nxd5 the knight is a target for e4, best prepared by 4. Nf3 (4. e4 at once allows 4... Nf6 5. Nc3 e5); after 3... Qxd5 4. Nc3 the queen is chased with tempo. Either way you get the whole centre. The routine 3. Nc3 lets Black off: 3... e6 or 3... c6 is an ordinary Queen's Gambit Declined or Slav. When the pawn you attack is defended only by pieces, capture, and take the centre from the piece that recaptures.",
+      "lines": [
+        {"moves": "c4d5 c7c6 d5c6 b8c6 g1f3 e7e5 d4e5 d8d1 e1d1 f6g4", "cp": 50},
+        {"moves": "b1c3 d5c4 e2e3 a7a6 f1c4 e7e6 a2a4 c7c5 g1f3 b8c6", "cp": 14}
+      ]
+    }
+  ]
+},
+{
+  "key": "benoni",
+  "title": "Benoni Defence: 1. d4 Nf6 2. c4 c5",
+  "positions": [
+    {
+      "fen": "rnbqkb1r/pp1ppppp/5n2/2p5/2PP4/8/PP2PPPP/RNBQKBNR w KQkq c6 0 3",
+      "last": "c7c5",
+      "answer": "d5",
+      "source": "opening theory",
+      "why": "Black offers to trade a wing pawn for your d-pawn. Do not allow it, and do not make the trade yourself: 3. Nf3 cxd4 4. Nxd4 gives up the centre pawn, 3. dxc5 e6 hands the pawn straight back with Black's bishop developed, and 3. e3 is tame. 3. d5 gains space and takes c6 from Black's knight. It is the same answer as to 1... c5 on the first move: when a wing pawn attacks your d4 pawn and d5 is free, advance.",
+      "lines": [
+        {"moves": "d4d5 b7b5 c4b5 a7a6 e2e3 a6b5 f1b5 c8b7 b1c3 d8a5", "cp": 56},
+        {"moves": "e2e3 c5d4 e3d4 g7g6 d4d5 f8g7 g1f3 e8g8 b1c3 e7e6", "cp": 18},
+        {"moves": "g1f3 c5d4 f3d4 e7e6 b1c3 d7d5 e2e3 d5c4 f1c4 c8d7", "cp": 12}
+      ]
+    }
+  ]
+},
+{
+  "key": "qgd-dxc4",
+  "title": "Queen's Gambit Declined, Black takes on c4: 1. d4 d5 2. c4 e6 3. Nc3 dxc4",
+  "positions": [
+    {
+      "fen": "rnbqkbnr/ppp2ppp/4p3/8/2pP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 0 4",
+      "last": "d5c4",
+      "answer": "e4",
+      "source": "opening theory",
+      "why": "Black has given up the centre and shut the c8 bishop in behind e6: the worst of the Queen's Gambit Accepted. Take all of the centre at once: 4. e4, and the bishop takes on c4 next move. The pawn cannot be kept: 4... b5 just loses it to 5. Nxb5. 4. e3 also wins the pawn back, but with half the centre. When they give you the centre for nothing, take both squares.",
+      "lines": [
+        {"moves": "e2e4 c7c5 d4d5 a7a6 g1f3 b7b5 g2g3 g8f6 f1g2 e6d5", "cp": 51},
+        {"moves": "e2e3 a7a6 f1c4 g8f6 g1f3 b7b5 c4b3 c8b7 e1g1 c7c5", "cp": 11},
+        {"moves": "g1f3 a7a6 a2a4 b8c6 e2e3 c6a5 f3e5 g8f6 f1c4 c7c5", "cp": -4}
+      ]
+    }
+  ]
+},
+{
+  "key": "albin-lasker",
+  "title": "Albin Countergambit, the Lasker Trap: 1. d4 d5 2. c4 e5 3. dxe5 d4 4. e3 Bb4+ 5. Bd2 dxe3",
+  "positions": [
+    {
+      "fen": "rnbqk1nr/ppp2ppp/8/4P3/1bP5/4p3/PP1B1PPP/RN1QKBNR w KQkq - 0 6",
+      "last": "d4e3",
+      "answer": "fxe3",
+      "source": "opening theory",
+      "why": "4. e3 was already the slip (4. Nf3 first, and the d4 pawn is attacked before it can be supported), and now there is one move. 6. Bxb4 loses to 6... exf2+ 7. Ke2 fxg1=N+: the pawn promotes to a knight with check, and after 8. Ke1 Qh4+ the king is hunted down (8. Rxg1 Bg4+ wins the queen). So 6. fxe3: the pawns are ugly, but after 6... Qh4+ 7. g3 Qe4 8. Nf3 the game is level. A pawn that reaches e3 or f2 with your king in the middle can promote with check: count that before you take the piece it left hanging.",
+      "lines": [
+        {"moves": "f2e3 d8h4 g2g3 h4e4 g1f3 b4d2 b1d2 e4e3 d1e2 e3e2", "cp": -4},
+        {"moves": "d1a4 b8c6 d2b4 e3f2 e1f2 d8h4 g2g3 h4d4 f2g2 d4b2", "cp": -172},
+        {"moves": "a2a3 e3d2 b1d2 b4d2 d1d2 d8d2 e1d2 g8e7 f2f4 b8d7", "cp": -611}
+      ]
+    }
+  ]
+},
+{
+  "key": "budapest-kieninger",
+  "title": "Budapest Gambit, the Kieninger Trap: 1. d4 Nf6 2. c4 e5 3. dxe5 Ng4 4. Bf4 Nc6 5. Nf3 Bb4+ 6. Nbd2 Qe7 7. a3 Ngxe5",
+  "positions": [
+    {
+      "fen": "r1b1k2r/ppppqppp/2n5/4n3/1bP2B2/P4N2/1P1NPPPP/R2QKB1R w KQkq - 0 8",
+      "last": "g4e5",
+      "answer": "Nxe5",
+      "source": "opening theory",
+      "why": "Black left the bishop on b4 to be taken, and it is not free: 8. axb4 Nd3 is mate. The e-pawn is pinned by the queen on e7 and the king has no square. So 8. Nxe5 Nxe5 9. e3 (the bishop is still not to be taken: the mate is still there), and after 9... Bxd2+ 10. Qxd2 you have the two bishops for nothing. When a piece is left hanging in the opening, find the move it is inviting and ask what that allows.",
+      "lines": [
+        {"moves": "f3e5 c6e5 e2e3 b4d2 d1d2 d7d6 f1e2 e8g8 e1g1 a7a5", "cp": 29},
+        {"moves": "f4e5 c6e5 f3e5 b4d2 d1d2 e7e5 g2g3 d7d6 f1g2 e8g8", "cp": 21},
+        {"moves": "e2e3 e5f3 g2f3 b4d2 d1d2 d7d6 e1c1 f7f6 d2c3 c8e6", "cp": 16}
+      ]
+    }
+  ]
+},
+{
+  "key": "fork-trick",
+  "title": "Italian Four Knights, the fork trick: 1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Nc3",
+  "positions": [
+    {
+      "fen": "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R b KQkq - 5 4",
+      "last": "b1c3",
+      "answer": "Nxe4",
+      "source": "the author's games (77283091, aef78837, 47fe0bf8, 3e4d5f6a, ebeb664c: he played ...Bc5 or ...Bb4, no card)",
+      "why": "The fork trick. 4... Nxe4 gives up the knight for a moment: after 5. Nxe4 d5 the pawn forks bishop and knight, you take one of them back, and you are left with the centre and easy development (6. Bd3 dxe4 7. Bxe4 Bd6). 5. Bxf7+ Kxf7 6. Nxe4 d5 is better still for you, and 5. O-O Nxc3 6. dxc3 f6 leaves you a pawn up. You have had this position five times, by 3. Bc4 or by 3. Nc3, and played ...Bc5 or ...Bb4 each time: sound, but this is the move that takes the centre. With a bishop on c4 and a knight on c3 against your knight on f6, look for ...Nxe4 and ...d5.",
+      "lines": [
+        {"moves": "f6e4 c3e4 d7d5 c4d3 d5e4 d3e4 f8d6 d2d4 e5d4 e1g1", "cp": -10},
+        {"moves": "f8c5 d2d3 h7h6 c1e3 c5b4 e1g1 b4c3 b2c3 e8g8 f1e1", "cp": 13},
+        {"moves": "f8e7 e1g1 e8g8 d2d3 d7d6 a2a4 c6a5 c4a2 c7c5 f1e1", "cp": 23}
+      ]
+    }
+  ]
+},
+{
+  "key": "fork-trick-bxf7",
+  "title": "Italian Four Knights, the fork trick: 1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Nc3 Nxe4 5. Bxf7+ Kxf7 6. Nxe4",
+  "positions": [
+    {
+      "fen": "r1bq1b1r/pppp1kpp/2n5/4p3/4N3/5N2/PPPP1PPP/R1BQK2R b KQ - 0 6",
+      "last": "c3e4",
+      "answer": "d5",
+      "source": "opening theory",
+      "why": "White has given the bishop back for a pawn to pull your king out, and it does not work: you have the two bishops and the centre, if you take it now. 6... d5 hits the knight, and it has no good square: 7. Ng3 e4 sends the other knight home to g1, and 7. Neg5+ Kg8 leaves both knights to be driven back by ...h6 and ...e4. The king walks to safety on g8 by hand. Bxf7+ in the fork trick is nothing to fear: answer it with the centre.",
+      "lines": [
+        {"moves": "d7d5 e4g3 e5e4 f3g1 h7h5 d2d4 e4d3 d1d3 d8e7 d3e3", "cp": -168},
+        {"moves": "f7g8 c2c4 h7h6 e4c3 e5e4 c3e4 d7d5 c4d5 d8d5 d2d3", "cp": -25},
+        {"moves": "f8e7 d2d4 d7d5 e4g5 f7g8 d4e5 h7h6 g5h3 g7g5 h3g1", "cp": -5}
+      ]
+    }
+  ]
+},
+{
+  "key": "two-knights-d4",
+  "title": "Two Knights Defence, 4. d4: 1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d4 exd4 5. O-O Nxe4 6. Re1",
+  "positions": [
+    {
+      "fen": "r1bqkb1r/pppp1ppp/2n5/8/2Bpn3/5N2/PPP2PPP/RNBQR1K1 b kq - 1 6",
+      "last": "f1e1",
+      "answer": "d5",
+      "source": "opening theory",
+      "why": "The knight on e4 is pinned to your king and attacked, and one move both holds it and hits back: 6... d5 defends it and attacks the bishop. After 7. Bxd5 Qxd5 8. Nc3 the knight on c3 cannot be taken (the d-pawn is pinned to your queen, the e4 knight to your king), so the queen steps aside, to a5 or h5, and after 9. Nxe4 Be6 the game is level. Anything slower loses material: 6... Be7 7. Rxe4 d5 8. Rxe7+, or 6... f5 7. Bg5. On an open e-file with your king still on e8, meet the pin with a move that makes a threat.",
+      "lines": [
+        {"moves": "d7d5 c4d5 d8d5 b1c3 d5d7 c3e4 f8e7 c1g5 e8g8 g5e7", "cp": -6},
+        {"moves": "f7f5 c1g5 f8e7 g5e7 d8e7 b1d2 d7d6 c4d5 c6e5 d2e4", "cp": 172},
+        {"moves": "f8e7 e1e4 d7d5 e4e7 d8e7 c4f1 e8g8 f3d4 c6e5 h2h3", "cp": 258}
+      ]
+    }
+  ]
+},
+{
+  "key": "two-knights-ng5",
+  "title": "Two Knights Defence, 4. Ng5: 1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Ng5 d5 5. exd5 Na5 6. Bb5+",
+  "positions": [
+    {
+      "fen": "r1bqkb1r/ppp2ppp/5n2/nB1Pp1N1/8/8/PPPP1PPP/RNBQK2R b KQkq - 2 6",
+      "last": "c4b5",
+      "answer": "c6",
+      "source": "opening theory",
+      "why": "You are a pawn down, and the way to make that not matter is to give it up for good: 6... c6 7. dxc6 bxc6, and the bishop must move again. After 8. Be2 h6 9. Nf3 e4 10. Ne5 Bd6 every move of yours has come with a threat, and your pieces are out while White's go backwards. 6... Bd7 is playable, but after 7. Qe2 White keeps the pawn in more comfort. In the Two Knights with 5... Na5 you are playing for time, not for the pawn: do not stop to count it.",
+      "lines": [
+        {"moves": "c7c6 d5c6 b7c6 b5d3 f6d5 g5f3 f8d6 e1g1 e8g8 f1e1", "cp": 7},
+        {"moves": "c8d7 d1e2 f8d6 b5d7 d8d7 b1c3 c7c6 d5c6 a5c6 d2d3", "cp": 32},
+        {"moves": "f6d7 g5e6 f7e6 d5e6 h7h5 d1e2 f8d6 b1c3 d8e7 e6d7", "cp": 212}
+      ]
+    }
+  ]
+},
+{
+  "key": "vienna-gambit",
+  "title": "Vienna Gambit: 1. e4 e5 2. Nc3 Nf6 3. f4",
+  "positions": [
+    {
+      "fen": "rnbqkb1r/pppp1ppp/5n2/4p3/4PP2/2N5/PPPP2PP/R1BQKBNR b KQkq f3 0 3",
+      "last": "f2f4",
+      "answer": "d5",
+      "source": "opening theory",
+      "why": "This is not a King's Gambit: with your knight already on f6, 3... exf4 is a mistake, because 4. e5 sends it home (4... Ng8; 4... Qe7 5. Qe2 only makes it worse). Strike in the centre instead: 3... d5. After 4. fxe5 Nxe4 your knight has a fine square in the middle of the board; after 4. exd5 Nxd5 you are simply well developed. A wing gambit while your king's knight can be hit by e5: answer in the centre.",
+      "lines": [
+        {"moves": "d7d5 f4e5 f6e4 g1f3 f8c5 d2d4 c5b4 c1d2 c7c5 f1d3", "cp": -10},
+        {"moves": "d7d6 g1f3 b8c6 d2d4 e5d4 f3d4 g7g6 f1b5 c8d7 d4c6", "cp": 44},
+        {"moves": "e5f4 e4e5 f6g8 g1f3 d7d6 d2d4 d6e5 f1b5 c7c6 b5c4", "cp": 64}
+      ]
+    }
+  ]
+},
+{
+  "key": "halloween",
+  "title": "Four Knights, Halloween Gambit: 1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Nxe5 Nxe5 5. d4",
+  "positions": [
+    {
+      "fen": "r1bqkb1r/pppp1ppp/5n2/4n3/3PP3/2N5/PPP2PPP/R1BQKB1R b KQkq d3 0 5",
+      "last": "d2d4",
+      "answer": "Ng6",
+      "source": "opening theory",
+      "why": "You are a piece up, and all White has for it is pawns that gain time on your knights. Put this one where they gain least: 5... Ng6 6. e5 Ng8 7. Bc4 d5, giving a pawn back to get the pieces out, and the extra knight tells. 5... Nc6 looks more natural and is much harder to play: 6. d5 hits it again, and after 6... Ne5 7. f4 Ng6 8. e5 both knights are being chased. A piece ahead against a pawn storm: retreat to where the pawns cannot follow with tempo, and give something back to develop.",
+      "lines": [
+        {"moves": "e5g6 e4e5 f6g8 f1c4 d7d5 c4d5 g8e7 c1g5 c7c6 d5b3", "cp": -203},
+        {"moves": "e5c6 d4d5 c6e5 f2f4 e5g6 e4e5 f8b4 e5f6 d8f6 c1e3", "cp": -64},
+        {"moves": "f8d6 d4e5 d6e5 f1d3 e8g8 e1g1 f8e8 c1g5 c7c6 g1h1", "cp": 4}
+      ]
+    }
+  ]
+},
+{
+  "key": "ruy-exchange",
+  "title": "Ruy Lopez, Exchange Variation: 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Bxc6",
+  "positions": [
+    {
+      "fen": "r1bqkbnr/1ppp1ppp/p1B5/4p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 0 4",
+      "last": "b5c6",
+      "answer": "dxc6",
+      "source": "opening theory",
+      "why": "Take towards the open lines: 4... dxc6 opens the d-file for the queen and a diagonal for the c8 bishop, and you have the two bishops to use on them. The pawn on e5 is not hanging: 5. Nxe5 Qd4 forks knight and e-pawn and wins it back at once (6. Nf3 Qxe4+). 4... bxc6 takes towards the centre, as the rule says, and here it is the lesser move: the bishops stay shut in, and White gets a free hand in the centre with 5. d4 or 5. Nc3. Capture towards the centre unless the other capture opens lines for pieces that need them.",
+      "lines": [
+        {"moves": "d7c6 e1g1 c8g4 h2h3 h7h5 d2d3 d8f6 b1d2 g7g5 d2c4", "cp": 1},
+        {"moves": "b7c6 d2d4 e5d4 d1d4 d8f6 d4a4 f8c5 e1g1 g8e7 b1c3", "cp": 63},
+        {"moves": "f7f5 c6d5 f5e4 f3e5 d8g5 d2d4 g5g2 d1h5 g7g6 d5f7", "cp": 671}
+      ]
+    }
+  ]
+},
+{
+  "key": "elephant-trap",
+  "title": "Queen's Gambit Declined, the Elephant Trap: 1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Nbd7 5. cxd5 exd5 6. Nxd5",
+  "positions": [
+    {
+      "fen": "r1bqkb1r/pppn1ppp/5n2/3N2B1/3P4/8/PP2PPPP/R2QKBNR b KQkq - 0 6",
+      "last": "c3d5",
+      "answer": "Nxd5",
+      "source": "opening theory",
+      "why": "The knight on f6 looked pinned to the queen. It is not: 6... Nxd5 7. Bxd8 Bb4+, and the only way out of check is to put the queen in the way: 8. Qd2 Bxd2+ 9. Kxd2 Kxd8. When the dust settles you are a knight up for a pawn. A pin on the queen holds only while the pinned piece has no forcing move of its own: look for the check that wins the queen back.",
+      "lines": [
+        {"moves": "f6d5 g5d8 f8b4 d1d2 e8d8 e2e3 b4d2 e1d2 h8e8 f1d3", "cp": -583},
+        {"moves": "h7h6 g5f6 d7f6 d5c3 c8d7 g1f3 c7c5 e2e3 d8b6 f1c4", "cp": 88},
+        {"moves": "c7c6 d5c3 f8b4 g1f3 e8g8 d1c2 c6c5 a2a3 b4c3 c2c3", "cp": 117}
+      ]
+    }
+  ]
+},
+{
+  "key": "london-qb3",
+  "title": "London System: 1. d4 d5 2. Nf3 Nf6 3. Bf4 c5 4. e3 Nc6 5. c3 Qb6 6. Qb3",
+  "positions": [
+    {
+      "fen": "r1b1kb1r/pp2pppp/1qn2n2/2pp4/3P1B2/1QP1PN2/PP3PPP/RN2KB1R b KQkq - 2 6",
+      "last": "d1b3",
+      "answer": "c4",
+      "source": "opening theory",
+      "why": "The queens face each other, and whoever takes opens the a-file for the other side: 6... Qxb3 7. axb3 gives White's rook a file and a small pull. Make White decide instead: 6... c4 hits the queen. After 7. Qxb6 axb6 it is your rook that has the open file, and ...b5 and ...b4 come fast; after 7. Qc2 Bf5 the bishop arrives with tempo, because 8. Qxf5 Qxb2 wins the rook in the corner. When queens stand off on the b-file, push the pawn that makes the other side take.",
+      "lines": [
+        {"moves": "c5c4 b3c2 c8f5 c2c1 f6h5 f4g3 g7g6 b1d2 h5g3 h2g3", "cp": -25},
+        {"moves": "e7e6 h2h3 f8e7 f1e2 c8d7 b1d2 e8g8 g2g4 f6e8 d4c5", "cp": 16},
+        {"moves": "h7h6 b1d2 e7e6 h2h3 c8d7 g2g4 f8e7 h1g1 g7g5 f4h2", "cp": 28}
+      ]
+    }
+  ]
+}
+]

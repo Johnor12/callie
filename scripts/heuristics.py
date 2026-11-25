@@ -10,6 +10,7 @@ where it is not shows nothing, and the app refuses the file.
     ./scripts/heuristics.py                # the positions without lines, five seconds each
     ./scripts/heuristics.py --all          # every position again
     ./scripts/heuristics.py --seconds 20
+    ./scripts/heuristics.py --file src/callie/openers.json    # the Openers deck's file, which is written the same way
 """
 
 from __future__ import annotations

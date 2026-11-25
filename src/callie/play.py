@@ -27,7 +27,7 @@ from collections import deque
 
 from . import allie, heuristics, openings, opponent, rating
 from .allie import Allie, AllieError
-from .cards import Cards, deck_of, right_moves
+from .cards import Cards, deck, deck_of, right_moves
 from .chess import START_FEN, Game, Position, describe
 from .config import Config
 from .engine import MATE_CP, Engine, EngineError, loss, show, verdict, win_percent
@@ -84,8 +84,10 @@ class Service:
         self.cfg = cfg
         self.store = Store(cfg.db_path)
         self.cards = Cards(self.store)  # your errors, to review
-        # and the positions of the heuristics, as their file has them now
-        self.cards.teach(heuristics.load(cfg.heuristics_path or heuristics.FILE))
+        # and the positions of the heuristics and of the openings, as their files have them now
+        seen: set[str] = set()
+        self.cards.teach("heuristic", heuristics.load(cfg.heuristics_path or heuristics.FILE, seen))
+        self.cards.teach("opener", heuristics.load(cfg.openers_path or heuristics.OPENERS, seen))
         if opponent.SCALE:  # Stockfish's ratings are given on Allie's scale: games from before are told so
             self.store.rescale(opponent.rated)
         path = str(cfg.engine)
@@ -1041,8 +1043,12 @@ class Service:
         pos = Position.from_fen(card["fen"])
         right = [pos.san(m) for m in right_moves(json.loads(card["lines"]), pos.turn == "w", card["uci"])]
         if card["heuristic"]:
-            game_id, about = self._heuristic_about(card)
+            game_id, about = self._taught_about(card)
             kind = "of the Heuristics deck: no error of theirs, but a position chosen to show a heuristic for finding moves"
+        elif card["opener"]:
+            game_id, about = self._taught_about(card)
+            kind = ("of the Openers deck: no error of theirs, but a position early in a game that is sharp, or often "
+                    "played wrongly")  # fmt: skip
         else:
             game_id, about = self._card_about(card)
             kind = f"of theirs, of a move that was {self._kind(card)}"
@@ -1050,6 +1056,8 @@ class Service:
         out.append(f"The card takes as right: {', '.join(right)}.")
         if card["heuristic"]:
             out.append(f"On its back, under the heuristic, is how it finds the move here: {card['explanation']}")
+        elif card["opener"]:
+            out.append(f"On its back, under the opening, is why the move is the one: {card['explanation']}")
         elif card["explanation"]:
             out.append(f"The explanation on its back, {self._written_by()}: {card['explanation']}")
         return game_id, "\n".join(out)
@@ -1093,14 +1101,15 @@ class Service:
         out.append(self.brief(at["game_id"]))
         return at["game_id"], "\n".join(out)
 
-    def _heuristic_about(self, card: dict) -> tuple[str, str]:
-        """A card of the Heuristics deck as Claude is told of it: the heuristic, the position, what the engine
-        plays there, and the game its tools read: the one the position is from, where it is from a game on
-        file ("0", which is no game, where it is not)."""
+    def _taught_about(self, card: dict) -> tuple[str, str]:
+        """A card of the Heuristics deck, or of the Openers, as Claude is told of it: the heuristic (the
+        opening), the position, what the engine plays there, and the game its tools read: the one the position
+        is from, where it is from a game on file ("0", which is no game, where it is not)."""
         pos = Position.from_fen(card["fen"])
         best = json.loads(card["lines"])[0]
+        of = deck(card)
         out = [
-            f"The heuristic: {self.cards.titles.get(card['heuristic'], card['heuristic'])}",
+            f"The {'opening' if of == 'opener' else of}: {self.cards.titles[of].get(card[of], card[of])}",
             f"The position, with {'White' if pos.turn == 'w' else 'Black'} to move, in which the student was to find "
             f"the move: {card['fen']}",
             f"The engine plays {best['san'][0]} ({show(best['cp'], best['mate'])}, for White): "

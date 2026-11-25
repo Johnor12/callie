@@ -99,6 +99,12 @@ it is such a position, to find the move in, and on its back are the heuristic an
 When this session belongs to one of those, the [card] message says so: talk about the position through the \
 heuristic, and say where the heuristic stops being a good guide.
 
+And one of openings, Openers: positions from the first moves of a game that are sharp, or that players of the \
+student's strength often get wrong, in the openings they play (1. d4 as White; 1... e5 and 1... d5 as Black). A \
+card of it is such a position, to find the move in, and on its back are the opening and why the move is the one. \
+When this session belongs to one of those, the [card] message says so: talk about the moves that lead to the \
+position and the ones that follow from it, and what the student should remember of it at the board.
+
 What reaches you
 - A message that starts with [card] was sent by the app when the session was opened: the card, the game its move \
 was played in, and what is written on its back.

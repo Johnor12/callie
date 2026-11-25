@@ -1,6 +1,6 @@
 """The database: games, their moves, the engine's analysis of each position, the cards made of your errors and
-of the heuristics' positions, the Claude session of the freeplay board, and the lines Claude put on the board in
-its conversations. SQLite, one file."""
+of the heuristics' and the openings' positions, the Claude session of the freeplay board, and the lines Claude put
+on the board in its conversations. SQLite, one file."""
 
 from __future__ import annotations
 
@@ -57,10 +57,11 @@ CREATE TABLE IF NOT EXISTS evals (      -- the position after `ply` moves (0: th
   PRIMARY KEY (game_id, ply)
 );
 CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for each position and the move played in it;
-                                        -- or a position that shows a heuristic (cards.py): one for each position
+                                        -- or a position that shows a heuristic, or one of an opening (cards.py):
+                                        -- one for each position
   id INTEGER PRIMARY KEY,
   position TEXT NOT NULL,               -- what makes it the same position in any game: the FEN less its move counters
-  uci TEXT NOT NULL,                    -- the move you played; '': none, the card is a heuristic's
+  uci TEXT NOT NULL,                    -- the move you played; '': none, the card is a heuristic's or an opener's
   san TEXT NOT NULL,
   fen TEXT NOT NULL,                    -- the position before it, in the game it was last played in
   prev TEXT,                            -- the move that led to that position there (the opponent's); NULL: none, or not known
@@ -76,7 +77,9 @@ CREATE TABLE IF NOT EXISTS cards (      -- an error of yours to review: one for 
   reviewed_at REAL,                     -- when it was last answered
   explanation TEXT,                     -- why the move was bad, as Claude wrote it; NULL: not written yet
   heuristic TEXT,                       -- the heuristic its position shows (its key in heuristics.json), whose deck it is
-                                        -- in, with how the heuristic finds the move as its explanation; NULL: an error
+                                        -- in, with how the heuristic finds the move as its explanation; NULL: not one
+  opener TEXT,                          -- the opening its position is of (its key in openers.json), whose deck it is in,
+                                        -- with why the move is the one as its explanation; NULL: not one
   game_id TEXT,                         -- the game it was last played in, which it is deleted with; NULL: not known
   session_id TEXT,                      -- the Claude Code session asked about it from its back; NULL: none yet
   session_started INTEGER NOT NULL DEFAULT 0,  -- it was given its first prompt, so it can be resumed
@@ -113,6 +116,7 @@ ADDED = {
         "session_id": "TEXT",
         "session_started": "INTEGER NOT NULL DEFAULT 0",
         "heuristic": "TEXT",
+        "opener": "TEXT",
     },
 }
 

@@ -45,6 +45,8 @@ def scratch_config(**changes):
     cfg.claude_config_dir = home / "claude"
     cfg.heuristics_path = home / "heuristics.json"  # none: the cards of a test are the ones it makes
     cfg.heuristics_path.write_text("[]")
+    cfg.openers_path = home / "openers.json"
+    cfg.openers_path.write_text("[]")
     for k, v in changes.items():
         setattr(cfg, k, v)
     return cfg
