@@ -412,9 +412,11 @@ def test_the_cards_over_http():
         assert (
             done["right"]
             and done["active"] == 0
-            and set(done) == {"right", "active", "move", "best", "played", "heuristic", "opener", "explanation", "next"}
+            and set(done)
+            == {"right", "active", "move", "best", "played", "heuristic", "opener", "shown", "explanation", "next"}
             and done["heuristic"] is None
             and done["opener"] is None
+            and done["shown"] == []
         )
         assert s.svc.store.one("SELECT state, interval FROM cards")["state"] == "review"
         assert s.call("GET", "/api/cards/blunder")[1] | {"deck": 0, "name": 0} == {
@@ -596,6 +598,7 @@ def test_the_heuristics_on_file():
     (h,) = heuristics.load(on_file(home))
     one, two = h["positions"]
     assert one["lines"][0] == LINES[0] and one["last"] == "f1c4" and two["last"] is None
+    assert one["shown"] == [] and two["shown"] == []  # neither says how it came about
     assert two["lines"] == [{"moves": ["h1e1"], "san": ["Re1"], "cp": None, "mate": 30, "value": 9970}]
     wrong = lambda **change: [{**ON_FILE[0], "positions": [{**ON_FILE[0]["positions"][0], **change}]}]  # noqa: E731
     for said in (
@@ -603,6 +606,8 @@ def test_the_heuristics_on_file():
         wrong(why=" "),
         wrong(lines=[{"moves": "g7g5 h5h8", "cp": 20}]),  # not a legal line
         wrong(fen="nonsense"),
+        wrong(moves="e4 e5 Qh5 Nc6"),  # moves that lead to another position
+        wrong(moves="e4 e5 Qh6"),  # or are not legal
         [ON_FILE[0], {**ON_FILE[0], "title": "Again."}],  # the same key twice
         [ON_FILE[0], {**ON_FILE[0], "key": "other"}],  # the same positions twice
         [{"key": "none", "title": "No positions.", "positions": []}],
@@ -712,12 +717,18 @@ def test_the_heuristics_over_http_and_claude_on_the_back_of_one():
         s.close()
 
 
-# An opening as its file has it: the same position, as one of the Openers deck.
+# An opening as its file has it: the same position, as one of the Openers deck, with the moves that lead to it.
 OPENER = [
     {
         "key": "wayward-queen",
-        "title": "Wayward Queen Attack: 1. e4 e5 2. Qh5 Nc6 3. Bc4",
-        "positions": [{**ON_FILE[0]["positions"][0], "why": "Mate on f7 is threatened: g6 shuts the queen out."}],
+        "title": "Wayward Queen Attack",
+        "positions": [
+            {
+                **{k: v for k, v in ON_FILE[0]["positions"][0].items() if k != "last"},
+                "moves": "e4 e5 Qh5 Nc6 Bc4",
+                "why": "Mate on f7 is threatened: g6 shuts the queen out.",
+            }
+        ],
     }
 ]
 
@@ -728,10 +739,14 @@ def test_the_openers_on_file():
     openers = heuristics.load(heuristics.OPENERS, seen)  # with the app, and none of them a position of a heuristic
     assert 10 <= len(seen) - theirs == sum(len(o["positions"]) for o in openers) <= 20
     for o in openers:
-        assert ":" in o["title"] and "1. " in o["title"], o["key"]  # the opening, and the moves that lead there
+        assert "1." not in o["title"], o["key"]  # the opening's name: the moves that lead there are a line
         for p in o["positions"]:
             assert p["answer"].rstrip("+#") in p["why"] and len(p["why"]) < 900, (o["key"], p["fen"])
-            assert int(p["fen"].split()[5]) <= 12 and p["last"], (o["key"], p["fen"])  # early in a game
+            assert int(p["fen"].split()[5]) <= 12, (o["key"], p["fen"])  # early in a game
+            (board,) = p["shown"]  # from the start of a game to the position, its last move the one that led there
+            (line,) = board["lines"]
+            assert board["fen"] == cards.Position.from_fen().fen() and line["moves"][-1]["uci"] == p["last"]
+            assert line["moves"][-1]["fen"].split()[:4] == p["fen"].split()[:4], (o["key"], p["fen"])
     # a position that is in both files is an error
     home, seen = scratch_config().home, set()
     heuristics.load(on_file(home), seen)
@@ -755,13 +770,19 @@ def test_an_opener_has_a_card():
     cid = drawn["card"]["id"]
     back = c.answer(cid, "g6", now=NOON)
     assert back["right"] and back["played"] is None and back["heuristic"] is None
-    assert back["opener"] == OPENER[0]["title"] and back["explanation"].startswith("Mate on f7")
+    assert back["opener"] == "Wayward Queen Attack" and back["explanation"].startswith("Mate on f7")
+    # the moves that led to it are a line on its back, from the start of a game
+    (board,) = back["shown"]
+    assert (board["title"], board["fen"].split()[0]) == ("Build-up", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
+    assert [m["san"] for m in board["lines"][0]["moves"]] == ["e4", "e5", "Qh5", "Nc6", "Bc4"]
+    assert board["lines"][0]["moves"][-1] == {"uci": "f1c4", "san": "Bc4", "fen": FEN}
     # its position said by the other file instead: the same card, where it stood, in the other deck
     c.answer(cid, "g6", "easy", now=NOON)
     hs = heuristics.load(on_file(home))
     assert c.teach("heuristic", hs, NOON + 5) == [] and c.teach("opener", [], NOON + 5) == []
     moved = c.store.one("SELECT * FROM cards WHERE id=?", (cid,))
     assert (moved["heuristic"], moved["opener"], moved["state"], moved["interval"]) == ("f7", None, "review", 4)
+    assert c.answer(cid, "g6", now=NOON + 5)["shown"] == []  # and no longer has the line
     assert [d["cards"] for d in c.decks(NOON + 5)] == [0, 0, 0, 2, 0]
     try:
         c.teach("blunder", [], NOON)
@@ -786,7 +807,10 @@ def test_the_openers_over_http_and_claude_on_the_back_of_one():
         r = s.call("POST", f"/api/cards/{cid}/claude/say", {"text": "why not Qe7?"})[1]
         told = json.loads(output(s.tutor.terminal(r["terminal"]), '"prompt"').split("\n")[0])["prompt"]
         assert told.startswith("[card] The student is on the back of a card of the Openers deck")
-        assert "The opening: Wayward Queen Attack: 1. e4 e5 2. Qh5 Nc6 3. Bc4" in told
+        assert (
+            "The opening: Wayward Queen Attack\n" in told and back["shown"][0]["lines"][0]["name"] == "From the start"
+        )
+        assert "a line on the back of the card (From the start): 1. e4 e5 2. Qh5 Nc6 3. Bc4\n" in told
         assert "under the opening, is why the move is the one: Mate on f7" in told and "why not Qe7?" in told
         assert not s.svc.explainer.failed and s.svc.cards.unexplained() is None  # nothing is written for it
     finally:

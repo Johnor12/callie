@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Give the positions of src/callie/heuristics.json the engine's lines: what their cards are answered by.
 
-A heuristic is added by hand: its key and title, and for each position its "fen", the move that led to it
-("last", UCI, if there was one), the "answer" (SAN) and "why". This asks Stockfish, at full strength, for its
-three best lines in every position that has none yet, writes them into the file, and says of each position
-whether its answer is one the lines make right (the first, or another within a few centipawns): a position
-where it is not shows nothing, and the app refuses the file.
+A heuristic is added by hand: its key and title, and for each position its "fen", the moves that led to it
+("moves", from the start of a game) or the last of them ("last", UCI), if there were any, the "answer" (SAN) and
+"why". This asks Stockfish, at full strength, for its three best lines in every position that has none yet,
+writes them into the file, and says of each position whether its answer is one the lines make right (the first,
+or another within a few centipawns): a position where it is not shows nothing, and the app refuses the file.
+
+A position where more than three moves are as good is given more lines (`--lines`), so that each of them is a
+right answer; searched again, it is given as many as it has.
 
     ./scripts/heuristics.py                # the positions without lines, five seconds each
     ./scripts/heuristics.py --all          # every position again
     ./scripts/heuristics.py --seconds 20
+    ./scripts/heuristics.py --lines 5      # five lines for the positions without any
     ./scripts/heuristics.py --file src/callie/openers.json    # the Openers deck's file, which is written the same way
 """
 
@@ -53,6 +57,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--all", action="store_true", help="every position, not only those without lines")
     ap.add_argument("--seconds", type=float, default=5.0, help="how long each position is searched")
+    ap.add_argument("--lines", type=int, default=3, help="how many lines a position is given")
     ap.add_argument("--file", type=Path, default=heuristics.FILE)
     args = ap.parse_args()
     cfg = load_config()
@@ -64,7 +69,8 @@ def main() -> int:
                 pos = Position.from_fen(p["fen"])
                 if args.all or not p.get("lines"):
                     found, first = [], set()
-                    for ln in engine.search(p["fen"], ms=int(args.seconds * 1000), multipv=3).lines:
+                    many = max(args.lines, len(p.get("lines") or []))
+                    for ln in engine.search(p["fen"], ms=int(args.seconds * 1000), multipv=many).lines:
                         if ln.moves and ln.moves[0] not in first:  # a line is now and then given twice
                             first.add(ln.moves[0])
                             found.append(ln)

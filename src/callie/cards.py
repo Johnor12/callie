@@ -29,8 +29,9 @@ left to review (Anki would show it up to twenty minutes early).
 Two more decks hold cards that no game made, each written down in a file (`heuristics.py`). Heuristics: the
 positions that show a heuristic, each to find the move in, with the heuristic and how it finds the move there on
 its back. Openers: positions early in a game that are sharp, or often played wrongly, with the opening and why
-the move is the one on the back. They are answered and scheduled as the others are. Such a card has no move that
-was played (its ``uci`` is empty) and names what it is a position of: its ``heuristic``, or its ``opener``.
+the move is the one on the back, and the moves that lead to the position there as a line to step through. They
+are answered and scheduled as the others are. Such a card has no move that was played (its ``uci`` is empty) and
+names what it is a position of: its ``heuristic``, or its ``opener``.
 """
 
 from __future__ import annotations
@@ -202,6 +203,9 @@ class Cards:
         self.made = threading.Event()  # set when a card is made: what writes their explanations waits on it
         # what the cards no game made are positions of, as said on the back of one (`teach`): by deck, then key
         self.titles: dict[str, dict[str, str]] = {key: {} for key, _ in TAUGHT}
+        # and what the back of one has to step through on the board, by deck, then position: positions, each with
+        # lines from it, as Claude's are kept (`Store.show`)
+        self.shown: dict[str, dict[str, list[dict]]] = {key: {} for key, _ in TAUGHT}
 
     def note(
         self,
@@ -266,6 +270,7 @@ class Cards:
             raise CardError(f"no deck {of!r} to be written down")
         now = time.time() if now is None else now
         self.titles[of] = {h["key"]: h["title"] for h in said}
+        self.shown[of] = {Position.from_fen(p["fen"]).key(): p.get("shown") or [] for h in said for p in h["positions"]}
         others = ", ".join(f"{key}=NULL" for key, _ in TAUGHT if key != of)
         with self.store.lock:
             gone = {r["id"] for r in self.store.all(f"SELECT id FROM cards WHERE {of} IS NOT NULL")}
@@ -421,8 +426,9 @@ class Cards:
         or "easy", how it was to remember): it is rated that. Right with none: nothing changes, and "next"
         says how long each grade would hide it for. Either way the answer is given: the engine's choice and its
         line, the move the card is about, and why that was bad, if it has been written. Of a card no game made:
-        its "heuristic" or its "opener" (the opening), why the move is the one, and no move the card is about
-        ("played" is None)."""
+        its "heuristic" or its "opener" (the opening), why the move is the one, no move the card is about
+        ("played" is None), and what there is to step through on its board ("shown": the moves that led to the
+        position, where they are known)."""
         now = time.time() if now is None else now
         if grade is not None and grade not in RATINGS[1:]:
             raise CardError(f"grade must be one of {', '.join(RATINGS[1:])}")
@@ -450,6 +456,7 @@ class Cards:
                 },
                 "played": {"uci": row["uci"], "san": row["san"], "cpl": row["cpl"], "deck": of} if row["uci"] else None,
                 **{key: self.titles[key].get(row[key]) for key, _ in TAUGHT},
+                "shown": self.shown.get(of, {}).get(row["position"], []),
                 "explanation": row["explanation"],
                 "next": waits(row, now) if right and grade is None and row["due"] <= now else None,
                 "active": next(d["active"] for d in self.decks(now) if d["key"] == of),

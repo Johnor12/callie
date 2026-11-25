@@ -703,7 +703,10 @@ async function showReview(deck) {
   renderReview();
   for (const t of r.tries) if (t.cpl === undefined) cardLoss(r, t);  // asked when the page went: asked again
 }
-function leaveReview() { if (S.review) { clearTimeout(S.review.timer); closeTerminal(); } S.review = null; $("card-delete").hidden = true; }
+function leaveReview() {
+  if (S.review) { clearTimeout(S.review.timer); closeTerminal(); S.review = null; S.line = null; renderLines(); }  // the card's own lines go with it
+  $("card-delete").hidden = true;
+}
 async function nextCard() {
   const r = S.review;
   if (!r) return;
@@ -712,7 +715,7 @@ async function nextCard() {
     const d = await api("GET", `/api/cards/${r.deck}` + (r.card ? `?skip=${r.card.id}` : ""));
     if (S.review !== r) return;
     Object.assign(r, { name: d.name, active: d.active, card: d.card, wait: d.wait, pending: null, result: null, tries: [], tried: null, told: 0, session: false, fast: false });
-    S.sel = null; S.promo = null;
+    S.sel = null; S.promo = null; S.line = null;
     showTerminal(null); $("compose-text").value = ""; $("claude-err").textContent = "";  // the last card's
     renderReview();
     r.at = performance.now();
@@ -792,6 +795,7 @@ function renderReview() {
   // The deck and how many of its cards are active go in the bar at the top: beside the board is only what came of your answer.
   $("crumb").innerHTML = "Review" + (r.name ? ` · <span id="card-deck" data-testid="card-deck">${esc(r.name)}</span> <b id="card-count" data-testid="card-count" title="Active cards in this deck">${r.active}</b>` : "");
   keepReview();
+  renderLines();  // the card's own, once it is answered
   $("card-delete").hidden = !c;  // in the bar at the top, answered or not
   if (!c) return;
   renderBoard();
@@ -1017,6 +1021,10 @@ $("compose-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" &
 // or the arrow keys, step through the line. Everything a session showed is kept, to page back through.
 // On a phone the pane is a screen below the board, and what is used together is to be on one screen: there the
 // list is directly under the board (a game's: under the buttons that step through its moves).
+// The back of a card no game made has lines of its own, with no session: the moves that led to its position
+// (`result.shown`). They are listed in the same place, before what Claude shows there.
+const ownLines = () => (S.review && S.review.result && S.review.result.shown || []).map((b, i) => ({ ...b, id: `card-${i}` }));
+const allLines = () => [...ownLines(), ...S.shown];
 function placeLines() {
   const el = $("lines"), over = !PHONE.matches ? null : S.free ? $("free-nav") : S.review ? $("card-board") : $("nav");
   if (over) { if (over.nextElementSibling !== el) over.after(el); }
@@ -1031,11 +1039,11 @@ async function loadLines(t) {
   S.shown = d.shown;
   if (S.line && !linePos()) { S.line = null; redraw(); }  // no longer kept
   // What is new is what is listed, unless a line is being stepped through.
-  if (!S.shown.some((b) => b.id === S.shownAt) || (more && !S.line)) S.shownAt = last(S.shown);
+  if (!allLines().some((b) => b.id === S.shownAt) || (more && !S.line)) S.shownAt = last(allLines());
   renderLines();
 }
 function linePos() {  // the line on the board and where it has got to; null: the board is the game's, or the card's
-  const l = S.line, set = l && S.shown.find((b) => b.id === l.set);
+  const l = S.line, set = l && allLines().find((b) => b.id === l.set);
   if (!set) return null;
   const line = set.lines[l.line], m = l.at ? line.moves[l.at - 1] : null;
   return { set, line, fen: m ? m.fen : set.fen, last: m ? m.uci : null, san: m ? m.san : "" };
@@ -1059,16 +1067,17 @@ function setLine(l) {  // null: what was on the board is back
   renderLines();
 }
 function stepLine(to) {  // to that many of its moves played; with no line on the board, the first one listed is started
-  const l = linePos(), set = S.shown.find((b) => b.id === S.shownAt);
+  const l = linePos(), set = allLines().find((b) => b.id === S.shownAt);
   if (l) setLine({ ...S.line, at: Math.max(0, Math.min(l.line.moves.length, to)) });
   else if (set) setLine({ set: set.id, line: 0, at: 1 });
 }
 function renderLines() {
-  const set = S.shown.find((b) => b.id === S.shownAt);
-  $("lines").hidden = !S.term || !set;
-  if ($("lines").hidden) return;
+  const all = allLines(), set = all.find((b) => b.id === S.shownAt) || all[all.length - 1];  // a card's own, before any is picked
+  $("lines").hidden = !set;
+  if (!set) return;
+  S.shownAt = set.id;
   placeLines();
-  const i = S.shown.indexOf(set), n = S.shown.length, l = linePos(), on = l && l.set === set ? S.line : null;
+  const i = all.indexOf(set), n = all.length, l = linePos(), on = l && l.set === set ? S.line : null;
   $("lines-title").textContent = set.title;
   $("lines-pager").hidden = n < 2;
   $("lines-n").textContent = `${i + 1}/${n}`;
@@ -1106,9 +1115,9 @@ $("lines-list").onclick = (ev) => {
   lineInSight();
 };
 function pageLines(by) {  // what was shown before, or after: listed, and the line on the board put away
-  const i = S.shown.findIndex((b) => b.id === S.shownAt) + by;
-  if (i < 0 || i >= S.shown.length) return;
-  S.shownAt = S.shown[i].id;
+  const all = allLines(), i = all.findIndex((b) => b.id === S.shownAt) + by;
+  if (i < 0 || i >= all.length) return;
+  S.shownAt = all[i].id;
   setLine(null);
 }
 $("lines-older").onclick = () => pageLines(-1);

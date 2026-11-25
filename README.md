@@ -345,20 +345,24 @@ theory, and two are from [Lichess's puzzle database](https://database.lichess.or
 
 The fifth deck is not made of errors either. It holds positions from the first dozen moves of a game: ones that
 are sharp (a trap to set off or to step around, one move that holds and others that lose) or that are often played
-wrongly, where the natural move is not the good one. A card of it is such a position, to find the move in; on its
-back are the opening, with the moves that lead to the position, and why the move is the one. Everything else is as
-for a card of the Heuristics deck: it is answered, graded and scheduled like any card, has no "you played", and
-Claude can be asked about it from its back.
+wrongly, where the natural move is not the good one. None is a position you would be in only after a slip of
+your own that you could have avoided: where there is one, the card is the position before it. A card of it is such
+a position, to find the move in; on its back are the opening's name and why the move is the one, and the moves
+that lead to the position are a line there, "From the start", to step through on the board as the lines Claude
+shows are (it is listed with them, first). Everything else is as for a card of the Heuristics deck: it is
+answered, graded and scheduled like any card, has no "you played", and Claude can be asked about it from its back.
 
 They are written down in [`src/callie/openers.json`](src/callie/openers.json), in the form of the heuristics'
-file: an entry is an opening, its `title` the opening's name and the moves to the position, and its position's
-`why` the back of the card. The twenty there are for the author's openings, 1. d4 and 2. c4 as White (the Queen's
+file: an entry is an opening, its `title` the opening's name, and its position has the `moves` that lead to it
+from the start of a game (SAN, in one string: they must end in its `fen`, and the last of them is its `last`) and
+`why`, the back of the card. A position of the heuristics' file can have `moves` too. The twenty there are for the author's openings, 1. d4 and 2. c4 as White (the Queen's
 Gambit Accepted and Declined, the Slav, the Marshall, the Benoni, the Albin and Budapest gambits) and 1... e5 and
 1... d5 as Black (the Italian and the Two Knights, the Four Knights, the Vienna, the Ruy Lopez, the Queen's Gambit,
 the London): replace them with yours. All are opening theory; three were also on the board in games of his, none
 of them a card of another deck (each position's `source` says which). A position is in one of the two files only.
 One is added as a heuristic's position is, with `./scripts/heuristics.py --file src/callie/openers.json` for its
-lines.
+lines. Where more than three moves are as good as each other (a card whose point is the one move not to play),
+`--lines 5` gives the position that many lines, and each move within 10 centipawns of the first is a right answer.
 
 ### Why the move was bad
 

@@ -1110,6 +1110,11 @@ class Service:
         of = deck(card)
         out = [
             f"The {'opening' if of == 'opener' else of}: {self.cards.titles[of].get(card[of], card[of])}",
+            *(
+                f"The moves that lead to the position, a line on the back of the card ({b['lines'][0]['name']}): "
+                + _numbered(1, "w", [m["san"] for m in b["lines"][0]["moves"]])
+                for b in self.cards.shown[of].get(card["position"], [])
+            ),
             f"The position, with {'White' if pos.turn == 'w' else 'Black'} to move, in which the student was to find "
             f"the move: {card['fen']}",
             f"The engine plays {best['san'][0]} ({show(best['cp'], best['mate'])}, for White): "
