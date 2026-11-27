@@ -272,8 +272,10 @@ them, drawn at random from the active ones, with the opponent's last move marked
   without the question: the card stays up until Next.
 
 Either way the back of the card is a board to [try moves on](#trying-moves-on-the-board): from the card's
-position, from your answer where it was right, or from any move of a line listed there. Your answer is the first
-of the lines kept with the card, and none of it changes anything of the card's schedule.
+position, from your answer where it was right, or from any move of a line listed there. A right answer stands on
+the board, where it is the other side's move: pick up one of your own pieces and the answer is taken back, for
+another move of yours to be tried in the card's position. Your answer is the first of the lines kept with the
+card, and none of it changes anything of the card's schedule.
 
 The card you are on stays until you move on: load the page again, or leave the deck and come back in the same
 tab, and it is there as you left it, answered or not.
@@ -428,7 +430,9 @@ resumed. Like the games' conversations, these are not part of the history kept i
 A board that is not being played is one to try moves on: the board of a game that is over, and the back of a
 card. Both sides' pieces are yours to move there, from the position on it: a move of the game you have stepped
 to, the card's position (or your answer, where it was right), or wherever a [line](#lines-on-the-board) has got
-to, Claude's or the card's own. There is no separate board for this, and nothing to open.
+to, Claude's or the card's own. There is no separate board for this, and nothing to open. Where a card's right
+answer stands on its board, a piece of yours picked up there is moved from the card's position instead: the
+answer is taken back (the piece that made it, to where it came from), and is still the first of the lines listed.
 
 - **What a move does.** The next move of the line it is made on, or of the game, is stepped to, and so is one
   you tried there before. Any other starts a line of your own from that position, and the line it left stays as

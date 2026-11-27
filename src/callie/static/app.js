@@ -381,7 +381,8 @@ function ownBoard() {
   if (r) {
     // Until you answer, the move that led to the position is marked, as in a game. Your answer stands on the
     // board once made, unless it was wrong: then the position is back, with where you went marked on it and
-    // an arrow for the right move. Either way other moves can then be tried from what is on it.
+    // an arrow for the right move. Either way other moves can then be tried from what is on it (and, with a
+    // right answer on it, your own from the card's position: see `unanswer`).
     const c = r.card, res = r.result, made = res ? (res.right ? res.move : null) : r.pending, fen = made ? made.fen : c.fen;
     const e = res && res.right ? S.evals.get(fen) : null;
     return { el: $("card-board"), fen, last: made ? made.uci : res ? res.move.uci : c.last, san: made ? made.san : "",
@@ -442,15 +443,18 @@ function arrow(uci, flip) {
 const squareAt = (x, y) => { const el = document.elementFromPoint(x, y); const s = el && el.closest && el.closest(".sq"); return s ? s.dataset.sq : null; };
 function pickUp(ev) {
   if (S.review ? !S.review.card : !S.game) return;
-  const b = onBoard();
+  let b = onBoard();
   const promo = ev.target.closest("[data-promo]");
   if (promo) return b.send(S.promo.from + S.promo.to + promo.dataset.promo);
   if (S.promo) { S.promo = null; return renderBoard(); }
   if (b.pre) sendPremove(null);  // a touch of the board takes back the move made ahead (and may start another)
-  const sq = squareAt(ev.clientX, ev.clientY);
-  if (!sq || ev.button || !Object.keys(b.legal).length) return;
+  let sq = squareAt(ev.clientX, ev.clientY);
+  if (!sq || ev.button) return;
+  const taking = S.sel && targets(S.sel).includes(sq), back = taking ? null : unanswer(b, sq);
+  if (back) { b = onBoard(); sq = back; }
+  if (!Object.keys(b.legal).length) return;
   ev.preventDefault();
-  if (S.sel && targets(S.sel).includes(sq)) return tryMove(S.sel, sq);
+  if (taking) return tryMove(S.sel, sq);
   const p = fenBoard(b.fen)[sqIndex(sq)];
   if (p && (p === p.toUpperCase()) === (b.color === "w")) {
     S.drag = { from: sq, piece: p, x: ev.clientX, y: ev.clientY, moved: false, again: S.sel === sq };
@@ -1108,6 +1112,20 @@ function explore(uci) {
   const has = () => { const set = allLines().find((s) => s.id === w.id); return set ? lineOf(set, w.line, path) : -1; };
   if (has() < 0) keepLine({ tree: w.tree, fen: w.root, moves: [...w.nodes, { uci, ...m }].map(({ uci, san, fen }) => ({ uci, san, fen })) });
   setLine({ set: w.id, line: has(), path });
+}
+// A right answer stands on the back of its card, and what moves there is the other side. One of your own pieces
+// picked up there (on `sq` of the board `b`) takes the answer back: the card's position is on the board, as the
+// place before the answer in the lines listed, for another move of yours to be tried in it. What is returned is
+// the square that piece is on there (the one that made the answer: where it came from); null: nothing was taken back.
+function unanswer(b, sq) {
+  const r = S.review, made = r && r.result && r.result.right && !linePos() ? r.result.move : null;
+  const p = made && fenBoard(b.fen)[sqIndex(sq)];
+  if (!p || (p === p.toUpperCase()) === (b.color === "w")) return null;
+  const w = where(), path = w.nodes.map((n) => n.uci);
+  const has = () => { const set = allLines().find((s) => s.id === w.id); return set ? lineOf(set, w.line, path) : -1; };
+  if (has() < 0) keepLine({ tree: w.tree, fen: w.root, moves: w.nodes.map(({ uci, san, fen }) => ({ uci, san, fen })) });  // the answer's line, not there yet (a page just loaded)
+  setLine({ set: w.id, line: has(), path: path.slice(0, -1) });
+  return sq === made.uci.slice(2, 4) ? made.uci.slice(0, 2) : sq;
 }
 // Where stepping goes on from: the line on the board (`on`); with none, the board's own place in what is listed,
 // if it is in it, and else the start of the first line listed. null: nothing is listed.
